@@ -613,6 +613,20 @@ async def bj_deal(data: dict, current_user = Depends(get_current_user)):
 async def bj_hit(data: dict, current_user = Depends(get_current_user)):
     game_id = data.get("game_id")
     result = bj_engine.hit(game_id)
+    if result["status"] == "split_end" and result.get("payout", 0) > 0:
+        payout = result["payout"]
+        conn = get_db()
+        cursor = conn.cursor()
+        is_postgres = hasattr(conn, 'get_dsn_parameters')
+        
+        u_id = current_user.get("id")
+        if not u_id:
+            cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
+            u_id = cursor.fetchone()[0]
+
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
+        conn.commit()
+        conn.close()
     return result
 
 @app.post("/api/blackjack/stand")
@@ -635,6 +649,55 @@ async def bj_stand(data: dict, current_user = Depends(get_current_user)):
         conn.commit()
         conn.close()
         
+    elif result["status"] == "split_end" and result.get("payout", 0) > 0:
+        payout = result["payout"]
+        conn = get_db()
+        cursor = conn.cursor()
+        is_postgres = hasattr(conn, 'get_dsn_parameters')
+        
+        u_id = current_user.get("id")
+        if not u_id:
+            cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
+            u_id = cursor.fetchone()[0]
+
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
+        conn.commit()
+        conn.close()
+
+    return result
+
+@app.post("/api/blackjack/split")
+async def bj_split(data: dict, current_user = Depends(get_current_user)):
+    game_id = data.get("game_id")
+    game = bj_engine.games.get(game_id)
+    if not game:
+        return JSONResponse({"error": "Gioco non trovato"}, status_code=400)
+    
+    bet = game['bet']
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    
+    u_id = current_user.get("id")
+    if not u_id:
+        cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
+        u_id = cursor.fetchone()[0]
+
+    cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (u_id,))
+    user_db = cursor.fetchone()
+    balance = float(user_db[0] if is_postgres else user_db["balance"])
+    
+    if balance < bet:
+        conn.close()
+        return JSONResponse({"error": "Saldo insufficiente per splittare"}, status_code=400)
+    
+    # Detrai la scommessa aggiuntiva
+    new_balance = balance - bet
+    cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (new_balance, u_id))
+    conn.commit()
+    conn.close()
+    
+    result = bj_engine.split(game_id)
     return result
 
 # Serve frontend
