@@ -583,24 +583,31 @@ table tr:hover td {
         height: 20px;
     }
 
-    /* Mostriamo il saldo sempre in alto a destra su mobile */
+    /* Forza il saldo in primo piano assoluto su mobile */
     .nav-extra {
-        position: absolute;
-        right: 15px;
-        top: 15px;
+        position: fixed !important;
+        right: 10px !important;
+        top: 10px !important;
+        z-index: 9999 !important;
+        /* Sopra a ogni cosa */
+        display: flex !important;
     }
 
     #user-balance-nav {
         display: block !important;
-        font-size: 0.75rem;
-        padding: 4px 10px !important;
-        background: var(--success) !important;
-        margin: 0 !important;
+        font-size: 0.8rem !important;
+        padding: 6px 14px !important;
+        background: #00ff88 !important;
+        /* Verde neon per non mancarlo */
+        color: #000 !important;
+        border-radius: 50px !important;
+        box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3) !important;
+        font-weight: 800 !important;
     }
 
-    /* Nascondiamo il tasto logout testuale su mobile per far spazio */
+    /* Nascondiamo il tasto logout su mobile per fare spazio */
     #logout-btn {
-        display: none;
+        display: none !important;
     }
 }
 
