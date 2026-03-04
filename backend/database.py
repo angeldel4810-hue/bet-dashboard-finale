@@ -2,7 +2,11 @@ import sqlite3
 import os
 from bcrypt import hashpw, gensalt, checkpw
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "antigravity.db")
+# Se siamo su Render con un disco persistente, usiamo quel percorso, altrimenti locale
+if os.path.exists("/data"):
+    DB_PATH = "/data/antigravity.db"
+else:
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "antigravity.db")
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
