@@ -39,381 +39,382 @@
                 <a href="#" id="nav-mybets" onclick="router.navigate('mybets')">Mie Giocate</a>
                 <a href="#" id="nav-admin" class="hidden" onclick="router.navigate('admin')">Admin</a>
             </div>
-            <div class="nav-extra" style="display: flex; align-items: center;">
+            <div class="nav-extra" style="display: flex; align-items: center; gap: 10px;">
+                <div id="bet-slip-toggle" onclick="ui.toggleSlip()"
+                    style="cursor: pointer; background: var(--accent); padding: 5px 10px; border-radius: 5px; font-weight: bold; position: relative; font-size: 0.9rem;">
+                    Schedina (<span id="slip-count">0</span>)
+                    <div id="slip-dropdown" class="hidden" onclick="event.stopPropagation()"
+                        style="position: absolute; top: 40px; right: 0; width: 300px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 1000;">
+                        <h3 style="font-size: 1rem; margin-bottom: 1rem;">La tua Schedina</h3>
+                        <div id="slip-items" style="max-height: 300px; overflow-y: auto; margin-bottom: 1rem;">
+                            <!-- Bet selections here -->
+                        </div>
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span>Quota Totale:</span>
+                                <span id="slip-total-odds" style="font-weight: bold;">1.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <span id="user-balance-nav"
-                    style="background:var(--success); color:black; padding:5px 12px; border-radius:20px; font-weight:bold; font-size:0.9rem; margin-left:10px;">Saldo:
+                    style="background:var(--success); color:black; padding:5px 12px; border-radius:20px; font-weight:bold; font-size:0.9rem;">Saldo:
                     €0.00</span>
                 <button onclick="auth.logout()" id="logout-btn"
-                    style="width:auto; padding:0.5rem 1rem; margin-left:1rem; background:rgba(255,255,255,0.1)">Logout</button>
+                    style="width:auto; padding:0.5rem 1rem; background:rgba(255,255,255,0.1)">Logout</button>
             </div>
-            <div id="bet-slip-toggle" onclick="ui.toggleSlip()"
-                style="cursor: pointer; background: var(--accent); padding: 5px 10px; border-radius: 5px; font-weight: bold; position: relative;">
-                Schedina (<span id="slip-count">0</span>)
-                <div id="slip-dropdown" class="hidden" onclick="event.stopPropagation()"
-                    style="position: absolute; top: 40px; right: 0; width: 300px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 1000;">
-                    <h3 style="font-size: 1rem; margin-bottom: 1rem;">La tua Schedina</h3>
-                    <div id="slip-items" style="max-height: 300px; overflow-y: auto; margin-bottom: 1rem;">
-                        <!-- Bet selections here -->
-                    </div>
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span>Quota Totale:</span>
-                            <span id="slip-total-odds" style="font-weight: bold;">1.00</span>
-                        </div>
-                        <div class="input-group">
-                            <label>Importo (€)</label>
-                            <input type="number" id="slip-amount" value="2" oninput="ui.updatePotentialWin()">
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
-                            <span>Vincita Potenziale:</span>
-                            <span id="slip-potential-win" style="font-weight: bold; color: var(--success);">€0.00</span>
-                        </div>
-                        <button onclick="bets.placeBet()">Scommetti Ora</button>
+            <div class="input-group">
+                <label>Importo (€)</label>
+                <input type="number" id="slip-amount" value="2" oninput="ui.updatePotentialWin()">
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                <span>Vincita Potenziale:</span>
+                <span id="slip-potential-win" style="font-weight: bold; color: var(--success);">€0.00</span>
+            </div>
+            <button onclick="bets.placeBet()">Scommetti Ora</button>
+    </div>
+    </div>
+    </div>
+    </nav>
+
+    <div class="container fade-in">
+        <!-- Odds Section -->
+        <div id="section-odds">
+            <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2>Quote Disponibili</h2>
+                    <span id="update-timer" style="font-size: 0.8rem; color: var(--text-secondary);">Prossimo
+                        aggiornamento: --s</span>
+                </div>
+
+                <!-- Barra di Ricerca -->
+                <div style="position: relative; width: 100%; max-width: 600px;">
+                    <input type="text" id="match-search" placeholder="Cerca squadra o campionato..."
+                        style="width: 100%; padding: 12px 20px; padding-left: 45px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 30px; color: white; outline: none; transition: border-color 0.3s;"
+                        oninput="ui.filterMatches()">
+                    <div
+                        style="position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-secondary);">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
                     </div>
                 </div>
             </div>
-        </nav>
+            <div id="odds-container" class="odds-grid">
+                <div style="grid-column: 1/-1; text-align: center; padding: 4rem; color: var(--text-secondary);">
+                    Caricamento quote in corso...</div>
+            </div>
+        </div>
 
-        <div class="container fade-in">
-            <!-- Odds Section -->
-            <div id="section-odds">
-                <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <h2>Quote Disponibili</h2>
-                        <span id="update-timer" style="font-size: 0.8rem; color: var(--text-secondary);">Prossimo
-                            aggiornamento: --s</span>
-                    </div>
-
-                    <!-- Barra di Ricerca -->
-                    <div style="position: relative; width: 100%; max-width: 600px;">
-                        <input type="text" id="match-search" placeholder="Cerca squadra o campionato..."
-                            style="width: 100%; padding: 12px 20px; padding-left: 45px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 30px; color: white; outline: none; transition: border-color 0.3s;"
-                            oninput="ui.filterMatches()">
-                        <div
-                            style="position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-secondary);">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                        </div>
-                    </div>
+        <!-- My Bets Section -->
+        <div id="section-mybets" class="hidden">
+            <div class="admin-section">
+                <h2>Le Mie Scommesse</h2>
+                <div id="my-bets-container" style="margin-top: 1.5rem;">
+                    <!-- Client bets will be injected here -->
                 </div>
-                <div id="odds-container" class="odds-grid">
-                    <div style="grid-column: 1/-1; text-align: center; padding: 4rem; color: var(--text-secondary);">
-                        Caricamento quote in corso...</div>
+            </div>
+        </div>
+
+        <!-- Admin Section -->
+        <div id="section-admin" class="hidden">
+            <div class="admin-tabs">
+                <button class="admin-tab active" onclick="admin.switchTab('dashboard')">Dashboard</button>
+                <button class="admin-tab" onclick="admin.switchTab('bets')">Scommesse Globali</button>
+                <button class="admin-tab" onclick="admin.switchTab('users')">Gestione Utenti</button>
+                <button class="admin-tab" onclick="admin.switchTab('odds')">Quote Manuali</button>
+                <button class="admin-tab" onclick="admin.switchTab('settings')">Impostazioni</button>
+            </div>
+
+            <!-- Tab: Dashboard / KPIs -->
+            <div id="admin-tab-dashboard" class="admin-tab-content">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-title">Utenti Registrati</div>
+                        <div class="kpi-value" id="kpi-users">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">Totale Saldi Aperti</div>
+                        <div class="kpi-value" id="kpi-balances">€0.00</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">Esposizione Banco</div>
+                        <div class="kpi-value warning" id="kpi-exposure">€0.00</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">Profitto Utile</div>
+                        <div class="kpi-value success" id="kpi-profit">€0.00</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- My Bets Section -->
-            <div id="section-mybets" class="hidden">
+            <!-- Tab: Impostazioni -->
+            <div id="admin-tab-settings" class="admin-tab-content hidden">
                 <div class="admin-section">
-                    <h2>Le Mie Scommesse</h2>
-                    <div id="my-bets-container" style="margin-top: 1.5rem;">
-                        <!-- Client bets will be injected here -->
+                    <h2>Gestione Margine & API</h2>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div class="input-group" style="min-width: 200px;">
+                            <label>Overround (Vantaggio Banco) %</label>
+                            <input type="number" id="setting-overround" value="5">
+                        </div>
+                        <div class="input-group" style="flex-grow: 1;">
+                            <label>API Key (TheOdds / API-Football / RapidAPI)</label>
+                            <input type="text" id="setting-apikey" placeholder="La tua API Key">
+                        </div>
+                        <div class="input-group" style="min-width: 200px;">
+                            <label>Sorgente Quote</label>
+                            <select id="setting-source"
+                                style="width: 100%; padding: 0.75rem; background: #0d1117; border: 1px solid var(--border-color); border-radius: 8px; color: white;">
+                                <option value="manual">Manuale (Inserimento Diretto)</option>
+                                <option value="betsapi2_rapidapi">Bet365 Diretta (via RapidAPI)</option>
+                                <option value="api-football">API-Football (Globale)</option>
+                                <option value="api">The Odds API</option>
+                            </select>
+                        </div>
                     </div>
+                    <button onclick="admin.saveSettings()">Salva Impostazioni</button>
                 </div>
             </div>
 
-            <!-- Admin Section -->
-            <div id="section-admin" class="hidden">
-                <div class="admin-tabs">
-                    <button class="admin-tab active" onclick="admin.switchTab('dashboard')">Dashboard</button>
-                    <button class="admin-tab" onclick="admin.switchTab('bets')">Scommesse Globali</button>
-                    <button class="admin-tab" onclick="admin.switchTab('users')">Gestione Utenti</button>
-                    <button class="admin-tab" onclick="admin.switchTab('odds')">Quote Manuali</button>
-                    <button class="admin-tab" onclick="admin.switchTab('settings')">Impostazioni</button>
-                </div>
+            <!-- Tab: Quote Manuali -->
+            <div id="admin-tab-odds" class="admin-tab-content hidden">
+                <h2>Inserimento Quote Manuali</h2>
+                <div class="odds-grid" style="margin-bottom: 2rem;">
+                    <div class="admin-section" style="padding: 1rem; background: rgba(0,0,0,0.2); grid-column: 1/-1;">
+                        <div
+                            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div class="input-group"><label>Sport</label><input type="text" id="m-sport"
+                                    placeholder="es. Calcio Serie A"></div>
+                            <div class="input-group"><label>Squadra Casa</label><input type="text" id="m-home"
+                                    placeholder="Casa"></div>
+                            <div class="input-group"><label>Squadra Fuori</label><input type="text" id="m-away"
+                                    placeholder="Ospiti"></div>
+                            <div class="input-group"><label>Ora Inizio</label><input type="datetime-local" id="m-time">
+                            </div>
+                        </div>
 
-                <!-- Tab: Dashboard / KPIs -->
-                <div id="admin-tab-dashboard" class="admin-tab-content">
-                    <div class="kpi-grid">
-                        <div class="kpi-card">
-                            <div class="kpi-title">Utenti Registrati</div>
-                            <div class="kpi-value" id="kpi-users">0</div>
+                        <p
+                            style="font-size: 0.8rem; color: var(--accent); margin: 1rem 0 0.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                            Quote 1X2</p>
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <div class="input-group"><label>Quota 1</label><input type="number" step="0.01" id="m-p1">
+                            </div>
+                            <div class="input-group"><label>Quota X</label><input type="number" step="0.01" id="m-px">
+                            </div>
+                            <div class="input-group"><label>Quota 2</label><input type="number" step="0.01" id="m-p2">
+                            </div>
                         </div>
-                        <div class="kpi-card">
-                            <div class="kpi-title">Totale Saldi Aperti</div>
-                            <div class="kpi-value" id="kpi-balances">€0.00</div>
+
+                        <p
+                            style="font-size: 0.8rem; color: var(--accent); margin: 1rem 0 0.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                            Altre Quote</p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                            <div class="input-group"><label>Over 2.5</label><input type="number" step="0.01"
+                                    id="m-over"></div>
+                            <div class="input-group"><label>Under 2.5</label><input type="number" step="0.01"
+                                    id="m-under"></div>
+                            <div class="input-group"><label>Goal</label><input type="number" step="0.01" id="m-goal">
+                            </div>
+                            <div class="input-group"><label>No Goal</label><input type="number" step="0.01"
+                                    id="m-nogoal"></div>
                         </div>
-                        <div class="kpi-card">
-                            <div class="kpi-title">Esposizione Banco</div>
-                            <div class="kpi-value warning" id="kpi-exposure">€0.00</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-title">Profitto Utile</div>
-                            <div class="kpi-value success" id="kpi-profit">€0.00</div>
-                        </div>
+                        <button onclick="admin.addManualOdd()"
+                            style="background: var(--success); margin-top: 1rem;">Aggiungi Partita</button>
                     </div>
                 </div>
 
-                <!-- Tab: Impostazioni -->
-                <div id="admin-tab-settings" class="admin-tab-content hidden">
-                    <div class="admin-section">
-                        <h2>Gestione Margine & API</h2>
-                        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                            <div class="input-group" style="min-width: 200px;">
-                                <label>Overround (Vantaggio Banco) %</label>
-                                <input type="number" id="setting-overround" value="5">
-                            </div>
-                            <div class="input-group" style="flex-grow: 1;">
-                                <label>API Key (TheOdds / API-Football / RapidAPI)</label>
-                                <input type="text" id="setting-apikey" placeholder="La tua API Key">
-                            </div>
-                            <div class="input-group" style="min-width: 200px;">
-                                <label>Sorgente Quote</label>
-                                <select id="setting-source"
-                                    style="width: 100%; padding: 0.75rem; background: #0d1117; border: 1px solid var(--border-color); border-radius: 8px; color: white;">
-                                    <option value="manual">Manuale (Inserimento Diretto)</option>
-                                    <option value="betsapi2_rapidapi">Bet365 Diretta (via RapidAPI)</option>
-                                    <option value="api-football">API-Football (Globale)</option>
-                                    <option value="api">The Odds API</option>
-                                </select>
-                            </div>
-                        </div>
-                        <button onclick="admin.saveSettings()">Salva Impostazioni</button>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Evento</th>
+                            <th>Sport</th>
+                            <th>Quote (Base)</th>
+                            <th>Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="manual-odds-table-body"></tbody>
+                </table>
+            </div>
+
+            <!-- Tab: Gestione Utenti -->
+            <div id="admin-tab-users" class="admin-tab-content hidden">
+                <div class="admin-section" id="admin-user-list-view">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2>Gestione Utenti</h2>
+                        <button onclick="admin.showAddUserModal()" style="width: auto; padding: 0.5rem 1rem;">Nuovo
+                            Utente</button>
                     </div>
-                </div>
-
-                <!-- Tab: Quote Manuali -->
-                <div id="admin-tab-odds" class="admin-tab-content hidden">
-                    <h2>Inserimento Quote Manuali</h2>
-                    <div class="odds-grid" style="margin-bottom: 2rem;">
-                        <div class="admin-section"
-                            style="padding: 1rem; background: rgba(0,0,0,0.2); grid-column: 1/-1;">
-                            <div
-                                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                                <div class="input-group"><label>Sport</label><input type="text" id="m-sport"
-                                        placeholder="es. Calcio Serie A"></div>
-                                <div class="input-group"><label>Squadra Casa</label><input type="text" id="m-home"
-                                        placeholder="Casa"></div>
-                                <div class="input-group"><label>Squadra Fuori</label><input type="text" id="m-away"
-                                        placeholder="Ospiti"></div>
-                                <div class="input-group"><label>Ora Inizio</label><input type="datetime-local"
-                                        id="m-time"></div>
-                            </div>
-
-                            <p
-                                style="font-size: 0.8rem; color: var(--accent); margin: 1rem 0 0.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                                Quote 1X2</p>
-                            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                                <div class="input-group"><label>Quota 1</label><input type="number" step="0.01"
-                                        id="m-p1"></div>
-                                <div class="input-group"><label>Quota X</label><input type="number" step="0.01"
-                                        id="m-px"></div>
-                                <div class="input-group"><label>Quota 2</label><input type="number" step="0.01"
-                                        id="m-p2"></div>
-                            </div>
-
-                            <p
-                                style="font-size: 0.8rem; color: var(--accent); margin: 1rem 0 0.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                                Altre Quote</p>
-                            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                                <div class="input-group"><label>Over 2.5</label><input type="number" step="0.01"
-                                        id="m-over"></div>
-                                <div class="input-group"><label>Under 2.5</label><input type="number" step="0.01"
-                                        id="m-under"></div>
-                                <div class="input-group"><label>Goal</label><input type="number" step="0.01"
-                                        id="m-goal"></div>
-                                <div class="input-group"><label>No Goal</label><input type="number" step="0.01"
-                                        id="m-nogoal"></div>
-                            </div>
-                            <button onclick="admin.addManualOdd()"
-                                style="background: var(--success); margin-top: 1rem;">Aggiungi Partita</button>
-                        </div>
-                    </div>
-
                     <table>
                         <thead>
                             <tr>
-                                <th>Evento</th>
-                                <th>Sport</th>
-                                <th>Quote (Base)</th>
+                                <th>Username</th>
+                                <th>Stato</th>
+                                <th>Saldo</th>
                                 <th>Azioni</th>
                             </tr>
                         </thead>
-                        <tbody id="manual-odds-table-body"></tbody>
+                        <tbody id="user-table-body"></tbody>
                     </table>
                 </div>
 
-                <!-- Tab: Gestione Utenti -->
-                <div id="admin-tab-users" class="admin-tab-content hidden">
-                    <div class="admin-section" id="admin-user-list-view">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                            <h2>Gestione Utenti</h2>
-                            <button onclick="admin.showAddUserModal()" style="width: auto; padding: 0.5rem 1rem;">Nuovo
-                                Utente</button>
-                        </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Username</th>
-                                    <th>Stato</th>
-                                    <th>Saldo</th>
-                                    <th>Azioni</th>
-                                </tr>
-                            </thead>
-                            <tbody id="user-table-body"></tbody>
-                        </table>
-                    </div>
+                <!-- User Details Admin Section -->
+                <div id="admin-user-detail" class="admin-section hidden">
+                    <button onclick="admin.closeUserDetail()"
+                        style="margin-bottom: 20px; width: auto; background: var(--text-secondary);">&larr; Torna
+                        agli
+                        Utenti</button>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 2rem;">
+                        <div class="login-card"
+                            style="flex: 1; min-width: 300px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
+                            <h3 id="detail-username" style="margin-bottom: 10px; color: var(--accent);">Username
+                            </h3>
+                            <p>Stato: <span id="detail-status" style="font-weight: bold;"></span></p>
+                            <p>Creato il: <span id="detail-created"></span></p>
+                            <p>Saldo Attuale: <strong style="font-size: 1.2rem; color: var(--success);"
+                                    id="detail-balance">€0.00</strong></p>
 
-                    <!-- User Details Admin Section -->
-                    <div id="admin-user-detail" class="admin-section hidden">
-                        <button onclick="admin.closeUserDetail()"
-                            style="margin-bottom: 20px; width: auto; background: var(--text-secondary);">&larr; Torna
-                            agli
-                            Utenti</button>
-                        <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 2rem;">
-                            <div class="login-card"
-                                style="flex: 1; min-width: 300px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
-                                <h3 id="detail-username" style="margin-bottom: 10px; color: var(--accent);">Username
-                                </h3>
-                                <p>Stato: <span id="detail-status" style="font-weight: bold;"></span></p>
-                                <p>Creato il: <span id="detail-created"></span></p>
-                                <p>Saldo Attuale: <strong style="font-size: 1.2rem; color: var(--success);"
-                                        id="detail-balance">€0.00</strong></p>
-
-                                <div style="margin-top: 15px; display: flex; gap: 10px;">
-                                    <button onclick="admin.toggleUserBlock()" id="btn-block-user"
-                                        style="width: auto;">Blocca/Sblocca</button>
-                                </div>
-                                <div
-                                    style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                                    <h4 style="margin-bottom: 5px; color: var(--text-secondary); font-size: 0.85rem;">
-                                        Cambia Password</h4>
-                                    <div style="display: flex; gap: 10px;">
-                                        <input type="text" id="detail-new-password" placeholder="Nuova password"
-                                            style="flex: 1; padding: 0.5rem; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 4px; color: white;">
-                                        <button onclick="admin.changeUserPassword()"
-                                            style="width: auto; background: var(--danger); padding: 0.5rem 1rem;">Salva</button>
-                                    </div>
-                                </div>
+                            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                                <button onclick="admin.toggleUserBlock()" id="btn-block-user"
+                                    style="width: auto;">Blocca/Sblocca</button>
                             </div>
-
-                            <div class="login-card"
-                                style="flex: 1; min-width: 300px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
-                                <h3>Gestione Saldo</h3>
-                                <div style="display: flex; gap: 10px; margin-top: 10px;">
-                                    <div class="input-group" style="flex: 1;">
-                                        <input type="number" id="detail-amount" placeholder="Importo (€)"
-                                            style="margin-bottom:0;">
-                                    </div>
-                                </div>
-                                <div class="input-group" style="margin-top: 10px;">
-                                    <input type="text" id="detail-reason" placeholder="Motivo operazione (log)">
-                                </div>
-                                <div style="display: flex; gap: 10px; margin-top: 10px;">
-                                    <button onclick="admin.detailAdjustBalance(1)"
-                                        style="flex: 1; background: var(--success); padding: 8px;">Aggiungi (+)</button>
-                                    <button onclick="admin.detailAdjustBalance(-1)"
-                                        style="flex: 1; background: var(--danger); padding: 8px;">Rimuovi (-)</button>
-                                </div>
-                                <div style="display: flex; gap: 10px; margin-top: 10px;">
-                                    <button onclick="admin.detailSetBalance()"
-                                        style="flex: 1; padding: 8px; border: 1px solid var(--border-color); background: transparent;">Imposta
-                                        Esatto</button>
-                                    <button onclick="admin.detailResetBalance()"
-                                        style="flex: 1; padding: 8px; border: 1px solid var(--danger); background: transparent;">Azzera
-                                        (0)</button>
+                            <div
+                                style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                                <h4 style="margin-bottom: 5px; color: var(--text-secondary); font-size: 0.85rem;">
+                                    Cambia Password</h4>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="text" id="detail-new-password" placeholder="Nuova password"
+                                        style="flex: 1; padding: 0.5rem; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 4px; color: white;">
+                                    <button onclick="admin.changeUserPassword()"
+                                        style="width: auto; background: var(--danger); padding: 0.5rem 1rem;">Salva</button>
                                 </div>
                             </div>
                         </div>
 
-                        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                            <div class="login-card"
-                                style="flex: 2; min-width: 400px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
-                                <h3>Scommesse Utente</h3>
-                                <div id="detail-bets-container" style="max-height: 400px; overflow-y: auto;">
-                                    <!-- User bets injected here -->
+                        <div class="login-card"
+                            style="flex: 1; min-width: 300px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
+                            <h3>Gestione Saldo</h3>
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <div class="input-group" style="flex: 1;">
+                                    <input type="number" id="detail-amount" placeholder="Importo (€)"
+                                        style="margin-bottom:0;">
                                 </div>
                             </div>
-                            <div class="login-card"
-                                style="flex: 1; min-width: 300px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
-                                <h3>Log Transazioni</h3>
-                                <div id="detail-transactions-container"
-                                    style="max-height: 400px; overflow-y: auto; font-size: 0.85rem;">
-                                    <!-- User transactions injected here -->
-                                </div>
+                            <div class="input-group" style="margin-top: 10px;">
+                                <input type="text" id="detail-reason" placeholder="Motivo operazione (log)">
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <button onclick="admin.detailAdjustBalance(1)"
+                                    style="flex: 1; background: var(--success); padding: 8px;">Aggiungi (+)</button>
+                                <button onclick="admin.detailAdjustBalance(-1)"
+                                    style="flex: 1; background: var(--danger); padding: 8px;">Rimuovi (-)</button>
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <button onclick="admin.detailSetBalance()"
+                                    style="flex: 1; padding: 8px; border: 1px solid var(--border-color); background: transparent;">Imposta
+                                    Esatto</button>
+                                <button onclick="admin.detailResetBalance()"
+                                    style="flex: 1; padding: 8px; border: 1px solid var(--danger); background: transparent;">Azzera
+                                    (0)</button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Tab: Scommesse Globali -->
-                    <div id="admin-tab-bets" class="admin-tab-content hidden">
-                        <div class="admin-section">
-                            <h2>Validazione Giocate Globali</h2>
-                            <p style="color:var(--text-secondary); margin-bottom:1rem; font-size:0.9rem;">Controlla e
-                                conferma
-                                qui se le giocate sono vincenti o perdenti oppure annullale rimborsando l'utente.</p>
-                            <div id="admin-bets-container">
-                                <!-- Caricato dinamicamente -->
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div class="login-card"
+                            style="flex: 2; min-width: 400px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
+                            <h3>Scommesse Utente</h3>
+                            <div id="detail-bets-container" style="max-height: 400px; overflow-y: auto;">
+                                <!-- User bets injected here -->
                             </div>
+                        </div>
+                        <div class="login-card"
+                            style="flex: 1; min-width: 300px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
+                            <h3>Log Transazioni</h3>
+                            <div id="detail-transactions-container"
+                                style="max-height: 400px; overflow-y: auto; font-size: 0.85rem;">
+                                <!-- User transactions injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Scommesse Globali -->
+                <div id="admin-tab-bets" class="admin-tab-content hidden">
+                    <div class="admin-section">
+                        <h2>Validazione Giocate Globali</h2>
+                        <p style="color:var(--text-secondary); margin-bottom:1rem; font-size:0.9rem;">Controlla e
+                            conferma
+                            qui se le giocate sono vincenti o perdenti oppure annullale rimborsando l'utente.</p>
+                        <div id="admin-bets-container">
+                            <!-- Caricato dinamicamente -->
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Modale Nuovo Utente -->
-        <div id="modal-user" class="hidden"
-            style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-            <div class="login-card" style="max-width: 350px;">
-                <h3>Nuovo Utente</h3>
-                <div class="input-group" style="margin-top: 1rem;">
-                    <label>Username</label>
-                    <input type="text" id="new-username">
-                </div>
-                <div class="input-group">
-                    <label>Password</label>
-                    <input type="text" id="new-password">
-                </div>
-                <div style="display: flex; gap: 1rem;">
-                    <button onclick="admin.createUser()" style="background: var(--success);">Crea</button>
-                    <button onclick="ui.closeModal()" style="background: var(--danger);">Annulla</button>
-                </div>
+    <!-- Modale Nuovo Utente -->
+    <div id="modal-user" class="hidden"
+        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+        <div class="login-card" style="max-width: 350px;">
+            <h3>Nuovo Utente</h3>
+            <div class="input-group" style="margin-top: 1rem;">
+                <label>Username</label>
+                <input type="text" id="new-username">
+            </div>
+            <div class="input-group">
+                <label>Password</label>
+                <input type="text" id="new-password">
+            </div>
+            <div style="display: flex; gap: 1rem;">
+                <button onclick="admin.createUser()" style="background: var(--success);">Crea</button>
+                <button onclick="ui.closeModal()" style="background: var(--danger);">Annulla</button>
             </div>
         </div>
+    </div>
 
-        <!-- Modal per tutte le quote di una partita -->
-        <div id="all-odds-modal" class="modal hidden">
-            <div class="modal-content">
-                <h2 id="modal-match-name" style="margin-bottom: 0.5rem;">Match Details</h2>
-                <div id="modal-match-time"
-                    style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Time</div>
-                <div id="modal-markets-container">
-                    <!-- Markets injected here -->
-                </div>
-                <button onclick="ui.closeAllOdds()" style="background: var(--danger); margin-top: 2rem;">Chiudi</button>
+    <!-- Modal per tutte le quote di una partita -->
+    <div id="all-odds-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2 id="modal-match-name" style="margin-bottom: 0.5rem;">Match Details</h2>
+            <div id="modal-match-time" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+                Time</div>
+            <div id="modal-markets-container">
+                <!-- Markets injected here -->
             </div>
+            <button onclick="ui.closeAllOdds()" style="background: var(--danger); margin-top: 2rem;">Chiudi</button>
         </div>
+    </div>
 
-        <div class="mobile-nav" id="mobile-nav">
-            <a onclick="router.navigate('odds')" class="mobile-nav-item active" id="mob-nav-odds">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M4 6h16M4 12h16M4 18h16"></path>
-                </svg>
-                <span>Quote</span>
-            </a>
-            <a onclick="router.navigate('mybets')" class="mobile-nav-item" id="mob-nav-mybets">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
-                    </path>
-                </svg>
-                <span>Giocate</span>
-            </a>
-            <a onclick="router.navigate('admin')" class="mobile-nav-item hidden" id="mob-nav-admin">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
-                    </path>
-                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                <span>Admin</span>
-            </a>
-        </div>
-        <script src="app.js"></script>
+    <div class="mobile-nav" id="mobile-nav">
+        <a onclick="router.navigate('odds')" class="mobile-nav-item active" id="mob-nav-odds">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+            <span>Quote</span>
+        </a>
+        <a onclick="router.navigate('mybets')" class="mobile-nav-item" id="mob-nav-mybets">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+                </path>
+            </svg>
+            <span>Giocate</span>
+        </a>
+        <a onclick="router.navigate('admin')" class="mobile-nav-item hidden" id="mob-nav-admin">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                </path>
+                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+            <span>Admin</span>
+        </a>
+    </div>
+    <script src="app.js"></script>
 </body>
 
 </html>
