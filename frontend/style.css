@@ -544,8 +544,7 @@ table tr:hover td {
     }
 
     .nav-links {
-        display: none;
-        /* Nascondiamo i link testuali classici */
+        display: none !important;
     }
 
     /* Barra di navigazione mobile in basso */
@@ -609,10 +608,15 @@ table tr:hover td {
         width: auto !important;
         max-width: none !important;
         z-index: 10000 !important;
+        display: none;
+        /* Inizialmente nascosto */
     }
 
-    /* Nascondiamo roba inutile in alto */
-    .nav-links,
+    #slip-dropdown:not(.hidden) {
+        display: block !important;
+    }
+
+    /* Nascondiamo il logout testuale in alto su mobile */
     #logout-btn {
         display: none !important;
     }
