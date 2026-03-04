@@ -6,3 +6,4 @@ bcrypt
 diskcache
 python-multipart
 pydantic
+psycopg2-binary
