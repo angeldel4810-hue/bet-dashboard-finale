@@ -583,9 +583,8 @@ table tr:hover td {
         height: 20px;
     }
 
-    /* Saldo e Schedina affiancati in alto a destra */
+    /* Gruppo destra in alto */
     .nav-extra {
-        position: static !important;
         display: flex !important;
         align-items: center !important;
         gap: 8px !important;
@@ -593,24 +592,44 @@ table tr:hover td {
 
     #user-balance-nav {
         display: block !important;
-        font-size: 0.75rem !important;
-        padding: 5px 10px !important;
+        font-size: 0.8rem !important;
+        padding: 6px 14px !important;
         background: #00ff88 !important;
         color: #000 !important;
-        border-radius: 20px !important;
+        border-radius: 50px !important;
         font-weight: 800 !important;
-        margin: 0 !important;
     }
 
-    #bet-slip-toggle {
-        font-size: 0.75rem !important;
-        padding: 5px 8px !important;
+    /* La schedina si apre a tutto schermo o quasi per non essere tagliata */
+    #slip-dropdown {
+        position: fixed !important;
+        top: 60px !important;
+        left: 10px !important;
+        right: 10px !important;
+        width: auto !important;
+        max-width: none !important;
+        z-index: 10000 !important;
     }
 
-    /* Nascondiamo il tasto logout su mobile */
+    /* Nascondiamo roba inutile in alto */
+    .nav-links,
     #logout-btn {
         display: none !important;
     }
+}
+
+/* Stile Dropdown Schedina (Desktop) */
+#slip-dropdown {
+    position: absolute;
+    top: 45px;
+    right: 0;
+    width: 320px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.7);
+    z-index: 1000;
 }
 
 .mobile-nav {
