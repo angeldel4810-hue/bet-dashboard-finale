@@ -284,12 +284,22 @@ const router = {
             'crash': 'nav-casino',
             'blackjack': 'nav-casino'
         };
+        // Mappa mobile nav
+        const mobNavMap = {
+            'odds': 'mob-nav-odds',
+            'admin': 'mob-nav-admin',
+            'mybets': 'mob-nav-mybets',
+            'casino': 'mob-nav-casino',
+            'crash': 'mob-nav-casino',
+            'blackjack': 'mob-nav-casino'
+        };
 
         const targetNavId = navMap[section];
         const targetNav = document.getElementById(targetNavId);
         if (targetNav) targetNav.classList.add('active');
 
-        const targetMobNav = document.getElementById(`mob-${targetNavId}`);
+        const targetMobNavId = mobNavMap[section];
+        const targetMobNav = document.getElementById(targetMobNavId);
         if (targetMobNav) targetMobNav.classList.add('active');
 
         if (section === 'admin') admin.init();
@@ -301,8 +311,9 @@ const router = {
 window.blackjack = {
     async deal() {
         const amountInput = document.getElementById('bj-bet-amount');
-        const bet = parseFloat(amountInput.value);
-        if (!bet || bet < 1) return alert("Scommessa minima 1€");
+        const rawVal = amountInput.value.replace(',', '.');
+        const bet = parseFloat(rawVal);
+        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/blackjack/deal', {
@@ -416,20 +427,48 @@ window.blackjack = {
     updateUI() {
         const bj = state.blackjack;
 
-        // Render cards helper
-        const renderCards = (cards, containerId) => {
-            const container = document.getElementById(containerId);
-            container.innerHTML = cards.map(c => `
-                <div class="card-item" style="width: 70px; height: 100px; background: white; border-radius: 8px; border: 2px solid #333; color: ${c.suit === '♥' || c.suit === '♦' ? 'red' : 'black'}; flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-weight: bold; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
-                    <div style="font-size: 1rem; line-height: 1;">${c.rank}</div>
-                    <div style="font-size: 2rem; align-self: center;">${c.suit}</div>
-                    <div style="font-size: 1rem; line-height: 1; transform: rotate(180deg);">${c.rank}</div>
-                </div>
-            `).join('');
+        const makeCard = (c) => {
+            const color = c.suit === '\u2665' || c.suit === '\u2666' ? 'red' : 'black';
+            const div = document.createElement('div');
+            div.className = 'card-item';
+            div.style.cssText = `width: 70px; height: 100px; background: white; border-radius: 8px; border: 2px solid #333; color: ${color}; flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-weight: bold; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3);`;
+            div.innerHTML = `<div style="font-size: 1rem; line-height: 1;">${c.rank}</div><div style="font-size: 2rem; align-self: center;">${c.suit}</div><div style="font-size: 1rem; line-height: 1; transform: rotate(180deg);">${c.rank}</div>`;
+            return div;
         };
 
-        renderCards(bj.dealer_hand, 'bj-dealer-cards');
-        renderCards(bj.player_hand, 'bj-player-cards');
+        const cardHelper = (cards, containerId, forceRedraw = false) => {
+            const container = document.getElementById(containerId);
+            const lastGameId = container.dataset.gameId;
+            const isNewGame = lastGameId !== String(bj.game_id);
+            if (isNewGame || forceRedraw) {
+                container.innerHTML = '';
+                container.dataset.gameId = String(bj.game_id);
+            }
+            const existing = container.querySelectorAll('.card-item').length;
+            if (existing === cards.length && !forceRedraw) return;
+            if (forceRedraw) {
+                // Instant full redraw - no animation, reveal all cards
+                container.innerHTML = '';
+                cards.forEach(c => container.appendChild(makeCard(c)));
+                return;
+            }
+            cards.forEach((c, idx) => {
+                if (idx < existing) return;
+                setTimeout(() => {
+                    const div = makeCard(c);
+                    div.style.opacity = '0';
+                    div.style.transform = 'translateY(-20px) scale(0.8)';
+                    div.style.transition = 'all 0.35s ease';
+                    container.appendChild(div);
+                    requestAnimationFrame(() => { setTimeout(() => { div.style.opacity = '1'; div.style.transform = 'translateY(0) scale(1)'; }, 30); });
+                }, (idx - existing) * 350);
+            });
+        };
+
+        // When game is over, force-redraw dealer hand to reveal hidden card
+        const gameOver = ['win', 'loss', 'push', 'bust', 'win_bj', 'split_end'].includes(bj.status);
+        cardHelper(bj.dealer_hand, 'bj-dealer-cards', gameOver);
+        cardHelper(bj.player_hand, 'bj-player-cards');
 
         document.getElementById('bj-player-score').innerText = `Punteggio: ${bj.player_score}`;
         document.getElementById('bj-dealer-score').innerText = `Punteggio: ${bj.dealer_score}`;
@@ -1128,8 +1167,9 @@ window.crash = {
     },
     async placeBet() {
         const amountInput = document.getElementById('crash-bet-amount');
-        const amount = parseFloat(amountInput.value);
-        if (!amount || amount <= 0) return alert("Inserisci un importo valido");
+        const rawVal = amountInput.value.replace(',', '.');
+        const amount = parseFloat(rawVal);
+        if (isNaN(amount) || amount < 0.20) return alert("Scommessa minima €0.20");
         if (amount > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/crash/bet', {

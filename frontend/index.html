@@ -163,7 +163,7 @@
                         style="background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
                         <div class="input-group" style="margin-bottom: 1.5rem;">
                             <label>Importo Scommessa (€)</label>
-                            <input type="number" id="crash-bet-amount" value="10" step="1" min="1"
+                            <input type="number" id="crash-bet-amount" value="1" step="0.20" min="0.20"
                                 style="width: 100%; padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; color: white; font-size: 1.1rem;">
                         </div>
 
@@ -221,7 +221,7 @@
                     <div id="bj-controls"
                         style="margin-top: 3rem; display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
                         <div id="bj-bet-controls">
-                            <input type="number" id="bj-bet-amount" value="10"
+                            <input type="number" id="bj-bet-amount" value="1" min="0.20" step="0.20"
                                 style="width: 100px; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; text-align: center; font-weight: bold;">
                             <button onclick="blackjack.deal()"
                                 style="background: #ffd700; color: #000; padding: 10px 30px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer;">GIOCA</button>
