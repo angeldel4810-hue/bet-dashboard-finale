@@ -314,6 +314,7 @@ window.blackjack = {
             state.blackjack = { ...state.blackjack, ...res };
             this.updateUI();
             ui.fetchBalance();
+            this._handleEndAlert(res);
         }
     },
     async hit() {
@@ -326,7 +327,7 @@ window.blackjack = {
             state.blackjack = { ...state.blackjack, ...res };
             this.updateUI();
             if (res.status === 'bust') {
-                setTimeout(() => alert("Hai sballato!"), 500);
+                this._handleEndAlert(res);
             }
         }
     },
@@ -340,10 +341,7 @@ window.blackjack = {
             state.blackjack = { ...state.blackjack, ...res };
             this.updateUI();
             ui.fetchBalance();
-            if (res.status === 'win') setTimeout(() => alert("HAI VINTO!"), 500);
-            else if (res.status === 'loss') setTimeout(() => alert("Il Banco vince."), 500);
-            else if (res.status === 'push') setTimeout(() => alert("Pareggio."), 500);
-            else if (res.status === 'split_end') setTimeout(() => alert("Partita SPLIT terminata. Hai vinto: " + (res.payout || 0) + "€"), 500);
+            this._handleEndAlert(res);
         }
     },
     async split() {
@@ -356,9 +354,64 @@ window.blackjack = {
             state.blackjack = { ...state.blackjack, ...res };
             this.updateUI();
             ui.fetchBalance();
+            this._handleEndAlert(res);
         } else if (res && res.error) {
             alert(res.error);
         }
+    },
+    async doubleDown() {
+        if (state.blackjack.status !== 'playing') return;
+        const res = await api.request('/blackjack/double', {
+            method: 'POST',
+            body: JSON.stringify({ game_id: state.blackjack.game_id })
+        });
+        if (res && !res.error) {
+            state.blackjack = { ...state.blackjack, ...res };
+            this.updateUI();
+            ui.fetchBalance();
+            this._handleEndAlert(res);
+        } else if (res && res.error) {
+            alert(res.error);
+        }
+    },
+    async insurance() {
+        if (state.blackjack.status !== 'playing') return;
+        const res = await api.request('/blackjack/insurance', {
+            method: 'POST',
+            body: JSON.stringify({ game_id: state.blackjack.game_id })
+        });
+        if (res && !res.error) {
+            state.blackjack = { ...state.blackjack, ...res };
+            this.updateUI();
+            ui.fetchBalance();
+            if (res.insurance_payout) alert("Assicurazione vinta! +" + res.insurance_payout + "€");
+            this._handleEndAlert(res);
+        } else if (res && res.error) {
+            alert(res.error);
+        }
+    },
+    async skipInsurance() {
+        if (state.blackjack.status !== 'playing') return;
+        const res = await api.request('/blackjack/skip_insurance', {
+            method: 'POST',
+            body: JSON.stringify({ game_id: state.blackjack.game_id })
+        });
+        if (res && !res.error) {
+            state.blackjack = { ...state.blackjack, ...res };
+            this.updateUI();
+            ui.fetchBalance();
+            this._handleEndAlert(res);
+        } else if (res && res.error) {
+            alert(res.error);
+        }
+    },
+    _handleEndAlert(res) {
+        if (res.status === 'win') setTimeout(() => alert("HAI VINTO!"), 500);
+        else if (res.status === 'win_bj') setTimeout(() => alert("BLACKJACK! Hai vinto!"), 500);
+        else if (res.status === 'loss') setTimeout(() => alert("Il Banco vince."), 500);
+        else if (res.status === 'push') setTimeout(() => alert("Pareggio."), 500);
+        else if (res.status === 'split_end') setTimeout(() => alert("Partita SPLIT terminata. Totale vinto: " + (res.payout || 0) + "€"), 500);
+        else if (res.status === 'bust') setTimeout(() => alert("Hai sballato!"), 500);
     },
     updateUI() {
         const bj = state.blackjack;
