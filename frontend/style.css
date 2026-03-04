@@ -146,6 +146,11 @@ nav {
     gap: 1.5rem;
 }
 
+.nav-extra {
+    display: flex;
+    align-items: center;
+}
+
 .nav-links a {
     color: var(--text-secondary);
     text-decoration: none;
@@ -579,14 +584,18 @@ table tr:hover td {
     }
 
     /* Mostriamo il saldo sempre in alto a destra su mobile */
-    #user-balance-nav {
-        display: block !important;
+    .nav-extra {
         position: absolute;
         right: 15px;
         top: 15px;
+    }
+
+    #user-balance-nav {
+        display: block !important;
         font-size: 0.75rem;
         padding: 4px 10px !important;
         background: var(--success) !important;
+        margin: 0 !important;
     }
 
     /* Nascondiamo il tasto logout testuale su mobile per far spazio */
