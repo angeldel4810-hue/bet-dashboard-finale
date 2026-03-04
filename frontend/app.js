@@ -1,11 +1,28 @@
-window.state = {
+const state = {
     token: localStorage.getItem('token'),
     role: localStorage.getItem('role'),
     odds: [],
     slip: [],
     timer: 60,
     searchQuery: '',
-    settings: null
+    settings: null,
+    crash: {
+        ws: null,
+        status: 'waiting',
+        multiplier: 1.0,
+        history: [],
+        betting: false,
+        activeBet: null // { id, amount }
+    },
+    blackjack: {
+        game_id: null,
+        player_hand: [],
+        dealer_hand: [],
+        player_score: 0,
+        dealer_score: 0,
+        status: 'betting', // betting, playing, win, loss, bust, push
+        bet: 0
+    }
 };
 
 window.api = {
@@ -244,7 +261,7 @@ window.ui = {
 
 const router = {
     navigate(section) {
-        const sections = ['odds', 'admin', 'mybets'];
+        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack'];
         sections.forEach(s => {
             const el = document.getElementById(`section-${s}`);
             if (el) el.classList.add('hidden');
@@ -257,14 +274,116 @@ const router = {
 
         const targetEl = document.getElementById(`section-${section}`);
         if (targetEl) targetEl.classList.remove('hidden');
-        const targetNav = document.getElementById(`nav-${section}`);
+
+        // Mappa per accendere il link corretto nel menu
+        const navMap = {
+            'odds': 'nav-odds',
+            'admin': 'nav-admin',
+            'mybets': 'nav-mybets',
+            'casino': 'nav-casino',
+            'crash': 'nav-casino',
+            'blackjack': 'nav-casino'
+        };
+
+        const targetNavId = navMap[section];
+        const targetNav = document.getElementById(targetNavId);
         if (targetNav) targetNav.classList.add('active');
 
-        const targetMobNav = document.getElementById(`mob-nav-${section}`);
+        const targetMobNav = document.getElementById(`mob-${targetNavId}`);
         if (targetMobNav) targetMobNav.classList.add('active');
 
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
+        if (section === 'crash') crash.init();
+    }
+};
+
+window.blackjack = {
+    async deal() {
+        const amountInput = document.getElementById('bj-bet-amount');
+        const bet = parseFloat(amountInput.value);
+        if (!bet || bet < 1) return alert("Scommessa minima 1€");
+        if (bet > state.balance) return alert("Saldo insufficiente");
+
+        const res = await api.request('/blackjack/deal', {
+            method: 'POST',
+            body: JSON.stringify({ bet })
+        });
+
+        if (res) {
+            state.blackjack = { ...state.blackjack, ...res };
+            this.updateUI();
+            ui.fetchBalance();
+        }
+    },
+    async hit() {
+        if (state.blackjack.status !== 'playing') return;
+        const res = await api.request('/blackjack/hit', {
+            method: 'POST',
+            body: JSON.stringify({ game_id: state.blackjack.game_id })
+        });
+        if (res) {
+            state.blackjack = { ...state.blackjack, ...res };
+            this.updateUI();
+            if (res.status === 'bust') {
+                setTimeout(() => alert("Hai sballato!"), 500);
+            }
+        }
+    },
+    async stand() {
+        if (state.blackjack.status !== 'playing') return;
+        const res = await api.request('/blackjack/stand', {
+            method: 'POST',
+            body: JSON.stringify({ game_id: state.blackjack.game_id })
+        });
+        if (res) {
+            state.blackjack = { ...state.blackjack, ...res };
+            this.updateUI();
+            ui.fetchBalance();
+            if (res.status === 'win') setTimeout(() => alert("HAI VINTO!"), 500);
+            else if (res.status === 'loss') setTimeout(() => alert("Il Banco vince."), 500);
+            else if (res.status === 'push') setTimeout(() => alert("Pareggio."), 500);
+        }
+    },
+    updateUI() {
+        const bj = state.blackjack;
+
+        // Render cards helper
+        const renderCards = (cards, containerId) => {
+            const container = document.getElementById(containerId);
+            container.innerHTML = cards.map(c => `
+                <div class="card-item" style="width: 70px; height: 100px; background: white; border-radius: 8px; border: 2px solid #333; color: ${c.suit === '♥' || c.suit === '♦' ? 'red' : 'black'}; flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-weight: bold; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
+                    <div style="font-size: 1rem; line-height: 1;">${c.rank}</div>
+                    <div style="font-size: 2rem; align-self: center;">${c.suit}</div>
+                    <div style="font-size: 1rem; line-height: 1; transform: rotate(180deg);">${c.rank}</div>
+                </div>
+            `).join('');
+        };
+
+        renderCards(bj.dealer_hand, 'bj-dealer-cards');
+        renderCards(bj.player_hand, 'bj-player-cards');
+
+        document.getElementById('bj-player-score').innerText = `Punteggio: ${bj.player_score}`;
+        document.getElementById('bj-dealer-score').innerText = `Punteggio: ${bj.dealer_score}`;
+
+        const statusEl = document.getElementById('bj-status');
+        const betControls = document.getElementById('bj-bet-controls');
+        const actionControls = document.getElementById('bj-action-controls');
+
+        if (bj.status === 'playing') {
+            statusEl.innerText = 'Tocca a te!';
+            betControls.classList.add('hidden');
+            actionControls.classList.remove('hidden');
+        } else {
+            betControls.classList.remove('hidden');
+            actionControls.classList.add('hidden');
+
+            if (bj.status === 'win') statusEl.innerText = 'HAI VINTO!';
+            else if (bj.status === 'loss') statusEl.innerText = 'BANCO VINCE';
+            else if (bj.status === 'bust') statusEl.innerText = 'SBALLATO!';
+            else if (bj.status === 'push') statusEl.innerText = 'PAREGGIO (Push)';
+            else statusEl.innerText = 'Piazza la tua puntata';
+        }
     }
 };
 
@@ -454,17 +573,19 @@ window.admin = {
         const settings = await api.request('/settings');
         if (settings) {
             document.getElementById('setting-overround').value = settings.overround;
+            document.getElementById('setting-crash-house-edge').value = settings.crash_house_edge || '3';
             document.getElementById('setting-apikey').value = settings.apikey || '';
             document.getElementById('setting-source').value = settings.odds_source || 'manual';
         }
     },
     async saveSettings() {
         const overround = document.getElementById('setting-overround').value;
+        const crash_house_edge = document.getElementById('setting-crash-house-edge').value;
         const apikey = document.getElementById('setting-apikey').value;
         const odds_source = document.getElementById('setting-source').value;
         await api.request('/settings', {
             method: 'POST',
-            body: JSON.stringify({ overround, apikey, odds_source })
+            body: JSON.stringify({ overround, crash_house_edge, apikey, odds_source })
         });
         state.settings = null; // Forza il refresh al prossimo render
         dashboard.fetchOdds();
@@ -489,14 +610,25 @@ window.admin = {
     async openUserDetail(userId) {
         this.currentUserId = userId;
         const detail = await api.request(`/admin/users/${userId}/detail`);
-        if (!detail) return;
 
-        // Populate info
-        document.getElementById('detail-username').innerText = detail.username;
-        document.getElementById('detail-status').innerText = detail.status;
+        // Handle error response or missing data
+        if (!detail || detail.detail) {
+            alert("Errore nel caricamento dei dettagli: " + (detail ? detail.detail : "Connessione fallita"));
+            return;
+        }
+
+        // Safe population
+        document.getElementById('detail-username').innerText = detail.username || '---';
+        document.getElementById('detail-status').innerText = detail.status || '---';
         document.getElementById('detail-status').style.color = detail.status === 'blocked' ? 'var(--danger)' : 'var(--success)';
-        document.getElementById('detail-created').innerText = new Date(detail.created_at).toLocaleDateString();
-        document.getElementById('detail-balance').innerText = `€${detail.balance.toFixed(2)}`;
+
+        try {
+            document.getElementById('detail-created').innerText = detail.created_at ? new Date(detail.created_at).toLocaleDateString() : '---';
+        } catch (e) {
+            document.getElementById('detail-created').innerText = '---';
+        }
+
+        document.getElementById('detail-balance').innerText = `€${(detail.balance || 0).toFixed(2)}`;
 
         // Populate bets
         const betsContainer = document.getElementById('detail-bets-container');
@@ -630,7 +762,7 @@ window.admin = {
         }
     },
     async loadAllBets() {
-        const bets = await api.request('/admin/all-bets');
+        const bets = await api.request('/admin/bets');
         if (bets) {
             const container = document.getElementById('admin-bets-container');
             container.innerHTML = bets.map(b => `
@@ -820,8 +952,175 @@ window.bets = {
     }
 };
 
-// Start
-if (state.token) {
-    ui.showDashboard();
-    dashboard.init();
-}
+window.crash = {
+    init() {
+        if (!state.crash.ws || state.crash.ws.readyState === WebSocket.CLOSED) {
+            this.connect();
+        }
+        this.drawGraph();
+    },
+    connect() {
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${location.host}/ws/crash`;
+        state.crash.ws = new WebSocket(wsUrl);
+
+        state.crash.ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            this.handleMessage(data);
+        };
+
+        state.crash.ws.onclose = () => {
+            console.log("WebSocket Crash chiuso. Riconnessione tra 3 secondi...");
+            setTimeout(() => this.connect(), 3000);
+        };
+    },
+    handleMessage(data) {
+        if (data.type === 'init') {
+            state.crash.status = data.status;
+            state.crash.multiplier = data.multiplier;
+            state.crash.history = data.history || [];
+            this.updateUI();
+            this.updateHistory();
+        } else if (data.type === 'waiting') {
+            state.crash.status = 'waiting';
+            document.getElementById('crash-status-text').innerText = `Prossimo round tra ${data.time}s`;
+            document.getElementById('crash-multiplier').style.color = 'white';
+            document.getElementById('crash-multiplier').innerText = `1.00x`;
+            this.updateUI();
+        } else if (data.type === 'running') {
+            state.crash.status = 'running';
+            state.crash.multiplier = data.multiplier;
+            document.getElementById('crash-status-text').innerText = 'In volo...';
+            document.getElementById('crash-multiplier').innerText = `${data.multiplier.toFixed(2)}x`;
+            this.updateUI();
+        } else if (data.type === 'crashed') {
+            state.crash.status = 'crashed';
+            state.crash.multiplier = data.multiplier;
+            state.crash.history = data.history;
+            state.crash.activeBet = null;
+            document.getElementById('crash-status-text').innerText = 'CRASH!';
+            document.getElementById('crash-multiplier').innerText = `${data.multiplier.toFixed(2)}x`;
+            document.getElementById('crash-multiplier').style.color = 'var(--danger)';
+            this.updateUI();
+            this.updateHistory();
+            ui.fetchBalance();
+        }
+    },
+    updateUI() {
+        const btn = document.getElementById('crash-bet-btn');
+        const amountInput = document.getElementById('crash-bet-amount');
+        if (!btn || !amountInput) return;
+
+        if (state.crash.status === 'waiting') {
+            if (!state.crash.activeBet) {
+                btn.innerText = 'SCOMMETTI';
+                btn.style.background = 'var(--accent)';
+                btn.disabled = false;
+                btn.onclick = () => this.placeBet();
+                amountInput.disabled = false;
+            } else {
+                btn.innerText = 'SCOMMESSA PIAZZATA';
+                btn.style.background = 'var(--text-secondary)';
+                btn.disabled = true;
+            }
+        } else if (state.crash.status === 'running') {
+            if (state.crash.activeBet) {
+                const payout = (state.crash.activeBet.amount * state.crash.multiplier).toFixed(2);
+                btn.innerText = `INCASSA €${payout}`;
+                btn.style.background = 'var(--success)';
+                btn.disabled = false;
+                btn.onclick = () => this.cashOut();
+            } else {
+                btn.innerText = 'IN CORSO...';
+                btn.style.background = 'var(--text-secondary)';
+                btn.disabled = true;
+            }
+            amountInput.disabled = true;
+        } else {
+            // Crashed
+            btn.innerText = 'CRASHATO';
+            btn.style.background = 'var(--danger)';
+            btn.disabled = true;
+            amountInput.disabled = true;
+        }
+    },
+    async placeBet() {
+        const amountInput = document.getElementById('crash-bet-amount');
+        const amount = parseFloat(amountInput.value);
+        if (!amount || amount <= 0) return alert("Inserisci un importo valido");
+        if (amount > state.balance) return alert("Saldo insufficiente");
+
+        const res = await api.request('/crash/bet', {
+            method: 'POST',
+            body: JSON.stringify({ amount })
+        });
+
+        if (res) {
+            state.crash.activeBet = { id: res.bet_id, amount };
+            ui.fetchBalance();
+            this.updateUI();
+        }
+    },
+    async cashOut() {
+        if (!state.crash.activeBet) return;
+        const res = await api.request('/crash/cashout', {
+            method: 'POST',
+            body: JSON.stringify({ bet_id: state.crash.activeBet.id })
+        });
+
+        if (res) {
+            alert(`Hai vinto €${res.payout.toFixed(2)}!`);
+            state.crash.activeBet = null;
+            ui.fetchBalance();
+            this.updateUI();
+        }
+    },
+    updateHistory() {
+        const container = document.getElementById('crash-history');
+        if (!container) return;
+        container.innerHTML = state.crash.history.slice(-10).reverse().map(m => `
+            <div style="background: ${m >= 2 ? 'var(--success)' : 'rgba(255,255,255,0.1)'}; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;">
+                ${m.toFixed(2)}x
+            </div>
+        `).join('');
+    },
+    drawGraph() {
+        const canvas = document.getElementById('crash-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+
+        const animate = () => {
+            if (document.getElementById('section-crash').classList.contains('hidden')) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (state.crash.status === 'running') {
+                ctx.beginPath();
+                ctx.strokeStyle = '#ffbb00';
+                ctx.lineWidth = 4;
+                ctx.moveTo(0, canvas.height);
+
+                // Disegna una curva basata sul moltiplicatore attuale
+                const progress = Math.min((state.crash.multiplier - 1) / 10, 1);
+                const targetX = canvas.width * 0.8 * progress;
+                const targetY = canvas.height - (canvas.height * 0.8 * progress);
+
+                ctx.quadraticCurveTo(canvas.width * 0.4, canvas.height, targetX, targetY);
+                ctx.stroke();
+            }
+
+            requestAnimationFrame(animate);
+        };
+        animate();
+    }
+};
+
+window.onload = () => {
+    if (state.token) {
+        ui.showDashboard();
+        dashboard.init();
+        router.navigate('odds');
+    }
+};
