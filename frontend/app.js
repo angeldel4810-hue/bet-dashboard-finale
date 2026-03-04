@@ -62,6 +62,8 @@ window.ui = {
         document.getElementById('main-dashboard').classList.remove('hidden');
         if (state.role === 'admin') {
             document.getElementById('nav-admin').classList.remove('hidden');
+            const mobAdmin = document.getElementById('mob-nav-admin');
+            if (mobAdmin) mobAdmin.classList.remove('hidden');
         }
         this.fetchBalance();
     },
@@ -248,12 +250,18 @@ const router = {
             if (el) el.classList.add('hidden');
             const navEl = document.getElementById(`nav-${s}`);
             if (navEl) navEl.classList.remove('active');
+
+            const mobNavEl = document.getElementById(`mob-nav-${s}`);
+            if (mobNavEl) mobNavEl.classList.remove('active');
         });
 
         const targetEl = document.getElementById(`section-${section}`);
         if (targetEl) targetEl.classList.remove('hidden');
         const targetNav = document.getElementById(`nav-${section}`);
         if (targetNav) targetNav.classList.add('active');
+
+        const targetMobNav = document.getElementById(`mob-nav-${section}`);
+        if (targetMobNav) targetMobNav.classList.add('active');
 
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
