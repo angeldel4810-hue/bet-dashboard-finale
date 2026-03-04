@@ -343,6 +343,21 @@ window.blackjack = {
             if (res.status === 'win') setTimeout(() => alert("HAI VINTO!"), 500);
             else if (res.status === 'loss') setTimeout(() => alert("Il Banco vince."), 500);
             else if (res.status === 'push') setTimeout(() => alert("Pareggio."), 500);
+            else if (res.status === 'split_end') setTimeout(() => alert("Partita SPLIT terminata. Hai vinto: " + (res.payout || 0) + "€"), 500);
+        }
+    },
+    async split() {
+        if (state.blackjack.status !== 'playing') return;
+        const res = await api.request('/blackjack/split', {
+            method: 'POST',
+            body: JSON.stringify({ game_id: state.blackjack.game_id })
+        });
+        if (res && !res.error) {
+            state.blackjack = { ...state.blackjack, ...res };
+            this.updateUI();
+            ui.fetchBalance();
+        } else if (res && res.error) {
+            alert(res.error);
         }
     },
     updateUI() {
@@ -369,16 +384,30 @@ window.blackjack = {
         const statusEl = document.getElementById('bj-status');
         const betControls = document.getElementById('bj-bet-controls');
         const actionControls = document.getElementById('bj-action-controls');
+        const splitBtn = document.getElementById('bj-split-btn');
+
+        // Split Button visibility
+        if (bj.status === 'playing' && bj.player_hand && bj.player_hand.length === 2 && !bj.is_split && (bj.player_hand[0].value === bj.player_hand[1].value || bj.player_hand[0].rank === bj.player_hand[1].rank)) {
+            splitBtn.classList.remove('hidden');
+        } else {
+            if (splitBtn) splitBtn.classList.add('hidden');
+        }
 
         if (bj.status === 'playing') {
-            statusEl.innerText = 'Tocca a te!';
+            if (bj.is_split) {
+                statusEl.innerText = `SPLIT - Gioca Mano ${bj.active_hand_num}`;
+            } else {
+                statusEl.innerText = 'Tocca a te!';
+            }
             betControls.classList.add('hidden');
             actionControls.classList.remove('hidden');
         } else {
             betControls.classList.remove('hidden');
             actionControls.classList.add('hidden');
 
-            if (bj.status === 'win') statusEl.innerText = 'HAI VINTO!';
+            if (bj.is_split && bj.status === 'split_end') {
+                statusEl.innerText = `FINE SPLIT (Premi Gioca)`;
+            } else if (bj.status === 'win') statusEl.innerText = 'HAI VINTO!';
             else if (bj.status === 'loss') statusEl.innerText = 'BANCO VINCE';
             else if (bj.status === 'bust') statusEl.innerText = 'SBALLATO!';
             else if (bj.status === 'push') statusEl.innerText = 'PAREGGIO (Push)';

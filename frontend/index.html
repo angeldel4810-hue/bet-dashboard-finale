@@ -38,6 +38,7 @@
             <!-- Link Desktop (Nascosti su mobile via CSS) -->
             <div class="nav-links">
                 <a onclick="router.navigate('odds')" id="nav-odds" class="active">Quote</a>
+                <a onclick="router.navigate('casino')" id="nav-casino">Casinò</a>
                 <a href="#" id="nav-mybets" onclick="router.navigate('mybets')">Mie Giocate</a>
                 <a href="#" id="nav-admin" class="hidden" onclick="router.navigate('admin')">Admin</a>
             </div>
@@ -117,6 +118,128 @@
                 </div>
             </div>
 
+            <!-- Casino Hub Section -->
+            <div id="section-casino" class="hidden">
+                <h2 style="margin-bottom: 2rem;">Casinò Games</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 2rem;">
+                    <!-- Crash Card -->
+                    <div class="game-card" onclick="router.navigate('crash')"
+                        style="background: linear-gradient(135deg, #1a1b23 0%, #0d0e12 100%); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; cursor: pointer; transition: transform 0.3s, border-color 0.3s;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🚀</div>
+                        <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Crash</h3>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem;">Scommetti sul moltiplicatore e
+                            incassa prima del crash!</p>
+                    </div>
+                    <!-- Blackjack Card -->
+                    <div class="game-card" onclick="router.navigate('blackjack')"
+                        style="background: linear-gradient(135deg, #1a1b23 0%, #0d0e12 100%); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; cursor: pointer; transition: transform 0.3s, border-color 0.3s;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🃏</div>
+                        <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Blackjack</h3>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem;">Sfida il banco, arriva a 21 e
+                            raddoppia la tua puntata!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Crash Game Section -->
+            <div id="section-crash" class="hidden">
+                <button onclick="router.navigate('casino')"
+                    style="margin-bottom: 1rem; background: transparent; border: 1px solid var(--border-color); width: auto; padding: 5px 15px;">&larr;
+                    Torna ai Giochi</button>
+                <div class="crash-container" style="display: grid; grid-template-columns: 1fr 300px; gap: 2rem;">
+                    <!-- Grafico Crash -->
+                    <div class="crash-main"
+                        style="background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); position: relative; height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; overflow: hidden;">
+                        <div id="crash-multiplier" style="font-size: 5rem; font-weight: 900; color: white;">1.00x</div>
+                        <div id="crash-status-text"
+                            style="color: var(--text-secondary); margin-top: 1rem; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">
+                            In attesa...</div>
+                        <canvas id="crash-canvas"
+                            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;"></canvas>
+                    </div>
+
+                    <!-- Pannello Scommesse -->
+                    <div class="crash-sidebar"
+                        style="background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div class="input-group" style="margin-bottom: 1.5rem;">
+                            <label>Importo Scommessa (€)</label>
+                            <input type="number" id="crash-bet-amount" value="10" step="1" min="1"
+                                style="width: 100%; padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; color: white; font-size: 1.1rem;">
+                        </div>
+
+                        <button id="crash-bet-btn" onclick="crash.placeBet()"
+                            style="width: 100%; padding: 1.5rem; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 1.2rem; font-weight: 800; cursor: pointer; transition: transform 0.2s, background 0.3s; margin-bottom: 1.5rem;">
+                            SCOMMETTI
+                        </button>
+
+                        <div style="margin-top: 2rem;">
+                            <h4
+                                style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.8rem; text-transform: uppercase;">
+                                Storia Recente</h4>
+                            <div id="crash-history" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <!-- Storia qui -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Blackjack Game Section -->
+            <div id="section-blackjack" class="hidden">
+                <button onclick="router.navigate('casino')"
+                    style="margin-bottom: 1rem; background: transparent; border: 1px solid var(--border-color); width: auto; padding: 5px 15px;">&larr;
+                    Torna ai Giochi</button>
+                <div class="blackjack-container"
+                    style="max-width: 900px; margin: 0 auto; background: #0c3d1d; border-radius: 20px; border: 8px solid #5d3a1a; padding: 2rem; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+                    <!-- Dealer Hand -->
+                    <div id="bj-dealer-area" style="text-align: center; margin-bottom: 3rem;">
+                        <h4 style="color: rgba(255,255,255,0.7); margin-bottom: 1rem;">BANCO</h4>
+                        <div id="bj-dealer-cards"
+                            style="display: flex; justify-content: center; gap: 10px; height: 120px;">
+                            <!-- Cards -->
+                        </div>
+                        <div id="bj-dealer-score" style="margin-top: 10px; font-weight: bold; color: white;"></div>
+                    </div>
+
+                    <!-- Status Display -->
+                    <div id="bj-status"
+                        style="text-align: center; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 900; color: #ffd700; text-shadow: 0 0 20px rgba(255,215,0,0.5);">
+                        Piazza la tua puntata
+                    </div>
+
+                    <!-- Player Hand -->
+                    <div id="bj-player-area" style="text-align: center; margin-top: 3rem;">
+                        <div id="bj-player-score" style="margin-bottom: 10px; font-weight: bold; color: white;"></div>
+                        <div id="bj-player-cards"
+                            style="display: flex; justify-content: center; gap: 10px; height: 120px;">
+                            <!-- Cards -->
+                        </div>
+                        <h4 style="color: rgba(255,255,255,0.7); margin-top: 1rem;">TU</h4>
+                    </div>
+
+                    <!-- Controls -->
+                    <div id="bj-controls"
+                        style="margin-top: 3rem; display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+                        <div id="bj-bet-controls">
+                            <input type="number" id="bj-bet-amount" value="10"
+                                style="width: 100px; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; text-align: center; font-weight: bold;">
+                            <button onclick="blackjack.deal()"
+                                style="background: #ffd700; color: #000; padding: 10px 30px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer;">GIOCA</button>
+                        </div>
+                        <div id="bj-action-controls" class="hidden">
+                            <button onclick="blackjack.hit()"
+                                style="background: #2ecc71; color: #fff; padding: 10px 25px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer;">CARTA</button>
+                            <button onclick="blackjack.stand()"
+                                style="background: #e74c3c; color: #fff; padding: 10px 25px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer;">STAI</button>
+                            <button onclick="blackjack.doubleDown()" id="bj-double-btn"
+                                style="background: #3498db; color: #fff; padding: 10px 25px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer;">RADDOPPIA</button>
+                            <button onclick="blackjack.split()" id="bj-split-btn" class="hidden"
+                                style="background: #9b59b6; color: #fff; padding: 10px 25px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer;">SPLIT</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- My Bets Section -->
             <div id="section-mybets" class="hidden">
                 <div class="admin-section">
@@ -165,8 +288,12 @@
                         <h2>Gestione Margine & API</h2>
                         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                             <div class="input-group" style="min-width: 200px;">
-                                <label>Overround (Vantaggio Banco) %</label>
+                                <label>Overround (Banco Quote) %</label>
                                 <input type="number" id="setting-overround" value="5">
+                            </div>
+                            <div class="input-group" style="min-width: 200px;">
+                                <label>Vantaggio Crash (House Edge) %</label>
+                                <input type="number" id="setting-crash-house-edge" value="3">
                             </div>
                             <div class="input-group" style="flex-grow: 1;">
                                 <label>API Key (TheOdds / API-Football / RapidAPI)</label>
@@ -412,6 +539,13 @@
                     <path d="M4 6h16M4 12h16M4 18h16"></path>
                 </svg>
                 <span>Quote</span>
+            </a>
+            <a onclick="router.navigate('crash')" class="mobile-nav-item" id="mob-nav-crash">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Crash</span>
             </a>
             <a onclick="router.navigate('mybets')" class="mobile-nav-item" id="mob-nav-mybets">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
