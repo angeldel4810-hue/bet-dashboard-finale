@@ -23,9 +23,14 @@ def get_db():
         return conn
     else:
         # Fallback locale (SQLite)
+        if not os.path.exists(os.path.dirname(LOCAL_DB_PATH)):
+            os.makedirs(os.path.dirname(LOCAL_DB_PATH), exist_ok=True)
         conn = sqlite3.connect(LOCAL_DB_PATH)
         conn.row_factory = sqlite3.Row
         return conn
+
+def is_postgres(conn):
+    return SUPABASE_DB_URL is not None or hasattr(conn, 'get_dsn_parameters')
 
 def init_db():
     conn = get_db()
@@ -100,6 +105,7 @@ def init_db():
         market {text_type} NOT NULL,
         selection {text_type} NOT NULL,
         odds {real_type} NOT NULL,
+        status {text_type} DEFAULT 'pending',
         home_team {text_type},
         away_team {text_type},
         FOREIGN KEY (bet_id) REFERENCES bets (id)
@@ -172,6 +178,76 @@ def init_db():
         FOREIGN KEY (round_id) REFERENCES crash_rounds (id)
     )
     ''')
+    # Virtual Football Schema
+    cursor.execute(f'''
+    CREATE TABLE IF NOT EXISTS virtual_teams (
+        id {serial_primary_key},
+        name {text_type} UNIQUE NOT NULL,
+        offense {real_type} NOT NULL,
+        defense {real_type} NOT NULL,
+        logo_url {text_type}
+    )
+    ''')
+
+    cursor.execute(f'''
+    CREATE TABLE IF NOT EXISTS virtual_seasons (
+        id {serial_primary_key},
+        current_matchday INTEGER DEFAULT 1,
+        status {text_type} DEFAULT 'active',
+        created_at {timestamp_type}
+    )
+    ''')
+
+    cursor.execute(f'''
+    CREATE TABLE IF NOT EXISTS virtual_matches (
+        id {serial_primary_key},
+        season_id INTEGER NOT NULL,
+        matchday INTEGER NOT NULL,
+        home_team_id INTEGER NOT NULL,
+        away_team_id INTEGER NOT NULL,
+        status {text_type} DEFAULT 'scheduled',
+        home_score INTEGER DEFAULT 0,
+        away_score INTEGER DEFAULT 0,
+        current_minute INTEGER DEFAULT 0,
+        odds_1 {real_type},
+        odds_x {real_type},
+        odds_2 {real_type},
+        odds_over25 {real_type},
+        odds_under25 {real_type},
+        odds_gg {real_type},
+        odds_ng {real_type},
+        odds_combo {text_type} DEFAULT '{{}}',
+        odds_exact {text_type} DEFAULT '{{}}',
+        FOREIGN KEY (season_id) REFERENCES virtual_seasons (id),
+        FOREIGN KEY (home_team_id) REFERENCES virtual_teams (id),
+        FOREIGN KEY (away_team_id) REFERENCES virtual_teams (id)
+    )
+    ''')
+
+    cursor.execute(f'''
+    CREATE TABLE IF NOT EXISTS virtual_standings (
+        id {serial_primary_key},
+        season_id INTEGER NOT NULL,
+        team_id INTEGER NOT NULL,
+        points INTEGER DEFAULT 0,
+        played INTEGER DEFAULT 0,
+        won INTEGER DEFAULT 0,
+        drawn INTEGER DEFAULT 0,
+        lost INTEGER DEFAULT 0,
+        goals_for INTEGER DEFAULT 0,
+        goals_against INTEGER DEFAULT 0,
+        FOREIGN KEY (season_id) REFERENCES virtual_seasons (id),
+        FOREIGN KEY (team_id) REFERENCES virtual_teams (id),
+        UNIQUE(season_id, team_id)
+    )
+    ''')
+
+    # Add virtual house edge default if missing
+    if is_postgres:
+        cursor.execute("INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING", ("virtual_house_edge", "15"))
+    else:
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("virtual_house_edge", "15"))
+
     conn.commit()
     conn.close()
 

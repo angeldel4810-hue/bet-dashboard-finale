@@ -757,11 +757,13 @@ table tr:hover td {
         height: 85px !important;
     }
 }
+
 @keyframes slideInCard {
     from {
         opacity: 0;
         transform: translateY(-60px) scale(0.9) rotate(-5deg);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1) rotate(0);
@@ -771,4 +773,45 @@ table tr:hover td {
 .dealt-card {
     animation: slideInCard 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.2) forwards;
     opacity: 0;
+}
+
+/* Virtual Football Styles */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.5;
+        transform: scale(1.1);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.virtual-layout {
+    animation: fadeIn 0.8s ease-out;
+}
+
+#virtual-standings-body tr {
+    transition: background 0.2s;
+}
+
+#virtual-standings-body tr:hover td {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.virtual-main,
+.virtual-sidebar {
+    height: fit-content;
+}
+
+@media (max-width: 900px) {
+    .virtual-layout {
+        grid-template-columns: 1fr !important;
+    }
 }

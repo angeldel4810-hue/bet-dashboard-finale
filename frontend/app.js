@@ -31,6 +31,16 @@ const state = {
         dealer_score: 0,
         status: 'betting',
         bet: 0
+    },
+    virtual: {
+        status: 'BETTING',
+        timeLeft: 0,
+        currentMatchday: 0,
+        matches: [],
+        standings: [],
+        lastFetch: 0,
+        polling: null,
+        clock: 0
     }
 };
 
@@ -270,7 +280,7 @@ window.ui = {
 
 const router = {
     navigate(section) {
-        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack', 'sette-mezzo'];
+        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack', 'sette-mezzo', 'virtual'];
         sections.forEach(s => {
             const el = document.getElementById(`section-${s}`);
             if (el) el.classList.add('hidden');
@@ -292,7 +302,8 @@ const router = {
             'casino': 'nav-casino',
             'crash': 'nav-casino',
             'blackjack': 'nav-casino',
-            'sette-mezzo': 'nav-casino'
+            'sette-mezzo': 'nav-casino',
+            'virtual': 'nav-casino'
         };
         // Mappa mobile nav
         const mobNavMap = {
@@ -301,7 +312,8 @@ const router = {
             'mybets': 'mob-nav-mybets',
             'casino': 'mob-nav-casino',
             'crash': 'mob-nav-casino',
-            'blackjack': 'mob-nav-casino'
+            'blackjack': 'mob-nav-casino',
+            'virtual': 'mob-nav-casino'
         };
 
         const targetNavId = navMap[section];
@@ -315,6 +327,7 @@ const router = {
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
+        if (section === 'virtual') virtual.init();
     }
 };
 
@@ -815,9 +828,9 @@ window.dashboard = {
 window.admin = {
     async init() {
         await this.loadSettings();
-        this.loadUsers();
-        this.loadManualOdds();
-        this.loadAllBets();
+        await this.loadUsers();
+        await this.loadManualOdds();
+        await this.loadAllBets();
         this.switchTab('dashboard');
     },
     switchTab(tabName) {
@@ -859,20 +872,29 @@ window.admin = {
     async loadSettings() {
         const settings = await api.request('/settings');
         if (settings) {
-            document.getElementById('setting-overround').value = settings.overround;
-            document.getElementById('setting-crash-house-edge').value = settings.crash_house_edge || '3';
-            document.getElementById('setting-apikey').value = settings.apikey || '';
-            document.getElementById('setting-source').value = settings.odds_source || 'manual';
+            state.settings = settings;
+            const overroundEl = document.getElementById('setting-overround');
+            const houseEdgeEl = document.getElementById('setting-crash-house-edge');
+            const virtualEdgeEl = document.getElementById('setting-virtual-house-edge');
+            const apiKeyEl = document.getElementById('setting-apikey');
+            const sourceEl = document.getElementById('setting-source');
+
+            if (overroundEl) overroundEl.value = settings.overround;
+            if (houseEdgeEl) houseEdgeEl.value = settings.crash_house_edge || '3';
+            if (virtualEdgeEl) virtualEdgeEl.value = settings.virtual_house_edge || '15';
+            if (apiKeyEl) apiKeyEl.value = settings.apikey || '';
+            if (sourceEl) sourceEl.value = settings.odds_source || 'manual';
         }
     },
     async saveSettings() {
         const overround = document.getElementById('setting-overround').value;
         const crash_house_edge = document.getElementById('setting-crash-house-edge').value;
+        const virtual_house_edge = document.getElementById('setting-virtual-house-edge').value;
         const apikey = document.getElementById('setting-apikey').value;
         const odds_source = document.getElementById('setting-source').value;
         await api.request('/settings', {
             method: 'POST',
-            body: JSON.stringify({ overround, crash_house_edge, apikey, odds_source })
+            body: JSON.stringify({ overround, crash_house_edge, virtual_house_edge, apikey, odds_source })
         });
         state.settings = null; // Forza il refresh al prossimo render
         dashboard.fetchOdds();
@@ -1105,10 +1127,10 @@ window.admin = {
     },
     async loadManualOdds() {
         const odds = await api.request('/odds');
-        const tbody = document.getElementById('manual-odds-table-body');
-        const settings = await api.request('/settings');
+        const settings = state.settings || await api.request('/settings');
+        if (!tbody) return;
 
-        if (settings.odds_source !== 'manual') {
+        if (settings && settings.odds_source !== 'manual') {
             tbody.innerHTML = '<tr><td colspan="4" style="text-align:center">Sorgente impostata su API Live. Cambia in Manuale per gestire qui.</td></tr>';
             return;
         }
@@ -1156,6 +1178,17 @@ window.admin = {
 
 window.bets = {
     addToSlip(eventId, event, market, selection, odds) {
+        // Controllo se stiamo cercando di mischiare Reale e Virtuale
+        if (state.slip.length > 0) {
+            const isNewVirtual = String(eventId).startsWith('v_');
+            const isExistingVirtual = String(state.slip[0].eventId).startsWith('v_');
+
+            if (isNewVirtual !== isExistingVirtual) {
+                alert('Non è possibile combinare scommesse reali e virtuali!');
+                return;
+            }
+        }
+
         if (state.slip.some(s => s.eventId === eventId)) {
             // Se la selezione è identica, la rimuoviamo (toggle)
             const sameIdx = state.slip.findIndex(s => s.eventId === eventId && s.market === market && s.selection === selection);
@@ -1216,25 +1249,32 @@ window.bets = {
     async loadHistory() {
         const history = await api.request('/my-bets');
         const container = document.getElementById('my-bets-container');
-        if (history) {
-            container.innerHTML = history.map(bet => `
+        if (history && container) {
+            container.innerHTML = history.map(bet => {
+                let dateStr = '---';
+                try {
+                    if (bet.created_at) dateStr = new Date(bet.created_at).toLocaleString();
+                } catch (e) { }
+
+                return `
                 <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:12px; padding:1.5rem; margin-bottom:1.5rem;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.5rem;">
-                        <span style="color:var(--text-secondary)">ID: #${bet.id} | ${new Date(bet.created_at).toLocaleString()}</span>
+                        <span style="color:var(--text-secondary)">ID: #${bet.id} | ${dateStr}</span>
                         <span style="font-weight:bold; color:${bet.status === 'won' ? 'var(--success)' : bet.status === 'lost' ? 'var(--danger)' : 'var(--accent)'}">${bet.status.toUpperCase()}</span>
                     </div>
-                    ${bet.selections.map(s => `
+                    ${(bet.selections || []).map(s => `
                         <div style="margin-bottom:8px; font-size:0.9rem;">
-                            <b>${s.selection}</b> <span style="color:var(--text-secondary)">@${s.odds.toFixed(2)}</span><br>
-                            ${s.home_team} vs ${s.away_team} (${s.market})
+                            <b>${s.selection || '---'}</b> <span style="color:var(--text-secondary)">@${(s.odds || 0).toFixed(2)}</span><br>
+                            ${s.home_team || '---'} vs ${s.away_team || '---'} (${s.market || '---'})
                         </div>
                     `).join('')}
                     <div style="margin-top:1rem; display:flex; justify-content:space-between; font-weight:bold;">
-                        <span>Importo: €${bet.amount.toFixed(2)}</span>
-                        <span>Potential Win: €${bet.potential_win.toFixed(2)}</span>
+                        <span>Importo: €${(bet.amount || 0).toFixed(2)}</span>
+                        <span>Potential Win: €${(bet.potential_win || 0).toFixed(2)}</span>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
     }
 };
@@ -1402,6 +1442,333 @@ window.crash = {
             requestAnimationFrame(animate);
         };
         animate();
+    }
+};
+
+window.virtual = {
+    init() {
+        if (state.virtual.polling) clearInterval(state.virtual.polling);
+        state.virtual.polling = setInterval(() => this.tick(), 1000);
+        this.fetchStatus();
+        this.fetchStandings();
+        this.fetchMatches();
+    },
+    async tick() {
+        if (state.virtual.status === 'BETTING' && state.virtual.timeLeft > 0) {
+            state.virtual.timeLeft--;
+            this.updateTimerUI();
+        }
+
+        if (Date.now() - state.virtual.lastFetch > 3000) {
+            await this.fetchStatus();
+        }
+    },
+    async fetchStatus() {
+        const data = await api.request('/virtual/status');
+        if (data) {
+            const statusChanged = state.virtual.status !== data.phase;
+            const matchdayChanged = state.virtual.currentMatchday !== data.matchday;
+
+            state.virtual.status = data.phase || 'BETTING';
+            state.virtual.timeLeft = data.timer || 0;
+            state.virtual.currentMatchday = data.matchday || 0;
+            state.virtual.clock = data.clock || "0'";
+            state.virtual.actionText = data.action_text || '';
+            state.virtual.lastFetch = Date.now();
+
+            this.updateStatusUI();
+
+            if (statusChanged || matchdayChanged || state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
+                this.fetchMatches().catch(e => console.error("Error fetching matches:", e));
+                if (statusChanged || matchdayChanged) {
+                    this.fetchStandings().catch(e => console.error("Error fetching standings:", e));
+                    ui.fetchBalance();
+                }
+            }
+        }
+    },
+    async fetchMatches() {
+        // Carica le partite per il betting (sempre current_matchday)
+        const matches = await api.request('/virtual/matches');
+        if (matches) {
+            state.virtual.matches = matches;
+            this.renderMatches();
+        }
+        // Carica le partite per il tabellone (usa finished_matchday durante FINISHED)
+        if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
+            const liveMatches = await api.request('/virtual/live');
+            if (liveMatches) {
+                state.virtual.liveMatches = liveMatches;
+                this.renderLiveBoard();
+            }
+        }
+    },
+    async fetchStandings() {
+        const standings = await api.request('/virtual/standings');
+        if (standings) {
+            state.virtual.standings = standings;
+            this.renderStandings();
+        }
+    },
+    updateTimerUI() {
+        const timerEl = document.getElementById('virtual-timer');
+        if (!timerEl) return;
+
+        if (state.virtual.status === 'BETTING' || state.virtual.status === 'FINISHED') {
+            const m = Math.floor(state.virtual.timeLeft / 60);
+            const s = state.virtual.timeLeft % 60;
+            timerEl.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+            timerEl.style.color = state.virtual.timeLeft < 30 ? 'var(--danger)' : 'var(--accent)';
+            document.getElementById('virtual-timer-label').innerText = 'Alla Giornata';
+        } else {
+            timerEl.innerText = 'LIVE';
+            timerEl.style.color = 'var(--danger)';
+            document.getElementById('virtual-timer-label').innerText = 'In Corso';
+        }
+    },
+    updateStatusUI() {
+        const header = document.getElementById('virtual-header');
+        const badge = document.getElementById('virtual-status-badge');
+        const liveBoard = document.getElementById('virtual-live-board');
+
+        if (header) header.innerText = `Campionato Virtuale - Giornata ${state.virtual.currentMatchday}`;
+        if (badge) {
+            if (state.virtual.status === 'BETTING') {
+                badge.innerText = 'BETTING';
+                badge.style.background = 'var(--accent)';
+            } else if (state.virtual.status === 'LIVE') {
+                badge.innerText = 'LIVE';
+                badge.style.background = 'var(--danger)';
+            } else if (state.virtual.status === 'FINISHED') {
+                badge.innerText = 'RISULTATI';
+                badge.style.background = '#9b59b6';
+            }
+        }
+
+        if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
+            if (liveBoard) liveBoard.classList.remove('hidden');
+        } else {
+            if (liveBoard) liveBoard.classList.add('hidden');
+        }
+
+        this.updateTimerUI();
+    },
+    renderStandings() {
+        const tbody = document.getElementById('virtual-standings-body');
+        if (!tbody) return;
+
+        if (!state.virtual.standings || !Array.isArray(state.virtual.standings)) return;
+
+        try {
+            tbody.innerHTML = state.virtual.standings.map((s, i) => `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px 4px;">${i + 1}</td>
+                    <td style="padding: 8px 4px; display: flex; align-items: center; gap: 8px;">
+                        <img src="${s.logo || ''}" style="width: 16px; height: 16px; object-fit: contain;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
+                        ${s.team_name || '---'}
+                    </td>
+                    <td style="padding: 8px 4px; font-weight: bold;">${s.points || 0}</td>
+                    <td style="padding: 8px 4px; color: var(--text-secondary);">${s.played || 0}</td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error("Error rendering standings:", e);
+        }
+    },
+    expandedMatches: new Set(),
+    toggleMatchOdds(matchId) {
+        if (this.expandedMatches.has(matchId)) {
+            this.expandedMatches.delete(matchId);
+        } else {
+            this.expandedMatches.add(matchId);
+        }
+        this.renderMatches(); // Rirenderizza solo la parte HTML per aggiornare la grid
+    },
+    renderMatches() {
+        const container = document.getElementById('virtual-matches-container');
+        if (!container) return;
+
+        const isBettingDisabled = state.virtual.status === 'LIVE';
+
+        if (!state.virtual.matches || !Array.isArray(state.virtual.matches)) return;
+
+        try {
+            container.innerHTML = state.virtual.matches.map(m => {
+                const homeName = (m.home_team && m.home_team.name) ? m.home_team.name : 'Casa';
+                const homeLogo = (m.home_team && m.home_team.logo) ? m.home_team.logo : '';
+                const awayName = (m.away_team && m.away_team.name) ? m.away_team.name : 'Ospiti';
+                const awayLogo = (m.away_team && m.away_team.logo) ? m.away_team.logo : '';
+                const dis = isBettingDisabled ? 'disabled' : '';
+
+                // Helper per pulsante quota
+                const mkBtn = (sel, label, odds) => {
+                    const safe = (Number(odds) || 1).toFixed(2);
+                    const isSel = this.isSelected(m.id, sel) ? 'selected' : '';
+                    return `<button onclick="virtual.addToSlip(${m.id},'${homeName} vs ${awayName}','bet','${sel}',${safe})"
+                        class="price-btn ${isSel}" ${dis} style="font-size:0.75rem; padding:8px 6px;">
+                        <span class="label" style="font-weight:600;">${label}</span>
+                        <span class="val" style="margin-left:auto;">${safe}</span>
+                    </button>`;
+                };
+
+                // Combo odds
+                const combo = m.odds_combo || {};
+                const exact = m.odds_exact || {};
+
+                // Sezione Combo 1X2 + Over/Under (iterata su tutte le soglie X.5)
+                const thresholds = [1.5, 2.5, 3.5, 4.5];
+                let comboOUHtml = '';
+                thresholds.forEach(t => {
+                    const order = [`1+Over ${t}`, `1+Under ${t}`, `X+Over ${t}`, `X+Under ${t}`, `2+Over ${t}`, `2+Under ${t}`];
+                    // Recupero quanti e quali pulsanti esistono validi
+                    const btns = order.map(k => combo[k] ? mkBtn(k, k.replace(`Over ${t}`, `O${t}`).replace(`Under ${t}`, `U${t}`), combo[k]) : '').filter(Boolean).join('');
+                    if (btns) {
+                        comboOUHtml += `<div style="margin-top:15px;">
+                            <div style="font-size:0.75rem; color:var(--text-secondary); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:block; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px;">Combo 1X2 + Over/Under ${t}</div>
+                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">${btns}</div>
+                        </div>`;
+                    }
+                });
+
+                // Sezione Combo 1X2 + GG/NG
+                const comboGGOrder = ['1+GG', '1+NG', 'X+GG', 'X+NG', '2+GG', '2+NG'];
+                const comboGGBtns = comboGGOrder.map(k => combo[k] ? mkBtn(k, k, combo[k]) : '').join('');
+
+                // Risultati Esatti: Ordina mettendo "Altro" in fondo
+                const exactBtns = Object.entries(exact)
+                    .sort((a, b) => {
+                        if (a[0] === "Altro") return 1;
+                        if (b[0] === "Altro") return -1;
+                        return a[1] - b[1]; // Poi per probabilità stimata o score (lascio valore)
+                    })
+                    .map(([score, odd]) => mkBtn(score === 'Altro' ? 'Esatto Altro' : `Esatto ${score}`, score, odd))
+                    .join('');
+
+                const secStyle = 'margin-top:15px;';
+                const lblStyle = 'font-size:0.75rem; color:var(--text-secondary); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:block; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px;';
+
+                const isExpanded = this.expandedMatches.has(m.id);
+
+                return `
+                <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.2rem;">
+                    <!-- Header squadre e Tasto Espandi -->
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                        <div style="display:flex; align-items:center; gap:8px; font-weight:bold; font-size:1rem;">
+                            <img src="${homeLogo}" style="width:24px;height:24px;object-fit:contain;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
+                            ${homeName}
+                        </div>
+                        <span style="color:var(--text-secondary);font-size:0.8rem;font-weight:600;padding: 0 10px;">VS</span>
+                        <div style="display:flex; align-items:center; gap:8px; font-weight:bold; font-size:1rem;">
+                            ${awayName}
+                            <img src="${awayLogo}" style="width:24px;height:24px;object-fit:contain;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
+                        </div>
+                    </div>
+
+                    <!-- 1X2 Visibile -->
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom: ${isExpanded ? '12px' : '0'};">
+                        ${mkBtn('1', '1', m.odds_1)}${mkBtn('X', 'X', m.odds_x)}${mkBtn('2', '2', m.odds_2)}
+                    </div>
+
+                    <!-- Sezione Nascosta per i mercati extra -->
+                    <div style="display: ${isExpanded ? 'block' : 'none'}; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                        <!-- Goal / No Goal -->
+                        <div style="${secStyle}">
+                            <div style="${lblStyle}">Goal / No Goal</div>
+                            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                                ${mkBtn('Goal', 'Goal', m.odds_gg)}
+                                ${mkBtn('No Goal', 'No Goal', m.odds_ng)}
+                            </div>
+                        </div>
+
+                        <!-- Over/Under -->
+                        <div style="${secStyle}">
+                            <div style="${lblStyle}">Over / Under</div>
+                            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                                ${combo['Over 1.5'] ? mkBtn('Over 1.5', 'Over 1.5', combo['Over 1.5']) : ''}
+                                ${combo['Under 1.5'] ? mkBtn('Under 1.5', 'Under 1.5', combo['Under 1.5']) : ''}
+                                ${mkBtn('Over 2.5', 'Over 2.5', m.odds_over25)}
+                                ${mkBtn('Under 2.5', 'Under 2.5', m.odds_under25)}
+                                ${combo['Over 3.5'] ? mkBtn('Over 3.5', 'Over 3.5', combo['Over 3.5']) : ''}
+                                ${combo['Under 3.5'] ? mkBtn('Under 3.5', 'Under 3.5', combo['Under 3.5']) : ''}
+                                ${combo['Over 4.5'] ? mkBtn('Over 4.5', 'Over 4.5', combo['Over 4.5']) : ''}
+                                ${combo['Under 4.5'] ? mkBtn('Under 4.5', 'Under 4.5', combo['Under 4.5']) : ''}
+                            </div>
+                        </div>
+
+                        <!-- Tutte le Combo 1X2 + Over/Under (1.5, 2.5, 3.5, 4.5) -->
+                        ${comboOUHtml}
+
+                        <!-- Combo 1X2 + GG/NG -->
+                        ${comboGGBtns ? `<div style="${secStyle}">
+                            <div style="${lblStyle}">Combo 1X2 + Goal/No Goal</div>
+                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">${comboGGBtns}</div>
+                        </div>` : ''}
+
+                        <!-- Risultati Esatti -->
+                        ${exactBtns ? `<div style="${secStyle}">
+                            <div style="${lblStyle}">Risultato Esatto</div>
+                            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${exactBtns}</div>
+                        </div>` : ''}
+                    </div>
+
+                    <!-- Tasto per espandere -->
+                    <button onclick="virtual.toggleMatchOdds(${m.id})" style="width:100%; background:transparent; border:none; color:var(--accent); cursor:pointer; font-weight:bold; font-size:0.8rem; margin-top:12px; display:flex; justify-content:center; align-items:center; gap:6px;">
+                        ${isExpanded ? '▲ Chiudi' : '▼ Altre Quote...'}
+                    </button>
+                </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error("Error rendering matches:", e);
+        }
+    },
+    renderLiveBoard() {
+        const container = document.getElementById('virtual-live-matches');
+        const clockEl = document.getElementById('virtual-clock');
+        if (!container) return;
+
+        if (!state.virtual.liveMatches || !Array.isArray(state.virtual.liveMatches)) return;
+
+        const isFinished = state.virtual.status === 'FINISHED';
+
+        // Aggiorna testo azione o titolo
+        if (clockEl) {
+            if (isFinished) {
+                clockEl.innerText = '🏆 Risultati Finali';
+                clockEl.style.color = 'var(--accent)';
+            } else {
+                clockEl.innerText = state.virtual.actionText || '🏟️ In corso...';
+                clockEl.style.color = 'var(--danger)';
+            }
+        }
+
+        try {
+            container.innerHTML = state.virtual.liveMatches.map(m => {
+                const hName = (m.home_team && m.home_team.name) ? m.home_team.name : '---';
+                const aName = (m.away_team && m.away_team.name) ? m.away_team.name : '---';
+                const scoreColor = isFinished ? '#ffd700' : '#00ff88';
+                const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
+
+                return `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
+                    <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${hName}</span>
+                    <span style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
+                        ${m.home_score || 0} - ${m.away_score || 0}
+                    </span>
+                    <span style="font-size: 0.85rem; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${aName}</span>
+                </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error("Error rendering live board:", e);
+        }
+    },
+    isSelected(matchId, selection) {
+        return state.slip.some(s => s.eventId === 'v_' + matchId && s.selection === selection);
+    },
+    addToSlip(matchId, event, market, selection, odds) {
+        bets.addToSlip('v_' + matchId, event, market, selection, odds);
+        this.renderMatches(); // Re-render per mostrare il bordo selezionato
     }
 };
 

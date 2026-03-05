@@ -12,7 +12,7 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from backend.crash import crash_engine
 import backend.sette_mezzo as sm
-
+from backend.virtual_football import router as virtual_router, run_virtual_football_loop
 
 is_postgres = os.environ.get("DATABASE_URL") is not None
 
@@ -33,6 +33,8 @@ async def startup_event():
     init_db()
     # Avvia il loop del Crash Game in background
     asyncio.create_task(crash_engine.start_loop())
+    # Avvia il loop del Calcio Virtuale in background
+    asyncio.create_task(run_virtual_football_loop())
 
 # --- Auth Routes ---
 
@@ -517,6 +519,15 @@ async def place_bet(data: dict, current_user = Depends(get_current_user)):
         )
         bet_id = cursor.lastrowid
 
+    # Check if we are mixing real and virtual bets
+    if selections:
+        first_is_virtual = str(selections[0].get('event_id', '')).startswith('v_')
+        for s in selections:
+            is_virtual = str(s.get('event_id', '')).startswith('v_')
+            if is_virtual != first_is_virtual:
+                conn.close()
+                raise HTTPException(status_code=400, detail="Non è possibile combinare scommesse reali e virtuali")
+
     # Insert selections
     for s in selections:
         if is_postgres:
@@ -980,6 +991,9 @@ async def bj_skip_insurance(data: dict, current_user = Depends(get_current_user)
         conn.close()
         
     return result
+
+# VIRTUAL FOOTBALL ROUTER
+app.include_router(virtual_router, prefix="/api/virtual", tags=["Virtual Football"])
 
 # Serve frontend
 frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
