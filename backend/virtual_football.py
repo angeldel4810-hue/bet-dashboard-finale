@@ -95,12 +95,26 @@ def get_or_create_season():
         engine.current_season_id = season_id
         engine.current_matchday = 1
     else:
-        if psql:
-            engine.current_season_id = season[0]
-            engine.current_matchday = season[1]
+        s_id = season[0] if psql else season["id"]
+        c_m = season[1] if psql else season["current_matchday"]
+        
+        q = "SELECT COUNT(*) FROM virtual_matches WHERE season_id = %s" if psql else "SELECT COUNT(*) FROM virtual_matches WHERE season_id = ?"
+        cursor.execute(q, (s_id,))
+        count = cursor.fetchone()
+        count_val = count[0] if isinstance(count, tuple) or (hasattr(count, 'keys') and 'COUNT(*)' not in count) else count.get('COUNT(*)', count[0])
+        
+        if count_val == 0:
+            print(f"[Virtual Football] Trovata stagione " + str(s_id) + " orfana senza partite. Rigenero...")
+            generate_fixtures(s_id, conn)
+            engine.current_season_id = s_id
+            engine.current_matchday = 1
+            
+            up_q = "UPDATE virtual_seasons SET current_matchday = 1 WHERE id = %s" if psql else "UPDATE virtual_seasons SET current_matchday = 1 WHERE id = ?"
+            cursor.execute(up_q, (s_id,))
+            conn.commit()
         else:
-            engine.current_season_id = season["id"]
-            engine.current_matchday = season["current_matchday"]
+            engine.current_season_id = s_id
+            engine.current_matchday = c_m
             
     conn.close()
 
