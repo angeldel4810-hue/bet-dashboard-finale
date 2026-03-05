@@ -473,6 +473,65 @@ async def get_my_bets_history(user = Depends(get_current_user)):
     conn.close()
     return bets_list
 
+@app.post("/api/bets")
+async def place_bet(data: dict, current_user = Depends(get_current_user)):
+    amount = float(data.get("amount", 0))
+    total_odds = float(data.get("total_odds", 0))
+    potential_win = float(data.get("potential_win", 0))
+    selections = data.get("selections", [])
+
+    if amount <= 0 or not selections:
+        raise HTTPException(status_code=400, detail="Dati scommessa non validi")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+
+    # Get user id and balance
+    u_query = "SELECT id, balance FROM users WHERE username = %s" if is_postgres else "SELECT id, balance FROM users WHERE username = ?"
+    cursor.execute(u_query, (current_user['username'],))
+    u_row = cursor.fetchone()
+    u_id, balance = u_row[0], u_row[1]
+
+    if balance < amount:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Saldo insufficiente")
+
+    # Deduct balance
+    upd = "UPDATE users SET balance = balance - %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance - ? WHERE id = ?"
+    cursor.execute(upd, (amount, u_id))
+
+    # Insert bet
+    if is_postgres:
+        cursor.execute(
+            "INSERT INTO bets (user_id, amount, total_odds, potential_win, status) VALUES (%s, %s, %s, %s, 'pending') RETURNING id",
+            (u_id, amount, total_odds, potential_win)
+        )
+        bet_id = cursor.fetchone()[0]
+    else:
+        cursor.execute(
+            "INSERT INTO bets (user_id, amount, total_odds, potential_win, status) VALUES (?, ?, ?, ?, 'pending')",
+            (u_id, amount, total_odds, potential_win)
+        )
+        bet_id = cursor.lastrowid
+
+    # Insert selections
+    for s in selections:
+        if is_postgres:
+            cursor.execute(
+                "INSERT INTO bet_selections (bet_id, event_id, market, selection, odds, home_team, away_team) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (bet_id, s.get('event_id'), s.get('market'), s.get('selection'), s.get('odds'), s.get('home_team'), s.get('away_team'))
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO bet_selections (bet_id, event_id, market, selection, odds, home_team, away_team) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (bet_id, s.get('event_id'), s.get('market'), s.get('selection'), s.get('odds'), s.get('home_team'), s.get('away_team'))
+            )
+
+    conn.commit()
+    conn.close()
+    return {"message": f"Scommessa piazzata con successo! Vincita potenziale: €{potential_win:.2f}", "bet_id": bet_id}
+
 # --- Crash Game WebSocket ---
 @app.websocket("/ws/crash")
 async def websocket_crash(websocket: WebSocket):
