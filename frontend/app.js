@@ -1722,60 +1722,61 @@ window.virtual = {
             console.error("Error rendering matches:", e);
             if (container) container.innerHTML = '<div style="color:red;font-weight:bold;padding:20px;">ERRORE JS:<br>' + e.message + '<br>' + e.stack + '</div>';
         }
-        renderLiveBoard() {
-            const container = document.getElementById('virtual-live-matches');
-            const clockEl = document.getElementById('virtual-clock');
-            if (!container) return;
+    },
+    renderLiveBoard() {
+        const container = document.getElementById('virtual-live-matches');
+        const clockEl = document.getElementById('virtual-clock');
+        if (!container) return;
 
-            if (!state.virtual.liveMatches || !Array.isArray(state.virtual.liveMatches)) return;
+        if (!state.virtual.liveMatches || !Array.isArray(state.virtual.liveMatches)) return;
 
-            const isFinished = state.virtual.status === 'FINISHED';
+        const isFinished = state.virtual.status === 'FINISHED';
 
-            // Aggiorna testo azione o titolo
-            if (clockEl) {
-                if (isFinished) {
-                    clockEl.innerText = '🏆 Risultati Finali';
-                    clockEl.style.color = 'var(--accent)';
-                } else {
-                    clockEl.innerText = state.virtual.actionText || '🏟️ In corso...';
-                    clockEl.style.color = 'var(--danger)';
-                }
+        // Aggiorna testo azione o titolo
+        if (clockEl) {
+            if (isFinished) {
+                clockEl.innerText = '🏆 Risultati Finali';
+                clockEl.style.color = 'var(--accent)';
+            } else {
+                clockEl.innerText = state.virtual.actionText || '🏟️ In corso...';
+                clockEl.style.color = 'var(--danger)';
             }
+        }
 
-            try {
-                container.innerHTML = state.virtual.liveMatches.map(m => {
-                    const hName = (m.home_team && m.home_team.name) ? m.home_team.name : '---';
-                    const aName = (m.away_team && m.away_team.name) ? m.away_team.name : '---';
-                    const scoreColor = isFinished ? '#ffd700' : '#00ff88';
-                    const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
+        try {
+            container.innerHTML = state.virtual.liveMatches.map(m => {
+                const hName = (m.home_team && m.home_team.name) ? m.home_team.name : '---';
+                const aName = (m.away_team && m.away_team.name) ? m.away_team.name : '---';
+                const scoreColor = isFinished ? '#ffd700' : '#00ff88';
+                const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
 
-                    return `
-                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
+                return `
+                    < div style = "display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};" >
                     <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${hName}</span>
                     <span style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
                         ${m.home_score || 0} - ${m.away_score || 0}
                     </span>
                     <span style="font-size: 0.85rem; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${aName}</span>
-                </div>
-                `;
-                }).join('');
-            } catch (e) {
-                console.error("Error rendering live board:", e);
-            }
-        },
-        isSelected(matchId, selection) {
-            return state.slip.some(s => s.eventId === 'v_' + matchId && s.selection === selection);
-        },
-        addToSlip(matchId, event, market, selection, odds) {
-            bets.addToSlip('v_' + matchId, event, market, selection, odds);
-            this.renderMatches(); // Re-render per mostrare il bordo selezionato
+                </div >
+                    `;
+            }).join('');
+        } catch (e) {
+            console.error("Error rendering live board:", e);
         }
-    };
+    },
+    isSelected(matchId, selection) {
+        return state.slip.some(s => s.eventId === 'v_' + matchId && s.selection === selection);
+    },
+    addToSlip(matchId, event, market, selection, odds) {
+        bets.addToSlip('v_' + matchId, event, market, selection, odds);
+        this.renderMatches(); // Re-render per mostrare il bordo selezionato
+    }
+};
 
-    window.onload = () => {
-        if (state.token) {
-            ui.showDashboard();
-            dashboard.init();
-            router.navigate('odds');
-        }
-    };
+window.onload = () => {
+    if (state.token) {
+        ui.showDashboard();
+        dashboard.init();
+        router.navigate('odds');
+    }
+};
