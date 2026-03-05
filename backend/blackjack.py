@@ -71,7 +71,7 @@ class BlackjackEngine:
 
     def insurance(self, game_id: str) -> Dict[str, Any]:
         game = self.games.get(game_id)
-        if not game or game['status'] != 'playing' or not game.get('insurance_available'):
+        if game is None or game['status'] != 'playing' or not game.get('insurance_available'):
             return {"error": "Assicurazione non disponibile"}
         
         game['insurance_active'] = True
@@ -98,7 +98,7 @@ class BlackjackEngine:
 
     def skip_insurance(self, game_id: str) -> Dict[str, Any]:
         game = self.games.get(game_id)
-        if not game or game['status'] != 'playing':
+        if game is None or game['status'] != 'playing':
             return {"error": "Gioco non trovato o terminato"}
         
         game['insurance_available'] = False
@@ -121,7 +121,7 @@ class BlackjackEngine:
 
     def split(self, game_id: str) -> Dict[str, Any]:
         game = self.games.get(game_id)
-        if not game or game['status'] != 'playing':
+        if game is None or game['status'] != 'playing':
             return {"error": "Gioco non trovato o terminato"}
         
         hand = game.get('player_hand')
@@ -147,7 +147,7 @@ class BlackjackEngine:
 
     def double_down(self, game_id: str) -> Dict[str, Any]:
         game = self.games.get(game_id)
-        if not game or game['status'] != 'playing':
+        if game is None or game['status'] != 'playing':
             return {"error": "Gioco non trovato o terminato"}
         
         hand = game.get('player_hand')
@@ -224,7 +224,7 @@ class BlackjackEngine:
 
     def hit(self, game_id: str) -> Dict[str, Any]:
         game = self.games.get(game_id)
-        if not game or game['status'] != 'playing':
+        if game is None or game['status'] != 'playing':
             return {"error": "Gioco non trovato o terminato"}
         
         game['insurance_available'] = False
@@ -245,7 +245,7 @@ class BlackjackEngine:
     def stand(self, game_state_or_id: Any) -> Dict[str, Any]:
         if isinstance(game_state_or_id, str):
             game = self.games.get(game_state_or_id)
-            if not game or game['status'] != 'playing':
+            if game is None or game['status'] != 'playing':
                 return {"error": "Gioco non trovato o terminato"}
         else:
             game = game_state_or_id

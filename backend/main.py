@@ -11,6 +11,8 @@ import os
 import asyncio
 from datetime import datetime, timezone, timedelta
 from backend.crash import crash_engine
+import backend.sette_mezzo as sm
+
 
 is_postgres = os.environ.get("DATABASE_URL") is not None
 
@@ -657,6 +659,74 @@ async def resolve_bet(data: Dict[str, Any] = Body(...)):
     return {"message": "Scommessa risolta", "status": status}
 
 
+# --- Sette e Mezzo Endpoints ---
+
+@app.post("/api/sette-mezzo/deal")
+async def sm_deal(data: dict, current_user = Depends(get_current_user)):
+    bet = float(data.get("bet", 0))
+    if bet < 0.20: return JSONResponse({"error": "Scommessa minima €0.20"}, status_code=400)
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    
+    u_id = current_user.get("id")
+    if not u_id:
+        cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
+        u_id = cursor.fetchone()[0]
+
+    cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (u_id,))
+    user_db = cursor.fetchone()
+    balance = float(user_db[0] if is_postgres else user_db["balance"])
+    
+    if balance < bet:
+        conn.close()
+        return JSONResponse({"error": "Saldo insufficiente"}, status_code=400)
+    
+    # Deduct bet
+    new_balance = balance - bet
+    cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (new_balance, u_id))
+    conn.commit()
+    conn.close()
+    
+    result = sm.deal(bet, u_id)
+    
+    # Se la partita finisce subito a causa di un 7 e mezzo naturale o push
+    if result["status"] in ["win_natural", "push"]:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (result["payout"], u_id))
+        conn.commit()
+        conn.close()
+        
+    return result
+
+@app.post("/api/sette-mezzo/hit")
+async def sm_hit(data: dict, current_user = Depends(get_current_user)):
+    game_id = data.get("game_id")
+    result = sm.hit(game_id)
+    return result
+
+@app.post("/api/sette-mezzo/stand")
+async def sm_stand(data: dict, current_user = Depends(get_current_user)):
+    game_id = data.get("game_id")
+    result = sm.stand(game_id)
+    
+    if result["status"] in ["win", "push"]:
+        conn = get_db()
+        cursor = conn.cursor()
+        is_postgres = hasattr(conn, 'get_dsn_parameters')
+        
+        u_id = current_user.get("id")
+        if not u_id:
+            cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
+            u_id = cursor.fetchone()[0]
+            
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (result["payout"], u_id))
+        conn.commit()
+        conn.close()
+        
+    return result
 
 # --- Blackjack Endpoints ---
 from backend.blackjack import bj_engine

@@ -36,9 +36,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        user_id: int = payload.get("id")
         if username is None:
             raise credentials_exception
-        return {"username": username, "role": payload.get("role")}
+        return {"username": username, "role": payload.get("role"), "id": user_id}
     except jwt.PyJWTError:
         raise credentials_exception
 
