@@ -22,6 +22,15 @@ const state = {
         dealer_score: 0,
         status: 'betting', // betting, playing, win, loss, bust, push
         bet: 0
+    },
+    sette_mezzo: {
+        game_id: null,
+        player_hand: [],
+        dealer_hand: [],
+        player_score: 0,
+        dealer_score: 0,
+        status: 'betting',
+        bet: 0
     }
 };
 
@@ -261,7 +270,7 @@ window.ui = {
 
 const router = {
     navigate(section) {
-        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack'];
+        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack', 'sette-mezzo'];
         sections.forEach(s => {
             const el = document.getElementById(`section-${s}`);
             if (el) el.classList.add('hidden');
@@ -282,7 +291,8 @@ const router = {
             'mybets': 'nav-mybets',
             'casino': 'nav-casino',
             'crash': 'nav-casino',
-            'blackjack': 'nav-casino'
+            'blackjack': 'nav-casino',
+            'sette-mezzo': 'nav-casino'
         };
         // Mappa mobile nav
         const mobNavMap = {
@@ -305,6 +315,152 @@ const router = {
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
+    }
+};
+
+window.setteMezzo = {
+    async deal() {
+        const amountInput = document.getElementById('sm-bet-amount');
+        const rawVal = amountInput.value.replace(',', '.');
+        const bet = parseFloat(rawVal);
+        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
+        if (bet > state.balance) return alert("Saldo insufficiente");
+
+        const res = await api.request('/sette-mezzo/deal', {
+            method: 'POST',
+            body: JSON.stringify({ bet })
+        });
+
+        if (res) {
+            state.sette_mezzo = { ...state.sette_mezzo, ...res };
+            this.updateUI();
+            ui.fetchBalance();
+            this._handleEndAlert(res);
+        }
+    },
+    async hit() {
+        if (state.sette_mezzo.status !== 'playing') return;
+        const res = await api.request('/sette-mezzo/hit', {
+            method: 'POST',
+            body: JSON.stringify({ game_id: state.sette_mezzo.game_id })
+        });
+        if (res) {
+            state.sette_mezzo = { ...state.sette_mezzo, ...res };
+            this.updateUI();
+            if (res.status === 'bust') {
+                this._handleEndAlert(res);
+            }
+        }
+    },
+    async stand() {
+        if (state.sette_mezzo.status !== 'playing') return;
+        const res = await api.request('/sette-mezzo/stand', {
+            method: 'POST',
+            body: JSON.stringify({ game_id: state.sette_mezzo.game_id })
+        });
+        if (res) {
+            state.sette_mezzo = { ...state.sette_mezzo, ...res };
+            this.updateUI();
+            ui.fetchBalance();
+            this._handleEndAlert(res);
+        }
+    },
+    _handleEndAlert(res) {
+        if (res.status === 'win') setTimeout(() => alert("HAI VINTO!"), 500);
+        else if (res.status === 'win_natural') setTimeout(() => alert("7 e Mezzo Naturale! Hai Mangiato il banco!"), 500);
+        else if (res.status === 'loss') setTimeout(() => alert("Il Banco vince."), 500);
+        else if (res.status === 'push') setTimeout(() => alert("Pareggio (Push). La tua puntata è stata rimborsata."), 500);
+        else if (res.status === 'bust') setTimeout(() => alert("Hai sballato!"), 500);
+    },
+    updateUI() {
+        const sm = state.sette_mezzo;
+
+        const makeCard = (c) => {
+            const isMatta = c.matta;
+            const rank = c.rank;
+            const suitStr = c.suit;
+
+            let suitEmj = suitStr;
+            let color = '#333';
+            if (suitStr === 'Denari') { suitEmj = '🪙'; color = '#d4af37'; }
+            else if (suitStr === 'Coppe') { suitEmj = '🏆'; color = '#d32f2f'; }
+            else if (suitStr === 'Bastoni') { suitEmj = '🏏'; color = '#388e3c'; }
+            else if (suitStr === 'Spade') { suitEmj = '⚔️'; color = '#1976d2'; }
+
+            if (isMatta) suitEmj = '★';
+
+            const bgColor = isMatta ? 'linear-gradient(135deg, #ffd700, #ff8c00)' : '#f8f1e5'; // Un bianco antico/panna
+            const bdColor = isMatta ? '#b8860b' : color;
+
+            const div = document.createElement('div');
+            div.className = 'card-item fade-in';
+            div.style.cssText = `width: 70px; height: 100px; background: ${bgColor}; border-radius: 8px; border: 2px solid ${bdColor}; color: ${color}; flex-shrink: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; font-weight: bold; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3); font-family: 'Times New Roman', serif;`;
+
+            if (rank === '?') {
+                // Carta coperta
+                div.style.background = 'linear-gradient(135deg, #2b3a55, #1d2538)';
+                div.style.color = '#fff';
+                div.style.border = '2px solid #5a7bba';
+                div.innerHTML = `<div style="font-size: 2rem; align-self: center; margin-top: 20px;">?</div>`;
+            } else {
+                div.innerHTML = `<div style="font-size: 1.1rem; line-height: 1;">${rank}</div><div style="font-size: 2rem; align-self: center;">${suitEmj}</div><div style="font-size: 1.1rem; line-height: 1; transform: rotate(180deg);">${rank}</div>`;
+            }
+            return div;
+        };
+
+        const cardDrawer = (cards, containerId) => {
+            const container = document.getElementById(containerId);
+            const lastGameId = container.dataset.gameId;
+            const isNewGame = lastGameId !== String(sm.game_id);
+
+            let existingCount = container.querySelectorAll('.card-item').length;
+            if (isNewGame) {
+                existingCount = 0;
+                container.dataset.gameId = String(sm.game_id);
+                container.innerHTML = '';
+            }
+
+            if (existingCount === cards.length) return;
+
+            let i = existingCount;
+            const drawNext = () => {
+                if (i >= cards.length) return;
+
+                const cardEl = makeCard(cards[i]);
+                cardEl.classList.add('dealt-card');
+                container.appendChild(cardEl);
+
+                i++;
+                if (i < cards.length) setTimeout(drawNext, 400); // 400ms delay per carta
+            };
+            drawNext();
+        };
+
+        cardDrawer(sm.dealer_hand, 'sm-dealer-cards');
+        cardDrawer(sm.player_hand, 'sm-player-cards');
+
+        document.getElementById('sm-player-score').innerText = sm.player_score || 0;
+        document.getElementById('sm-dealer-score').innerText = sm.dealer_score || '?';
+
+        // Attiva/disattiva controlli
+        const cStart = document.getElementById('sm-controls-start');
+        const cAct = document.getElementById('sm-controls-action');
+
+        if (sm.status === 'playing') {
+            cStart.classList.add('hidden');
+            cAct.classList.remove('hidden');
+        } else {
+            cStart.classList.remove('hidden');
+            cAct.classList.add('hidden');
+        }
+
+        const msg = document.getElementById('sm-game-message');
+        if (sm.status === 'win') msg.innerText = 'HAI VINTO!';
+        else if (sm.status === 'win_natural') msg.innerText = '7 E MEZZO NATURALE!';
+        else if (sm.status === 'loss') msg.innerText = 'IL BANCO VINCE';
+        else if (sm.status === 'bust') msg.innerText = 'SBALLATO!';
+        else if (sm.status === 'push') msg.innerText = 'PAREGGIO (PUSH)';
+        else msg.innerText = 'PIAZZA LA TUA PUNTATA';
     }
 };
 
@@ -417,12 +573,12 @@ window.blackjack = {
         }
     },
     _handleEndAlert(res) {
-        if (res.status === 'win') setTimeout(() => alert("HAI VINTO!"), 500);
-        else if (res.status === 'win_bj') setTimeout(() => alert("BLACKJACK! Hai vinto!"), 500);
-        else if (res.status === 'loss') setTimeout(() => alert("Il Banco vince."), 500);
-        else if (res.status === 'push') setTimeout(() => alert("Pareggio."), 500);
-        else if (res.status === 'split_end') setTimeout(() => alert("Partita SPLIT terminata. Totale vinto: " + (res.payout || 0) + "€"), 500);
-        else if (res.status === 'bust') setTimeout(() => alert("Hai sballato!"), 500);
+        if (res.status === 'win') setTimeout(() => alert("HAI VINTO!"), 1800);
+        else if (res.status === 'win_bj') setTimeout(() => alert("BLACKJACK! Hai vinto!"), 1800);
+        else if (res.status === 'loss') setTimeout(() => alert("Il Banco vince."), 1800);
+        else if (res.status === 'push') setTimeout(() => alert("Pareggio."), 1800);
+        else if (res.status === 'split_end') setTimeout(() => alert("Partita SPLIT terminata. Totale vinto: " + (res.payout || 0) + "€"), 1800);
+        else if (res.status === 'bust') setTimeout(() => alert("Hai sballato!"), 1800);
     },
     updateUI() {
         const bj = state.blackjack;
@@ -436,39 +592,49 @@ window.blackjack = {
             return div;
         };
 
-        const cardHelper = (cards, containerId, forceRedraw = false) => {
+        const cardHelper = (cards, containerId, forceRedraw = false, startDelay = 0) => {
             const container = document.getElementById(containerId);
             const lastGameId = container.dataset.gameId;
             const isNewGame = lastGameId !== String(bj.game_id);
-            if (isNewGame || forceRedraw) {
+
+            if (isNewGame) {
                 container.innerHTML = '';
                 container.dataset.gameId = String(bj.game_id);
             }
-            const existing = container.querySelectorAll('.card-item').length;
-            if (existing === cards.length && !forceRedraw) return;
-            if (forceRedraw) {
-                // Instant full redraw - no animation, reveal all cards
-                container.innerHTML = '';
-                cards.forEach(c => container.appendChild(makeCard(c)));
-                return;
+
+            let existingNodes = Array.from(container.children);
+            let existingCount = existingNodes.length;
+
+            if (!isNewGame && forceRedraw && existingCount > 1 && cards.length > 1) {
+                // Flip the dealer's face-down card at index 1 in-place without clearing the whole container
+                const newSecondCard = makeCard(cards[1]);
+                container.replaceChild(newSecondCard, existingNodes[1]);
             }
-            cards.forEach((c, idx) => {
-                if (idx < existing) return;
-                setTimeout(() => {
-                    const div = makeCard(c);
-                    div.style.opacity = '0';
-                    div.style.transform = 'translateY(-20px) scale(0.8)';
-                    div.style.transition = 'all 0.35s ease';
-                    container.appendChild(div);
-                    requestAnimationFrame(() => { setTimeout(() => { div.style.opacity = '1'; div.style.transform = 'translateY(0) scale(1)'; }, 30); });
-                }, (idx - existing) * 350);
-            });
+
+            if (existingCount === cards.length && !isNewGame) return;
+
+            let i = existingCount;
+            const drawNext = () => {
+                if (i >= cards.length) return;
+
+                const div = makeCard(cards[i]);
+                div.classList.add('dealt-card');
+                container.appendChild(div);
+
+                i++;
+                if (i < cards.length) setTimeout(drawNext, 400);
+            };
+
+            if (isNewGame && startDelay > 0) setTimeout(drawNext, startDelay);
+            else drawNext();
         };
 
         // When game is over, force-redraw dealer hand to reveal hidden card
         const gameOver = ['win', 'loss', 'push', 'bust', 'win_bj', 'split_end'].includes(bj.status);
-        cardHelper(bj.dealer_hand, 'bj-dealer-cards', gameOver);
-        cardHelper(bj.player_hand, 'bj-player-cards');
+        const isInitialDeal = bj.status === 'playing' && bj.player_hand && bj.player_hand.length === 2;
+
+        cardHelper(bj.player_hand, 'bj-player-cards', false, 0);
+        cardHelper(bj.dealer_hand, 'bj-dealer-cards', gameOver, isInitialDeal ? 200 : 0);
 
         document.getElementById('bj-player-score').innerText = `Punteggio: ${bj.player_score}`;
         document.getElementById('bj-dealer-score').innerText = `Punteggio: ${bj.dealer_score}`;

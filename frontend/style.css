@@ -757,3 +757,18 @@ table tr:hover td {
         height: 85px !important;
     }
 }
+@keyframes slideInCard {
+    from {
+        opacity: 0;
+        transform: translateY(-60px) scale(0.9) rotate(-5deg);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(0);
+    }
+}
+
+.dealt-card {
+    animation: slideInCard 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.2) forwards;
+    opacity: 0;
+}
