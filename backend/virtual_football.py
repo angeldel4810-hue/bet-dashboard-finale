@@ -313,8 +313,16 @@ def generate_fixtures(season_id, conn):
     # Get house edge
     cursor.execute("SELECT value FROM settings WHERE key = 'virtual_house_edge'")
     row = cursor.fetchone()
-    edge_pct = float(row[0]) if row and not (psql and not hasattr(row, 'keys')) else (float(row['value']) if row else 15.0)
-    if psql and row and not hasattr(row, 'keys'): edge_pct = float(row[0])
+    edge_pct = 15.0
+    if row:
+        try:
+            val = row[0] if isinstance(row, tuple) or (hasattr(row, 'keys') and 'value' not in row) else row.get('value', row[0])
+            edge_pct = float(val)
+        except Exception:
+            try:
+                edge_pct = float(row[0])
+            except:
+                pass
     
     margin_multiplier = 1.0 - (edge_pct / 100.0)
 
@@ -467,8 +475,15 @@ def generate_fixtures(season_id, conn):
 
 async def run_virtual_football_loop():
     print("[Virtual Football] Avvio ciclo asincrono...")
-    init_teams()
-    get_or_create_season()
+    try:
+        init_teams()
+        get_or_create_season()
+    except Exception as e:
+        import traceback
+        err_msg = str(e) + " " + traceback.format_exc().replace('\n', ' ')
+        engine.action_text = f"CRASH: {err_msg[:400]}"
+        print("[CRITICAL] Virtual Football Loop Crashed:", traceback.format_exc())
+        return
     
     BETTING_SECONDS = 120  # 2 minuti per scommettere
     LIVE_SECONDS = 30      # 30 secondi per la partita live
