@@ -245,8 +245,14 @@ def init_db():
     # Add virtual house edge default if missing
     if is_postgres:
         cursor.execute("INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING", ("virtual_house_edge", "15"))
+        cursor.execute("ALTER TABLE virtual_matches ADD COLUMN IF NOT EXISTS odds_combo TEXT DEFAULT '{}'")
+        cursor.execute("ALTER TABLE virtual_matches ADD COLUMN IF NOT EXISTS odds_exact TEXT DEFAULT '{}'")
     else:
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("virtual_house_edge", "15"))
+        try: cursor.execute("ALTER TABLE virtual_matches ADD COLUMN odds_combo TEXT DEFAULT '{}'")
+        except: pass
+        try: cursor.execute("ALTER TABLE virtual_matches ADD COLUMN odds_exact TEXT DEFAULT '{}'")
+        except: pass
 
     conn.commit()
     conn.close()
