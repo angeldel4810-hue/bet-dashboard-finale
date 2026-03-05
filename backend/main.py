@@ -255,6 +255,41 @@ async def list_users():
     conn.close()
     return users
 
+@app.post("/api/admin/users", dependencies=[Depends(check_admin)])
+async def create_user(data: dict):
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    role = data.get("role", "user")
+    balance = float(data.get("balance", 0))
+
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username e password obbligatori")
+
+    hashed = get_password_hash(password)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+
+    try:
+        if is_postgres:
+            cursor.execute(
+                "INSERT INTO users (username, password_hash, role, balance, status) VALUES (%s, %s, %s, %s, %s)",
+                (username, hashed, role, balance, 'active')
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO users (username, password_hash, role, balance, status) VALUES (?, ?, ?, ?, ?)",
+                (username, hashed, role, balance, 'active')
+            )
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Errore: username già esistente o dati non validi")
+
+    conn.close()
+    return {"message": f"Utente '{username}' creato con successo"}
+
 @app.get("/api/admin/users/{user_id}/detail", dependencies=[Depends(check_admin)])
 async def get_user_detail(user_id: int):
     try:
