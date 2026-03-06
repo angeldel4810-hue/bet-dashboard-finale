@@ -188,6 +188,8 @@ window.ui = {
             'spreads': 'Handicap / Spread',
             'handicaps': 'Handicap Asiatico',
             'alternate_totals': 'Over/Under (Linee Aggiuntive)',
+            'combo_1x2_btts': '1X2 + Goal/No Goal',
+            'combo_1x2_ou': '1X2 + Over/Under',
             'alternate_spreads': 'Handicap (Linee Aggiuntive)',
             'handicap_euro': 'Handicap Europeo',
 
@@ -225,37 +227,76 @@ window.ui = {
         }
 
         container.innerHTML = bookmaker.markets
-            .filter(m => m.key !== 'h2h_lay') // <--- RIMUOVI BANCA (EXCHANGE)
+            .filter(m => m.key !== 'h2h_lay')
             .map(m => {
                 const marketLabel = labels[m.key] || m.key.toUpperCase();
-                const outcomesHtml = m.outcomes.map(o => {
-                    let name = o.name;
-                    if (m.key === 'btts') {
-                        name = (name === 'Yes' ? 'Goal' : 'No Goal');
-                    } else if (m.key.includes('totals') && o.point !== undefined) {
-                        if (!name.includes(o.point.toString())) {
-                            name = `${o.name} ${o.point}`;
+                const isCombo = m.key === 'combo_1x2_btts' || m.key === 'combo_1x2_ou';
+
+                // Per i combo raggruppa per soglia (Over/Under) o per tipo (GG/NG)
+                let outcomesHtml = '';
+                if (m.key === 'combo_1x2_ou') {
+                    // Raggruppa per punto (1.5, 2.5, 3.5, 4.5)
+                    const byPoint = {};
+                    m.outcomes.forEach(o => {
+                        const pt = o.point !== undefined ? o.point : o.name.match(/\d+\.\d+/)?.[0] || '?';
+                        if (!byPoint[pt]) byPoint[pt] = [];
+                        byPoint[pt].push(o);
+                    });
+                    outcomesHtml = Object.keys(byPoint).sort((a,b)=>parseFloat(a)-parseFloat(b)).map(pt => {
+                        const label = byPoint[pt][0]?.name.includes('Over') ? `Over/Under ${pt}` : `Linea ${pt}`;
+                        const btns = byPoint[pt].map(o => {
+                            const name = o.name;
+                            const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
+                            return `<div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
+                                <span>${name}</span><span class="price-val">${o.price.toFixed(2)}</span>
+                            </div>`;
+                        }).join('');
+                        return `<div style="margin-bottom:8px;">
+                            <div style="font-size:0.72rem; color:var(--text-secondary); margin-bottom:4px; text-transform:uppercase;">${label}</div>
+                            <div style="display:grid; grid-template-columns: repeat(3,1fr); gap:6px;">${btns}</div>
+                        </div>`;
+                    }).join('');
+                } else if (m.key === 'combo_1x2_btts') {
+                    // Raggruppa per GG e NG
+                    const gg = m.outcomes.filter(o => o.name.endsWith('+GG'));
+                    const ng = m.outcomes.filter(o => o.name.endsWith('+NG'));
+                    const renderGroup = (arr, lbl) => {
+                        const btns = arr.map(o => {
+                            const name = o.name;
+                            const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
+                            return `<div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
+                                <span>${name}</span><span class="price-val">${o.price.toFixed(2)}</span>
+                            </div>`;
+                        }).join('');
+                        return `<div style="margin-bottom:8px;">
+                            <div style="font-size:0.72rem; color:var(--text-secondary); margin-bottom:4px; text-transform:uppercase;">${lbl}</div>
+                            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;">${btns}</div>
+                        </div>`;
+                    };
+                    outcomesHtml = renderGroup(gg, 'Goal Goal') + renderGroup(ng, 'No Goal');
+                } else {
+                    outcomesHtml = m.outcomes.map(o => {
+                        let name = o.name;
+                        if (m.key === 'btts') {
+                            name = (name === 'Yes' ? 'Goal' : 'No Goal');
+                        } else if (m.key.includes('totals') && o.point !== undefined) {
+                            if (!name.includes(o.point.toString())) name = `${o.name} ${o.point}`;
+                        } else if (o.description) {
+                            name = `${o.description}: ${o.name}`;
+                        } else if (o.point !== undefined) {
+                            name = `${o.name} (${o.point > 0 ? '+' : ''}${o.point})`;
                         }
-                    } else if (o.description) {
-                        name = `${o.description}: ${o.name}`;
-                    } else if (o.point !== undefined) {
-                        name = `${o.name} (${o.point > 0 ? '+' : ''}${o.point})`;
-                    }
-
-                    const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
-
-                    return `
-                    <div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
-                        <span>${name}</span>
-                        <span class="price-val">${o.price.toFixed(2)}</span>
-                    </div>
-                `;
-                }).join('');
+                        const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
+                        return `<div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
+                            <span>${name}</span><span class="price-val">${o.price.toFixed(2)}</span>
+                        </div>`;
+                    }).join('');
+                }
 
                 return `
                 <div class="market-group">
                     <h4 style="color:var(--accent); font-size:0.8rem; margin-bottom:10px; text-transform:uppercase;">${marketLabel}</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;">
+                    <div style="${isCombo ? '' : 'display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;'}">
                         ${outcomesHtml}
                     </div>
                 </div>
@@ -949,30 +990,17 @@ window.admin = {
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
                          <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => {
-                        const isVirt = s.event_id && String(s.event_id).startsWith('v_');
-                        const selSt  = s.status || 'pending';
-                        const selCol = selSt === 'won' ? 'var(--success)' : selSt === 'lost' ? 'var(--danger)' : 'rgba(255,255,255,0.8)';
-                        const resBadge = isVirt
-                            ? (s.match_result
-                                ? `<span style="margin-left:8px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-weight:bold; font-size:0.9rem; letter-spacing:1px;">${s.match_result}</span>`
-                                : `<span style="margin-left:8px; opacity:0.45; font-size:0.75rem;">⏳ in corso</span>`)
-                            : '';
-                        return `<div style="font-size:0.85rem; margin-bottom:5px; display:flex; align-items:center; color:${selCol};">
-                            • ${s.home_team} vs ${s.away_team}: <b style="margin:0 4px;">${s.selection}</b> @${s.odds.toFixed(2)}${resBadge}
-                        </div>`;
-                    }).join('')}
-                    <div style="margin-top:0.8rem; display:flex; gap:10px; align-items:center;">
-                        ${(() => {
-                            const isVirt = b.selections.some(s => s.event_id && String(s.event_id).startsWith('v_'));
-                            if (b.status !== 'pending') return `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : b.status === 'cancelled' ? 'RIMBORSATA 🔄' : b.status.toUpperCase()}</span>`;
-                            return `
-                                <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;" title="Segna vincente">V</button>
-                                <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;" title="Segna perdente">P</button>
-                                <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;" title="Rimborsa">A</button>
-                                ${isVirt ? '<span style="font-size:0.75rem; opacity:0.5; margin-left:4px;">virtuale</span>' : ''}
-                            `;
-                        })()}
+                    ${b.selections.map(s => `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
+                        </div>
+                    `).join('')}
+                    <div style="margin-top:0.8rem; display:flex; gap:10px;">
+                        ${b.status === 'pending' ? `
+                            <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
+                            <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;">P</button>
+                            <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;">A</button>
+                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status}</span>`}
                     </div>
                 </div>
             `).join('');
