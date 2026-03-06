@@ -327,9 +327,33 @@ async def get_user_detail(user_id: int):
             cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
             s_rows = cursor.fetchall()
             if is_postgres:
-                bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
+                sels = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s) > 8 else "pending"} for s in s_rows]
             else:
-                bet['selections'] = [dict(sr) for sr in s_rows]
+                sels = [dict(sr) for sr in s_rows]
+            # Per selezioni virtuali aggiungo risultato partita
+            for sel in sels:
+                eid = sel.get("event_id", "")
+                if eid and str(eid).startswith("v_"):
+                    try:
+                        match_id = int(str(eid)[2:])
+                        cursor.execute(
+                            "SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres
+                            else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?",
+                            (match_id,))
+                        mr = cursor.fetchone()
+                        if mr:
+                            hs  = mr[0] if is_postgres else mr["home_score"]
+                            as_ = mr[1] if is_postgres else mr["away_score"]
+                            ms  = mr[2] if is_postgres else mr["status"]
+                            sel["match_result"] = f"{hs}-{as_}" if ms == "finished" else None
+                            sel["match_status"] = ms
+                        else:
+                            sel["match_result"] = None; sel["match_status"] = None
+                    except:
+                        sel["match_result"] = None; sel["match_status"] = None
+                else:
+                    sel["match_result"] = None; sel["match_status"] = None
+            bet['selections'] = sels
             bets.append(bet)
         
         user_data['bets'] = bets
@@ -436,36 +460,9 @@ async def list_all_bets():
         cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
         s_rows = cursor.fetchall()
         if is_postgres:
-            sels = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s) > 8 else "pending"} for s in s_rows]
+            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
         else:
-            sels = [dict(sr) for sr in s_rows]
-        # Per le selezioni virtuali aggiungo il risultato della partita
-        for sel in sels:
-            eid = sel.get("event_id", "")
-            if eid and str(eid).startswith("v_"):
-                try:
-                    match_id = int(str(eid)[2:])
-                    cursor.execute(
-                        "SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres
-                        else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?",
-                        (match_id,))
-                    mr = cursor.fetchone()
-                    if mr:
-                        hs = mr[0] if is_postgres else mr["home_score"]
-                        as_ = mr[1] if is_postgres else mr["away_score"]
-                        ms = mr[2] if is_postgres else mr["status"]
-                        sel["match_result"] = f"{hs}-{as_}" if ms == "finished" else None
-                        sel["match_status"] = ms
-                    else:
-                        sel["match_result"] = None
-                        sel["match_status"] = None
-                except:
-                    sel["match_result"] = None
-                    sel["match_status"] = None
-            else:
-                sel["match_result"] = None
-                sel["match_status"] = None
-        bet['selections'] = sels
+            bet['selections'] = [dict(sr) for sr in s_rows]
         bets_list.append(bet)
         
     conn.close()
