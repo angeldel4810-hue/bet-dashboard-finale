@@ -149,17 +149,17 @@ def finalize_matchday(season_id, matchday):
 def resolve_virtual_bets(conn, season_id, matchday):
     cursor = conn.cursor(); psql = check_is_psql(conn)
 
-    # --- Admin id per le transazioni ---
+    # Admin id per le transazioni
     cursor.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
     adm_row = cursor.fetchone()
     admin_id = (adm_row[0] if psql else adm_row["id"]) if adm_row else 1
 
-    # --- Costruisce le selezioni vincenti per ogni partita di questa giornata ---
+    # Costruisce le selezioni vincenti per ogni partita di questa giornata
     cursor.execute(
         "SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = %s AND matchday = %s" if psql
         else "SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = ? AND matchday = ?",
         (season_id, matchday))
-    winning = {}   # "v_{mid}" -> set di selezioni vincenti
+    winning = {}  # "v_{mid}" -> set di selezioni vincenti
     for r in cursor.fetchall():
         mid = r[0] if psql else r["id"]
         hg  = r[1] if psql else r["home_score"]
@@ -188,13 +188,9 @@ def resolve_virtual_bets(conn, season_id, matchday):
     if not winning:
         return
 
-    # --- Trova bet pending che hanno ALMENO UNA selezione su questa giornata ---
+    # Trova SOLO le bet pending che hanno almeno una selezione su questa giornata
     event_ids = list(winning.keys())
-    if psql:
-        placeholders = ",".join(["%s"] * len(event_ids))
-    else:
-        placeholders = ",".join(["?"] * len(event_ids))
-
+    placeholders = ",".join(["%s" if psql else "?"] * len(event_ids))
     cursor.execute(
         f"SELECT DISTINCT b.id, b.user_id, b.potential_win "
         f"FROM bets b JOIN bet_selections bs ON b.id = bs.bet_id "
@@ -207,14 +203,14 @@ def resolve_virtual_bets(conn, season_id, matchday):
         uid = b[1] if psql else b["user_id"]
         pot = b[2] if psql else b["potential_win"]
 
-        # Leggi TUTTE le selezioni di questa bet
+        # Leggi tutte le selezioni di questa bet
         cursor.execute(
             "SELECT id, event_id, selection, status FROM bet_selections WHERE bet_id = %s" if psql
             else "SELECT id, event_id, selection, status FROM bet_selections WHERE bet_id = ?",
             (bid,))
         sels = cursor.fetchall()
 
-        # Aggiorna solo le selezioni che appartengono a questa giornata
+        # Aggiorna solo le selezioni che appartengono a questa giornata e sono ancora pending
         for s in sels:
             sel_id    = s[0] if psql else s["id"]
             evid      = s[1] if psql else s["event_id"]
@@ -230,7 +226,7 @@ def resolve_virtual_bets(conn, season_id, matchday):
 
         conn.commit()
 
-        # Rileggi tutti gli stati aggiornati
+        # Rileggi tutti gli stati aggiornati per decidere la bet
         cursor.execute(
             "SELECT status FROM bet_selections WHERE bet_id = %s" if psql
             else "SELECT status FROM bet_selections WHERE bet_id = ?",
@@ -238,13 +234,13 @@ def resolve_virtual_bets(conn, season_id, matchday):
         all_statuses = [r[0] if psql else r["status"] for r in cursor.fetchall()]
 
         if "lost" in all_statuses:
-            # Almeno una selezione persa → bet persa
+            # Almeno una persa → bet persa
             cursor.execute(
                 "UPDATE bets SET status = 'lost' WHERE id = %s" if psql
                 else "UPDATE bets SET status = 'lost' WHERE id = ?",
                 (bid,))
         elif "pending" not in all_statuses and all(s == "won" for s in all_statuses):
-            # Tutte le selezioni vinte e nessuna ancora pending → paga
+            # Tutte vinte, nessuna ancora in attesa → paga
             cursor.execute(
                 "SELECT balance FROM users WHERE id = %s" if psql
                 else "SELECT balance FROM users WHERE id = ?",
@@ -267,7 +263,7 @@ def resolve_virtual_bets(conn, season_id, matchday):
                      "VALUES (?, 'credit', ?, ?, ?, ?, ?)",
                 (uid, pot, prev, nxt, admin_id, f"Vincita Virtuale bet#{bid}"))
             print(f"[VirtualPay] bet#{bid} → utente#{uid} +€{pot:.2f}")
-        # Se ci sono ancora 'pending' (selezioni su giornate future) → non fare nulla
+        # Se ci sono ancora 'pending' = selezioni su giornate future → aspetta
 
     conn.commit()
 
