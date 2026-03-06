@@ -377,22 +377,22 @@
 
                     <div class="virtual-sidebar">
                         <div style="background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); padding: 1.5rem;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                                <h3 style="font-size: 1.1rem; margin:0;">🏆 Classifica</h3>
-                                <span id="virtual-standings-day" style="font-size:0.75rem; color:var(--text-secondary);"></span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
+                                <h3 style="font-size:1rem; margin:0;">🏆 Classifica</h3>
+                                <span id="virtual-standings-day" style="font-size:0.72rem; color:var(--text-secondary); font-style:italic;"></span>
                             </div>
                             <div style="overflow-x: auto;">
-                                <table style="width: 100%; font-size: 0.78rem; border-collapse: collapse;">
+                                <table style="width:100%; font-size:0.78rem; border-collapse:collapse;">
                                     <thead>
-                                        <tr style="color: var(--text-secondary); text-align: center; border-bottom: 1px solid var(--border-color);">
-                                            <th style="padding: 6px 3px; text-align:left;">#</th>
-                                            <th style="padding: 6px 3px; text-align:left;">Squadra</th>
-                                            <th style="padding: 6px 3px;" title="Punti">Pt</th>
-                                            <th style="padding: 6px 3px;" title="Partite Giocate">G</th>
-                                            <th style="padding: 6px 3px;" title="Vinte">V</th>
-                                            <th style="padding: 6px 3px;" title="Pareggiate">N</th>
-                                            <th style="padding: 6px 3px;" title="Perse">P</th>
-                                            <th style="padding: 6px 3px;" title="Differenza Reti">DR</th>
+                                        <tr style="color:var(--text-secondary); border-bottom:1px solid var(--border-color); font-size:0.72rem;">
+                                            <th style="padding:5px 3px; text-align:center;">#</th>
+                                            <th style="padding:5px 3px; text-align:left;">Squadra</th>
+                                            <th style="padding:5px 3px; text-align:center;" title="Punti">Pt</th>
+                                            <th style="padding:5px 3px; text-align:center;" title="Giocate">G</th>
+                                            <th style="padding:5px 3px; text-align:center;" title="Vinte">V</th>
+                                            <th style="padding:5px 3px; text-align:center;" title="Pareggiate">N</th>
+                                            <th style="padding:5px 3px; text-align:center;" title="Perse">P</th>
+                                            <th style="padding:5px 3px; text-align:center;" title="Differenza Reti">DR</th>
                                         </tr>
                                     </thead>
                                     <tbody id="virtual-standings-body">
@@ -400,19 +400,17 @@
                                     </tbody>
                                 </table>
                             </div>
-                            <!-- Navigazione Giornate Precedenti -->
-                            <div style="margin-top:1.2rem; border-top:1px solid var(--border-color); padding-top:1rem;">
-                                <h4 style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.8rem;">📅 Risultati Giornate</h4>
-                                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                                    <button onclick="virtual.prevHistoryDay()" id="btn-prev-day"
-                                        style="background:var(--card-bg); border:1px solid var(--border-color); color:var(--text-primary); padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.8rem;">◀</button>
-                                    <span id="history-day-label" style="font-size:0.85rem; font-weight:bold; flex:1; text-align:center;">-</span>
-                                    <button onclick="virtual.nextHistoryDay()" id="btn-next-day"
-                                        style="background:var(--card-bg); border:1px solid var(--border-color); color:var(--text-primary); padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.8rem;">▶</button>
+                            <!-- Navigazione Storico Giornate -->
+                            <div style="margin-top:1rem; border-top:1px solid var(--border-color); padding-top:0.9rem;">
+                                <h4 style="font-size:0.82rem; color:var(--text-secondary); margin-bottom:0.7rem;">📅 Risultati Giornata</h4>
+                                <div style="display:flex; gap:6px; align-items:center;">
+                                    <button id="btn-prev-day" onclick="virtual.prevHistoryDay()"
+                                        style="background:var(--card-bg);border:1px solid var(--border-color);color:var(--text-primary);padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem;">◀</button>
+                                    <span id="history-day-label" style="font-size:0.82rem;font-weight:bold;flex:1;text-align:center;color:var(--accent);">-</span>
+                                    <button id="btn-next-day" onclick="virtual.nextHistoryDay()"
+                                        style="background:var(--card-bg);border:1px solid var(--border-color);color:var(--text-primary);padding:5px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem;">▶</button>
                                 </div>
-                                <div id="virtual-history-results" style="margin-top:0.8rem; display:grid; gap:6px; font-size:0.8rem;">
-                                    <!-- Storico risultati giornata -->
-                                </div>
+                                <div id="virtual-history-results" style="margin-top:0.6rem; display:grid; gap:5px; font-size:0.78rem;"></div>
                             </div>
                         </div>
                     </div>
