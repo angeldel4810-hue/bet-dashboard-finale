@@ -1,261 +1,264 @@
-import sqlite3
 import os
-try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
-    PSYCOG_AVAILABLE = True
-except ImportError:
-    PSYCOG_AVAILABLE = False
-from bcrypt import hashpw, gensalt, checkpw
+import sqlite3
+import psycopg2
+import psycopg2.extras
 
-# Supabase URL (PostgreSQL)
-SUPABASE_DB_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# Path locale per fallback SQLite (se non c'è DATABASE_URL)
-LOCAL_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "antigravity.db")
 
 def get_db():
-    if SUPABASE_DB_URL:
-        # Usiamo Supabase (PostgreSQL)
-        if not PSYCOG_AVAILABLE:
-            raise ImportError("psycopg2 non è installato. Impossibile connettersi a PostgreSQL.")
-        conn = psycopg2.connect(SUPABASE_DB_URL)
+    if DATABASE_URL:
+        conn = psycopg2.connect(DATABASE_URL)
         return conn
     else:
-        # Fallback locale (SQLite)
-        if not os.path.exists(os.path.dirname(LOCAL_DB_PATH)):
-            os.makedirs(os.path.dirname(LOCAL_DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(LOCAL_DB_PATH)
+        conn = sqlite3.connect("simusbet.db", check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
 
-def is_postgres(conn):
-    return SUPABASE_DB_URL is not None or hasattr(conn, 'get_dsn_parameters')
 
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-    
-    is_postgres = SUPABASE_DB_URL is not None
-    
-    # Sintassi per l'auto-incremento diversa tra SQLite e PostgreSQL
-    serial_primary_key = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
-    text_type = "TEXT"
-    real_type = "DOUBLE PRECISION" if is_postgres else "REAL"
-    timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-    
-    # Users table
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS users (
-        id {serial_primary_key},
-        username {text_type} UNIQUE NOT NULL,
-        password_hash {text_type} NOT NULL,
-        role {text_type} DEFAULT 'user',
-        balance {real_type} DEFAULT 0,
-        status {text_type} DEFAULT 'active'
-    )
-    ''')
-    
-    # Settings table
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS settings (
-        key {text_type} PRIMARY KEY,
-        value {text_type} NOT NULL
-    )
-    ''')
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
 
-    # Manual Odds table
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS manual_odds (
-        id {serial_primary_key},
-        sport_title {text_type} NOT NULL,
-        home_team {text_type} NOT NULL,
-        away_team {text_type} NOT NULL,
-        commence_time {text_type} NOT NULL,
-        price_home {real_type} NOT NULL,
-        price_draw {real_type},
-        price_away {real_type} NOT NULL,
-        price_over {real_type},
-        price_under {real_type},
-        price_goal {real_type},
-        price_nogoal {real_type}
-    )
-    ''')
-
-    # Bets table
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS bets (
-        id {serial_primary_key},
-        user_id INTEGER NOT NULL,
-        amount {real_type} NOT NULL,
-        total_odds {real_type} NOT NULL,
-        potential_win {real_type} NOT NULL,
-        status {text_type} DEFAULT 'pending',
-        created_at {timestamp_type},
-        FOREIGN KEY (user_id) REFERENCES users (id)
-    )
-    ''')
-
-    # Bet Selections
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS bet_selections (
-        id {serial_primary_key},
-        bet_id INTEGER NOT NULL,
-        event_id {text_type} NOT NULL,
-        market {text_type} NOT NULL,
-        selection {text_type} NOT NULL,
-        odds {real_type} NOT NULL,
-        status {text_type} DEFAULT 'pending',
-        home_team {text_type},
-        away_team {text_type},
-        FOREIGN KEY (bet_id) REFERENCES bets (id)
-    )
-    ''')
-    
-    # Check if admin exists
-    cursor.execute("SELECT * FROM users WHERE username = 'admin'")
-    if not cursor.fetchone():
-        admin_pass = "admin123"
-        hashed = hashpw(admin_pass.encode('utf-8'), gensalt()).decode('utf-8')
-        cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)" if is_postgres else "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
-                       ("admin", hashed, "admin"))
-    
-    # Initialize default settings
-    default_settings = {
-        "overround": "5",
-        "active_sports": "soccer_italy_serie_a,soccer_italy_serie_b,soccer_italy_serie_c_girone_a,soccer_italy_serie_c_girone_b,soccer_italy_serie_c_girone_c,soccer_epl,soccer_efl_champ,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_uefa_champs_league,soccer_uefa_europa_league,soccer_uefa_europa_conference_league,soccer_netherlands_eredivisie,soccer_portugal_primeira_liga,soccer_usa_mls,soccer_brazil_campeonato,soccer_argentina_primera_division,basketball_nba,basketball_euroleague,basketball_ncaab,tennis_atp_aus_open,tennis_wta_aus_open,tennis_atp_french_open,tennis_wta_french_open,tennis_atp_wimbledon,tennis_wta_wimbledon,tennis_atp_us_open,tennis_wta_us_open",
-        "odds_source": "api",
-        "api_provider": "the-odds-api",
-        "apikey": "f85d90a7ce76ed13e4a81a93bb880665",
-        "crash_house_edge": "3"
-    }
-    
-    for key, value in default_settings.items():
-        if is_postgres:
-            cursor.execute("INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING", (key, value))
-        else:
-            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
-        
-    # Transactions table
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS transactions (
-        id {serial_primary_key},
-        user_id INTEGER NOT NULL,
-        type {text_type} NOT NULL,
-        amount {real_type} NOT NULL,
-        balance_before {real_type} NOT NULL,
-        balance_after {real_type} NOT NULL,
-        admin_id INTEGER NOT NULL,
-        reason {text_type},
-        timestamp {timestamp_type},
-        FOREIGN KEY (user_id) REFERENCES users (id),
-        FOREIGN KEY (admin_id) REFERENCES users (id)
-    )
-    ''')
-
-    # Crash Game Rounds
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS crash_rounds (
-        id {serial_primary_key},
-        crash_point {real_type} NOT NULL,
-        status {text_type} DEFAULT 'finished',
-        created_at {timestamp_type}
-    )
-    ''')
-
-    # Crash Game Bets
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS crash_bets (
-        id {serial_primary_key},
-        user_id INTEGER NOT NULL,
-        round_id INTEGER,
-        amount {real_type} NOT NULL,
-        cashout_multiplier {real_type},
-        payout {real_type} DEFAULT 0,
-        status {text_type} DEFAULT 'pending',
-        created_at {timestamp_type},
-        FOREIGN KEY (user_id) REFERENCES users (id),
-        FOREIGN KEY (round_id) REFERENCES crash_rounds (id)
-    )
-    ''')
-    # Virtual Football Schema
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS virtual_teams (
-        id {serial_primary_key},
-        name {text_type} UNIQUE NOT NULL,
-        offense {real_type} NOT NULL,
-        defense {real_type} NOT NULL,
-        logo_url {text_type}
-    )
-    ''')
-
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS virtual_seasons (
-        id {serial_primary_key},
-        current_matchday INTEGER DEFAULT 1,
-        status {text_type} DEFAULT 'active',
-        created_at {timestamp_type}
-    )
-    ''')
-
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS virtual_matches (
-        id {serial_primary_key},
-        season_id INTEGER NOT NULL,
-        matchday INTEGER NOT NULL,
-        home_team_id INTEGER NOT NULL,
-        away_team_id INTEGER NOT NULL,
-        status {text_type} DEFAULT 'scheduled',
-        home_score INTEGER DEFAULT 0,
-        away_score INTEGER DEFAULT 0,
-        current_minute INTEGER DEFAULT 0,
-        odds_1 {real_type},
-        odds_x {real_type},
-        odds_2 {real_type},
-        odds_over25 {real_type},
-        odds_under25 {real_type},
-        odds_gg {real_type},
-        odds_ng {real_type},
-        odds_combo {text_type} DEFAULT '{{}}',
-        odds_exact {text_type} DEFAULT '{{}}',
-        FOREIGN KEY (season_id) REFERENCES virtual_seasons (id),
-        FOREIGN KEY (home_team_id) REFERENCES virtual_teams (id),
-        FOREIGN KEY (away_team_id) REFERENCES virtual_teams (id)
-    )
-    ''')
-
-    cursor.execute(f'''
-    CREATE TABLE IF NOT EXISTS virtual_standings (
-        id {serial_primary_key},
-        season_id INTEGER NOT NULL,
-        team_id INTEGER NOT NULL,
-        points INTEGER DEFAULT 0,
-        played INTEGER DEFAULT 0,
-        won INTEGER DEFAULT 0,
-        drawn INTEGER DEFAULT 0,
-        lost INTEGER DEFAULT 0,
-        goals_for INTEGER DEFAULT 0,
-        goals_against INTEGER DEFAULT 0,
-        FOREIGN KEY (season_id) REFERENCES virtual_seasons (id),
-        FOREIGN KEY (team_id) REFERENCES virtual_teams (id),
-        UNIQUE(season_id, team_id)
-    )
-    ''')
-
-    # Add virtual house edge default if missing
     if is_postgres:
-        cursor.execute("INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING", ("virtual_house_edge", "15"))
-        cursor.execute("ALTER TABLE virtual_matches ADD COLUMN IF NOT EXISTS odds_combo TEXT DEFAULT '{}'")
-        cursor.execute("ALTER TABLE virtual_matches ADD COLUMN IF NOT EXISTS odds_exact TEXT DEFAULT '{}'")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                role VARCHAR(20) DEFAULT 'user',
+                balance NUMERIC(12,2) DEFAULT 0.0,
+                status VARCHAR(20) DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bets (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                amount NUMERIC(12,2) NOT NULL,
+                total_odds NUMERIC(10,4) DEFAULT 1.0,
+                potential_win NUMERIC(12,2) NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bet_selections (
+                id SERIAL PRIMARY KEY,
+                bet_id INTEGER REFERENCES bets(id),
+                event_id VARCHAR(255),
+                market VARCHAR(100),
+                selection VARCHAR(255),
+                odds NUMERIC(10,4),
+                home_team VARCHAR(100),
+                away_team VARCHAR(100),
+                status VARCHAR(20) DEFAULT 'pending'
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                type VARCHAR(50),
+                amount NUMERIC(12,2),
+                balance_before NUMERIC(12,2),
+                balance_after NUMERIC(12,2),
+                admin_id INTEGER,
+                reason TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key VARCHAR(100) PRIMARY KEY,
+                value TEXT
+            )
+        """)
+        # Virtual football tables
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS virtual_teams (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                offense NUMERIC(5,2) DEFAULT 1.0,
+                defense NUMERIC(5,2) DEFAULT 1.0,
+                logo VARCHAR(10) DEFAULT '⚽'
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS virtual_seasons (
+                id SERIAL PRIMARY KEY,
+                status VARCHAR(20) DEFAULT 'active',
+                current_matchday INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS virtual_matches (
+                id SERIAL PRIMARY KEY,
+                season_id INTEGER REFERENCES virtual_seasons(id),
+                matchday INTEGER,
+                home_team_id INTEGER REFERENCES virtual_teams(id),
+                away_team_id INTEGER REFERENCES virtual_teams(id),
+                home_score INTEGER DEFAULT 0,
+                away_score INTEGER DEFAULT 0,
+                status VARCHAR(20) DEFAULT 'scheduled',
+                current_minute INTEGER DEFAULT 0,
+                odd_1 NUMERIC(6,2) DEFAULT 2.0,
+                odd_x NUMERIC(6,2) DEFAULT 3.0,
+                odd_2 NUMERIC(6,2) DEFAULT 2.0,
+                odd_gg NUMERIC(6,2) DEFAULT 1.8,
+                odd_ng NUMERIC(6,2) DEFAULT 1.9,
+                odd_over25 NUMERIC(6,2) DEFAULT 2.0,
+                odd_under25 NUMERIC(6,2) DEFAULT 1.7,
+                odd_over15 NUMERIC(6,2) DEFAULT 1.3,
+                odd_under15 NUMERIC(6,2) DEFAULT 3.5
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS virtual_standings (
+                id SERIAL PRIMARY KEY,
+                season_id INTEGER REFERENCES virtual_seasons(id),
+                team_id INTEGER REFERENCES virtual_teams(id),
+                played INTEGER DEFAULT 0,
+                won INTEGER DEFAULT 0,
+                drawn INTEGER DEFAULT 0,
+                lost INTEGER DEFAULT 0,
+                goals_for INTEGER DEFAULT 0,
+                goals_against INTEGER DEFAULT 0,
+                points INTEGER DEFAULT 0,
+                UNIQUE(season_id, team_id)
+            )
+        """)
     else:
-        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("virtual_house_edge", "15"))
-        try: cursor.execute("ALTER TABLE virtual_matches ADD COLUMN odds_combo TEXT DEFAULT '{}'")
-        except: pass
-        try: cursor.execute("ALTER TABLE virtual_matches ADD COLUMN odds_exact TEXT DEFAULT '{}'")
-        except: pass
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT DEFAULT 'user',
+                balance REAL DEFAULT 0.0,
+                status TEXT DEFAULT 'active',
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                amount REAL NOT NULL,
+                total_odds REAL DEFAULT 1.0,
+                potential_win REAL NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bet_selections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bet_id INTEGER REFERENCES bets(id),
+                event_id TEXT,
+                market TEXT,
+                selection TEXT,
+                odds REAL,
+                home_team TEXT,
+                away_team TEXT,
+                status TEXT DEFAULT 'pending'
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id),
+                type TEXT,
+                amount REAL,
+                balance_before REAL,
+                balance_after REAL,
+                admin_id INTEGER,
+                reason TEXT,
+                timestamp TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS virtual_teams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                offense REAL DEFAULT 1.0,
+                defense REAL DEFAULT 1.0,
+                logo TEXT DEFAULT '⚽'
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS virtual_seasons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT DEFAULT 'active',
+                current_matchday INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS virtual_matches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                season_id INTEGER REFERENCES virtual_seasons(id),
+                matchday INTEGER,
+                home_team_id INTEGER REFERENCES virtual_teams(id),
+                away_team_id INTEGER REFERENCES virtual_teams(id),
+                home_score INTEGER DEFAULT 0,
+                away_score INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'scheduled',
+                current_minute INTEGER DEFAULT 0,
+                odd_1 REAL DEFAULT 2.0,
+                odd_x REAL DEFAULT 3.0,
+                odd_2 REAL DEFAULT 2.0,
+                odd_gg REAL DEFAULT 1.8,
+                odd_ng REAL DEFAULT 1.9,
+                odd_over25 REAL DEFAULT 2.0,
+                odd_under25 REAL DEFAULT 1.7,
+                odd_over15 REAL DEFAULT 1.3,
+                odd_under15 REAL DEFAULT 3.5
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS virtual_standings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                season_id INTEGER REFERENCES virtual_seasons(id),
+                team_id INTEGER REFERENCES virtual_teams(id),
+                played INTEGER DEFAULT 0,
+                won INTEGER DEFAULT 0,
+                drawn INTEGER DEFAULT 0,
+                lost INTEGER DEFAULT 0,
+                goals_for INTEGER DEFAULT 0,
+                goals_against INTEGER DEFAULT 0,
+                points INTEGER DEFAULT 0,
+                UNIQUE(season_id, team_id)
+            )
+        """)
+
+    # Impostazioni di default
+    if is_postgres:
+        cursor.execute("""
+            INSERT INTO settings (key, value) VALUES ('overround', '5')
+            ON CONFLICT (key) DO NOTHING
+        """)
+        cursor.execute("""
+            INSERT INTO settings (key, value) VALUES ('virtual_house_edge', '5')
+            ON CONFLICT (key) DO NOTHING
+        """)
+    else:
+        cursor.execute("""
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('overround', '5')
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_house_edge', '5')
+        """)
 
     conn.commit()
     conn.close()
-
-if __name__ == "__main__":
-    init_db()
+    print("[DB] init_db completato.")
