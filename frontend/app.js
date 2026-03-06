@@ -1211,8 +1211,8 @@ window.bets = {
     async placeBet() {
         const amount = parseFloat(document.getElementById('slip-amount').value);
         if (!amount || amount <= 0) return alert('Inserisci un importo valido');
-        if (amount < 2) { // Minimum bet amount
-            alert('L\'importo minimo è €2.00');
+        if (amount < 1) { // Minimum bet amount
+            alert('L\'importo minimo della scommessa è €1.00');
             return;
         }
         if (amount > state.balance) return alert('Saldo insufficiente!');
@@ -1751,13 +1751,13 @@ window.virtual = {
                 const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
 
                 return `
-                    < div style = "display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};" >
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
                     <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${hName}</span>
                     <span style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
                         ${m.home_score || 0} - ${m.away_score || 0}
                     </span>
                     <span style="font-size: 0.85rem; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${aName}</span>
-                </div >
+                </div>
                     `;
             }).join('');
         } catch (e) {
