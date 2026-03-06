@@ -949,17 +949,30 @@ window.admin = {
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
                          <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => `
-                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
-                        </div>
-                    `).join('')}
-                    <div style="margin-top:0.8rem; display:flex; gap:10px;">
-                        ${b.status === 'pending' ? `
-                            <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
-                            <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;">P</button>
-                            <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;">A</button>
-                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status}</span>`}
+                    ${b.selections.map(s => {
+                        const isVirt = s.event_id && String(s.event_id).startsWith('v_');
+                        const selSt  = s.status || 'pending';
+                        const selCol = selSt === 'won' ? 'var(--success)' : selSt === 'lost' ? 'var(--danger)' : 'rgba(255,255,255,0.8)';
+                        const resBadge = isVirt
+                            ? (s.match_result
+                                ? `<span style="margin-left:8px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-weight:bold; font-size:0.9rem; letter-spacing:1px;">${s.match_result}</span>`
+                                : `<span style="margin-left:8px; opacity:0.45; font-size:0.75rem;">⏳ in corso</span>`)
+                            : '';
+                        return `<div style="font-size:0.85rem; margin-bottom:5px; display:flex; align-items:center; color:${selCol};">
+                            • ${s.home_team} vs ${s.away_team}: <b style="margin:0 4px;">${s.selection}</b> @${s.odds.toFixed(2)}${resBadge}
+                        </div>`;
+                    }).join('')}
+                    <div style="margin-top:0.8rem; display:flex; gap:10px; align-items:center;">
+                        ${(() => {
+                            const isVirt = b.selections.some(s => s.event_id && String(s.event_id).startsWith('v_'));
+                            if (b.status !== 'pending') return `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : b.status === 'cancelled' ? 'RIMBORSATA 🔄' : b.status.toUpperCase()}</span>`;
+                            return `
+                                <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;" title="Segna vincente">V</button>
+                                <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;" title="Segna perdente">P</button>
+                                <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;" title="Rimborsa">A</button>
+                                ${isVirt ? '<span style="font-size:0.75rem; opacity:0.5; margin-left:4px;">virtuale</span>' : ''}
+                            `;
+                        })()}
                     </div>
                 </div>
             `).join('');
@@ -1080,27 +1093,16 @@ window.admin = {
                         <span style="font-weight:bold; color:var(--accent)">Giocata di: ${b.username}</span>
                         <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => {
-                        const isVirtual = s.event_id && String(s.event_id).startsWith('v_');
-                        const selStatus = s.status || 'pending';
-                        const selColor = selStatus === 'won' ? 'var(--success)' : selStatus === 'lost' ? 'var(--danger)' : 'inherit';
-                        const resultBadge = isVirtual && s.match_result
-                            ? `<span style="margin-left:6px; background:rgba(255,255,255,0.12); padding:1px 7px; border-radius:4px; font-weight:bold; letter-spacing:1px;">${s.match_result}</span>`
-                            : (isVirtual ? `<span style="margin-left:6px; opacity:0.5; font-size:0.75rem;">in corso</span>` : '');
-                        return `<div style="font-size:0.85rem; margin-bottom:4px; display:flex; align-items:center; gap:4px; color:${selColor};">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}${resultBadge}
-                        </div>`;
-                    }).join('')}
-                    <div style="margin-top:0.8rem; display:flex; align-items:center; gap:10px;">
-                        ${(() => {
-                            const isVirtual = b.selections.some(s => s.event_id && String(s.event_id).startsWith('v_'));
-                            if (b.status !== 'pending') return `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : 'RIMBORSATA 🔄'}</span>`;
-                            if (isVirtual) return `<span style="color:var(--text-secondary); font-size:0.8rem;">⏳ Pagamento automatico</span>`;
-                            return `
-                                <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
-                                <button onclick="admin.resolveBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 15px;">Perdente</button>
-                            `;
-                        })()}
+                    ${b.selections.map(s => `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
+                        </div>
+                    `).join('')}
+                    <div style="margin-top:0.8rem; display:flex; gap:10px;">
+                        ${b.status === 'pending' ? `
+                            <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
+                            <button onclick="admin.resolveBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 15px;">Perdente</button>
+                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : 'PERSA ❌'}</span>`}
                     </div>
                 </div>
             `).join('');
