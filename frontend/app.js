@@ -188,8 +188,6 @@ window.ui = {
             'spreads': 'Handicap / Spread',
             'handicaps': 'Handicap Asiatico',
             'alternate_totals': 'Over/Under (Linee Aggiuntive)',
-            'combo_1x2_btts': '1X2 + Goal/No Goal',
-            'combo_1x2_ou': '1X2 + Over/Under',
             'alternate_spreads': 'Handicap (Linee Aggiuntive)',
             'handicap_euro': 'Handicap Europeo',
 
@@ -227,76 +225,38 @@ window.ui = {
         }
 
         container.innerHTML = bookmaker.markets
-            .filter(m => m.key !== 'h2h_lay')
+            .filter(m => m.key !== 'h2h_lay') // <--- RIMUOVI BANCA (EXCHANGE)
             .map(m => {
                 const marketLabel = labels[m.key] || m.key.toUpperCase();
-                const isCombo = m.key === 'combo_1x2_btts' || m.key === 'combo_1x2_ou';
-
-                // Per i combo raggruppa per soglia (Over/Under) o per tipo (GG/NG)
-                let outcomesHtml = '';
-                if (m.key === 'combo_1x2_ou') {
-                    // Raggruppa per punto (1.5, 2.5, 3.5, 4.5)
-                    const byPoint = {};
-                    m.outcomes.forEach(o => {
-                        const pt = o.point !== undefined ? o.point : o.name.match(/\d+\.\d+/)?.[0] || '?';
-                        if (!byPoint[pt]) byPoint[pt] = [];
-                        byPoint[pt].push(o);
-                    });
-                    outcomesHtml = Object.keys(byPoint).sort((a,b)=>parseFloat(a)-parseFloat(b)).map(pt => {
-                        const label = byPoint[pt][0]?.name.includes('Over') ? `Over/Under ${pt}` : `Linea ${pt}`;
-                        const btns = byPoint[pt].map(o => {
-                            const name = o.name;
-                            const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
-                            return `<div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
-                                <span>${name}</span><span class="price-val">${o.price.toFixed(2)}</span>
-                            </div>`;
-                        }).join('');
-                        return `<div style="margin-bottom:8px;">
-                            <div style="font-size:0.72rem; color:var(--text-secondary); margin-bottom:4px; text-transform:uppercase;">${label}</div>
-                            <div style="display:grid; grid-template-columns: repeat(3,1fr); gap:6px;">${btns}</div>
-                        </div>`;
-                    }).join('');
-                } else if (m.key === 'combo_1x2_btts') {
-                    // Raggruppa per GG e NG
-                    const gg = m.outcomes.filter(o => o.name.endsWith('+GG'));
-                    const ng = m.outcomes.filter(o => o.name.endsWith('+NG'));
-                    const renderGroup = (arr, lbl) => {
-                        const btns = arr.map(o => {
-                            const name = o.name;
-                            const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
-                            return `<div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
-                                <span>${name}</span><span class="price-val">${o.price.toFixed(2)}</span>
-                            </div>`;
-                        }).join('');
-                        return `<div style="margin-bottom:8px;">
-                            <div style="font-size:0.72rem; color:var(--text-secondary); margin-bottom:4px; text-transform:uppercase;">${lbl}</div>
-                            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;">${btns}</div>
-                        </div>`;
-                    };
-                    outcomesHtml = renderGroup(gg, 'Goal Goal') + renderGroup(ng, 'No Goal');
-                } else {
-                    outcomesHtml = m.outcomes.map(o => {
-                        let name = o.name;
-                        if (m.key === 'btts') {
-                            name = (name === 'Yes' ? 'Goal' : 'No Goal');
-                        } else if (m.key.includes('totals') && o.point !== undefined) {
-                            if (!name.includes(o.point.toString())) name = `${o.name} ${o.point}`;
-                        } else if (o.description) {
-                            name = `${o.description}: ${o.name}`;
-                        } else if (o.point !== undefined) {
-                            name = `${o.name} (${o.point > 0 ? '+' : ''}${o.point})`;
+                const outcomesHtml = m.outcomes.map(o => {
+                    let name = o.name;
+                    if (m.key === 'btts') {
+                        if (name === 'Yes' || name === 'Goal') name = 'Goal';
+                        else name = 'No Goal';
+                    } else if (m.key.includes('totals') && o.point !== undefined) {
+                        if (!name.includes(o.point.toString())) {
+                            name = `${o.name} ${o.point}`;
                         }
-                        const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
-                        return `<div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
-                            <span>${name}</span><span class="price-val">${o.price.toFixed(2)}</span>
-                        </div>`;
-                    }).join('');
-                }
+                    } else if (o.description) {
+                        name = `${o.description}: ${o.name}`;
+                    } else if (o.point !== undefined) {
+                        name = `${o.name} (${o.point > 0 ? '+' : ''}${o.point})`;
+                    }
+
+                    const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
+
+                    return `
+                    <div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
+                        <span>${name}</span>
+                        <span class="price-val">${o.price.toFixed(2)}</span>
+                    </div>
+                `;
+                }).join('');
 
                 return `
                 <div class="market-group">
                     <h4 style="color:var(--accent); font-size:0.8rem; margin-bottom:10px; text-transform:uppercase;">${marketLabel}</h4>
-                    <div style="${isCombo ? '' : 'display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;'}">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;">
                         ${outcomesHtml}
                     </div>
                 </div>
