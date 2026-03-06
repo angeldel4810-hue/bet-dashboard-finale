@@ -47,7 +47,6 @@ class VirtualEngine:
 engine = VirtualEngine()
 
 def check_is_psql(conn):
-    """Controlla se la connessione è PostgreSQL basandosi sugli attributi del cursore."""
     return hasattr(conn, 'get_dsn_parameters')
 
 def init_teams():
@@ -57,7 +56,7 @@ def init_teams():
     cursor.execute("SELECT COUNT(*) FROM virtual_teams")
     count = cursor.fetchone()[0]
     if count == 0:
-        print("[Virtual Football] Inizializzazione 20 squadre Serie A...")
+        print("[Virtual] Inizializzazione 20 squadre Serie A...")
         for t in SERIE_A_TEAMS:
             if psql:
                 cursor.execute("INSERT INTO virtual_teams (name, offense, defense) VALUES (%s, %s, %s)", (t["name"], t["offense"], t["defense"]))
@@ -70,10 +69,11 @@ def get_or_create_season():
     conn = get_db()
     cursor = conn.cursor()
     psql = check_is_psql(conn)
+    # Cerchiamo solo l'ultima stagione ATTIVA
     cursor.execute("SELECT id, current_matchday FROM virtual_seasons WHERE status = 'active' ORDER BY id DESC LIMIT 1")
     season = cursor.fetchone()
     if not season:
-        print("[Virtual Football] Creazione nuova stagione...")
+        print("[Virtual] Creazione nuova stagione...")
         if psql:
             cursor.execute("INSERT INTO virtual_seasons (status) VALUES ('active') RETURNING id")
             season_id = cursor.fetchone()[0]
@@ -85,17 +85,33 @@ def get_or_create_season():
         engine.current_season_id = season_id
         engine.current_matchday = 1
     else:
-        s_id = season[0] if psql else season["id"]
-        c_m = season[1] if psql else season["current_matchday"]
-        engine.current_season_id = s_id
-        engine.current_matchday = c_m
+        engine.current_season_id = season[0] if psql else season["id"]
+        engine.current_matchday = season[1] if psql else season["current_matchday"]
+    conn.close()
+
+def mark_season_finished(season_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = check_is_psql(conn)
+    q = "UPDATE virtual_seasons SET status = 'finished' WHERE id = %s" if psql else "UPDATE virtual_seasons SET status = 'finished' WHERE id = ?"
+    cursor.execute(q, (season_id,))
+    conn.commit()
+    conn.close()
+
+def update_season_matchday(season_id, mday):
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = check_is_psql(conn)
+    q = "UPDATE virtual_seasons SET current_matchday = %s WHERE id = %s" if psql else "UPDATE virtual_seasons SET current_matchday = ? WHERE id = ?"
+    cursor.execute(q, (mday, season_id))
+    conn.commit()
     conn.close()
 
 def finalize_matchday(season_id, matchday):
     conn = get_db()
     cursor = conn.cursor()
     psql = check_is_psql(conn)
-    print(f"[Virtual Football] Finalizzo giornata {matchday} della stagione {season_id}")
+    print(f"[Virtual] Finalizzo giornata {matchday} della stagione {season_id}")
     
     if psql:
         cursor.execute("SELECT id, home_team_id, away_team_id, home_score, away_score FROM virtual_matches WHERE season_id = %s AND matchday = %s", (season_id, matchday))
@@ -110,7 +126,6 @@ def finalize_matchday(season_id, matchday):
         h_g = m[3] if psql else m["home_score"]
         a_g = m[4] if psql else m["away_score"]
         
-        # Standings update
         h_pts, a_pts = (3, 0) if h_g > a_g else ((1, 1) if h_g == a_g else (0, 3))
         h_w, h_d, h_l = (1, 0, 0) if h_g > a_g else ((0, 1, 0) if h_g == a_g else (0, 0, 1))
         a_w, a_d, a_l = (0, 0, 1) if h_g > a_g else ((0, 1, 0) if h_g == a_g else (1, 0, 0))
@@ -152,7 +167,7 @@ def resolve_virtual_bets(conn, season_id, matchday):
     try:
         cursor = conn.cursor()
         psql = check_is_psql(conn)
-        print(f"[Virtual Resolve] Inizio pagamento giornata {matchday} (PSQL: {psql})")
+        print(f"[Virtual Resolve] Inizio resolv giornata {matchday} stagione {season_id}")
         
         if psql:
             cursor.execute("SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = %s AND matchday = %s", (season_id, matchday))
@@ -182,7 +197,9 @@ def resolve_virtual_bets(conn, season_id, matchday):
             res.add(f"Esatto {exact_str}" if exact_str in {"0-0", "1-0", "0-1", "1-1", "2-0", "0-2", "2-1", "1-2", "2-2", "3-0", "0-3", "3-1", "1-3", "3-2", "2-3"} else "Esatto Altro")
             match_results[f"v_{m_id}"] = res
 
-        if not match_results: return
+        if not match_results: 
+            print("[Virtual Resolve] Nessuna partita trovata.")
+            return
 
         ph = ", ".join(["%s" if psql else "?" for _ in match_results.keys()])
         query = f"SELECT bs.bet_id, bs.event_id, bs.selection, b.user_id FROM bet_selections bs JOIN bets b ON bs.bet_id = b.id WHERE b.status = 'pending' AND bs.event_id IN ({ph})"
@@ -230,9 +247,9 @@ def resolve_virtual_bets(conn, season_id, matchday):
                         cursor.execute("UPDATE users SET balance = ? WHERE id = ?", (new_bal, uid))
                         cursor.execute("INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?, 'credit', ?, ?, ?, 0, ?)", 
                                        (uid, win_amt, old_bal, new_bal, f"Vincita Virtuale #{bid}"))
-                    print(f"[Virtual Payout] Pagato {win_amt}€ a user {uid} per schedina #{bid}")
+                    print(f"[Virtual Resolve] Pagato {win_amt}€ a user {uid} per schedina #{bid}")
             except Exception as e_bet:
-                print(f"[Virtual Payout Error] Bet #{bid}: {e_bet}")
+                print(f"[Virtual Resolve Error] Bet #{bid}: {e_bet}")
     except Exception as e:
         print(f"[Virtual Resolve Error] {e}")
 
@@ -253,6 +270,7 @@ def generate_fixtures(season_id, conn):
     margin = 1.0 - (edge_pct / 100.0)
 
     if len(team_ids) != 20: return
+    # IMPORTANTE: Mescola le squadre per ogni nuova stagione
     random.shuffle(team_ids)
     rounds = []
     temp_ids = list(team_ids)
@@ -313,22 +331,25 @@ def generate_fixtures(season_id, conn):
             cj, ej, crj, erj = json.dumps(c), json.dumps(e), json.dumps(cr), json.dumps(er)
             q = "INSERT INTO virtual_matches (season_id, matchday, home_team_id, away_team_id, status, odds_1, odds_x, odds_2, odds_over25, odds_under25, odds_gg, odds_ng, odds_combo, odds_exact) VALUES (%s, %s, %s, %s, 'scheduled', %s, %s, %s, %s, %s, %s, %s, %s, %s)" if psql else "INSERT INTO virtual_matches (season_id, matchday, home_team_id, away_team_id, status, odds_1, odds_x, odds_2, odds_over25, odds_under25, odds_gg, odds_ng, odds_combo, odds_exact) VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             cursor.execute(q, (season_id, mday, h, a, o1, ox, o2, oo, ou, ogg, ong, cj, ej))
+            # Matchday rday (ritorno)
             cursor.execute(q, (season_id, rday, a, h, o1r, oxr, o2r, oor, our, oggr, ongr, crj, erj))
     conn.commit()
 
 async def run_virtual_football_loop():
-    print("[Virtual Football] Ciclo Avviato.")
+    print("[Virtual] Loop Avviato.")
     try:
         init_teams()
         get_or_create_season()
     except Exception:
-        print("[CRITICAL] Virtual Loop INIT Error:", traceback.format_exc()); return
+        print("[CRITICAL] Loop INIT Error:", traceback.format_exc()); return
     
     while True:
-        engine.phase, engine.timer, engine.clock, engine.action_text = "BETTING", 120, "", "⏳ Scommetti!"
+        # 1. FASE BETTING
+        engine.phase, engine.timer, engine.clock, engine.action_text = "BETTING", 120, "", "⏳ Piazza le scommesse!"
         while engine.timer > 0: await asyncio.sleep(1); engine.timer -= 1
         
-        engine.phase, engine.timer, engine.clock, engine.action_text = "LIVE", 30, "0'", "🏟️ Inizio!"
+        # 2. FASE LIVE
+        engine.phase, engine.timer, engine.clock, engine.action_text = "LIVE", 30, "0'", "🏟️ Fischio d'inizio!"
         conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
         q_up = "UPDATE virtual_matches SET status = 'live', current_minute = 0, home_score = 0, away_score = 0 WHERE season_id = %s AND matchday = %s" if psql else "UPDATE virtual_matches SET status = 'live', current_minute = 0, home_score = 0, away_score = 0 WHERE season_id = ? AND matchday = ?"
         cursor.execute(q_up, (engine.current_season_id, engine.current_matchday))
@@ -339,7 +360,7 @@ async def run_virtual_football_loop():
         cursor.execute("SELECT id, home_team_id, away_team_id FROM virtual_matches WHERE season_id = %s AND matchday = %s" if psql else "SELECT id, home_team_id, away_team_id FROM virtual_matches WHERE season_id = ? AND matchday = ?", (engine.current_season_id, engine.current_matchday))
         matches = cursor.fetchall()
         
-        for sec in range(LIVE_SECONDS:=30, 0, -1):
+        for sec in range(30, 0, -1):
             await asyncio.sleep(1); engine.timer = sec
             if sec in (25, 20, 15, 10, 5, 2):
                 min_str = {25:"15'", 20:"30'", 15:"45'", 10:"60'", 5:"75'", 2:"90'"}[sec]
@@ -351,35 +372,69 @@ async def run_virtual_football_loop():
                     q_g = "UPDATE virtual_matches SET home_score = home_score + %s, away_score = away_score + %s, current_minute = %s WHERE id = %s" if psql else "UPDATE virtual_matches SET home_score = home_score + ?, away_score = away_score + ?, current_minute = ? WHERE id = ?"
                     cursor.execute(q_g, (hg, ag, int(min_str.replace("'","")), mid))
                 conn.commit()
+        conn.close()
         
+        # 3. FINALIZZAZIONE E PAGAMENTO
         finalize_matchday(engine.current_season_id, engine.current_matchday)
         engine.finished_matchday = engine.current_matchday
-        engine.current_matchday += 1
-        if engine.current_matchday > 38: engine.current_matchday = 1; get_or_create_season()
+        
+        # 4. AVANZAMENTO GIORNATA / RESET STAGIONE
+        if engine.current_matchday >= 38:
+            print(f"[Virtual] Fine Stagione {engine.current_season_id}. Reset Classifica...")
+            mark_season_finished(engine.current_season_id)
+            engine.current_matchday = 1
+            get_or_create_season() # Creerà una nuova stagione 'active'
         else:
-            q_s = "UPDATE virtual_seasons SET current_matchday = %s WHERE id = %s" if psql else "UPDATE virtual_seasons SET current_matchday = ? WHERE id = ?"
-            cursor.execute(q_s, (engine.current_matchday, engine.current_season_id)); conn.commit()
-        conn.close()
+            engine.current_matchday += 1
+            update_season_matchday(engine.current_season_id, engine.current_matchday)
 
+        # 5. FASE FINISHED
         engine.phase, engine.timer, engine.clock, engine.action_text = "FINISHED", 120, "FIN", f"🏆 Risultati giornata {engine.finished_matchday}"
         while engine.timer > 0: await asyncio.sleep(1); engine.timer -= 1
 
 @router.get("/status")
 async def get_virtual_status():
-    return {"phase": engine.phase, "timer": engine.timer, "matchday": engine.current_matchday, "season_id": engine.current_season_id, "clock": engine.clock, "action_text": engine.action_text}
+    return {
+        "phase": engine.phase, 
+        "timer": engine.timer, 
+        "matchday": engine.current_matchday, 
+        "finished_matchday": engine.finished_matchday, # Importante per la UI
+        "season_id": engine.current_season_id, 
+        "clock": engine.clock, 
+        "action_text": engine.action_text
+    }
 
 @router.get("/live")
 async def get_virtual_live():
+    from backend.database import get_db
     conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
-    day = engine.finished_matchday if engine.phase == 'FINISHED' else engine.current_matchday
+    # Se siamo in fase FINISHED mostriamo i risultati della giornata appena conclusa
+    # Altrimenti mostriamo quella corrente (per i live update)
+    if engine.phase == 'FINISHED':
+        day = engine.finished_matchday
+        # Se siamo appena passati alla stagione nuova, dobbiamo usare l'ID precedente?
+        # No, se day=38 e engine.current_matchday=1, cercheremo i matchday 38.
+        # Se matchday 38 era della stagione precedente, dobbiamo trovarlo.
+        # Per semplicità, cerchiamo l'ultimo stagione finita se siamo a day=38 e current=1.
+        sid = engine.current_season_id
+        if day == 38 and engine.current_matchday == 1:
+            q_prev = "SELECT id FROM virtual_seasons WHERE status = 'finished' ORDER BY id DESC LIMIT 1"
+            cursor.execute(q_prev)
+            p_row = cursor.fetchone()
+            if p_row: sid = p_row[0]
+    else:
+        day = engine.current_matchday
+        sid = engine.current_season_id
+
     q = "SELECT m.id, m.home_score, m.away_score, th.name, ta.name FROM virtual_matches m JOIN virtual_teams th ON m.home_team_id = th.id JOIN virtual_teams ta ON m.away_team_id = ta.id WHERE m.season_id = %s AND m.matchday = %s" if psql else "SELECT m.id, m.home_score, m.away_score, th.name, ta.name FROM virtual_matches m JOIN virtual_teams th ON m.home_team_id = th.id JOIN virtual_teams ta ON m.away_team_id = ta.id WHERE m.season_id = ? AND m.matchday = ?"
-    cursor.execute(q, (engine.current_season_id, day))
+    cursor.execute(q, (sid, day))
     rows = cursor.fetchall()
     conn.close()
     return [{"id":r[0], "home_score":r[1], "away_score":r[2], "home_team":{"name":r[3]}, "away_team":{"name":r[4]}} if psql else {"id":r["id"], "home_score":r["home_score"], "away_score":r["away_score"], "home_team":{"name":r["name"]}, "away_team":{"name":r["name:1"]}} for r in rows]
 
 @router.get("/matches")
 async def get_virtual_matches():
+    from backend.database import get_db
     conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
     q = "SELECT m.id, m.matchday, m.status, m.home_score, m.away_score, m.current_minute, m.odds_1, m.odds_x, m.odds_2, m.odds_over25, m.odds_under25, m.odds_gg, m.odds_ng, m.odds_combo, m.odds_exact, th.name, th.logo_url, ta.name, ta.logo_url FROM virtual_matches m JOIN virtual_teams th ON m.home_team_id = th.id JOIN virtual_teams ta ON m.away_team_id = ta.id WHERE m.season_id = %s AND m.matchday = %s" if psql else "SELECT m.id, m.matchday, m.status, m.home_score, m.away_score, m.current_minute, m.odds_1, m.odds_x, m.odds_2, m.odds_over25, m.odds_under25, m.odds_gg, m.odds_ng, m.odds_combo, m.odds_exact, th.name, th.logo_url, ta.name, ta.logo_url FROM virtual_matches m JOIN virtual_teams th ON m.home_team_id = th.id JOIN virtual_teams ta ON m.away_team_id = ta.id WHERE m.season_id = ? AND m.matchday = ?"
     cursor.execute(q, (engine.current_season_id, engine.current_matchday))
@@ -394,6 +449,7 @@ async def get_virtual_matches():
 
 @router.get("/standings")
 async def get_virtual_standings():
+    from backend.database import get_db
     conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
     q = "SELECT t.name, t.logo_url, s.points, s.played, s.won, s.drawn, s.lost, s.goals_for, s.goals_against FROM virtual_standings s JOIN virtual_teams t ON s.team_id = t.id WHERE s.season_id = %s ORDER BY s.points DESC, (s.goals_for - s.goals_against) DESC" if psql else "SELECT t.name, t.logo_url, s.points, s.played, s.won, s.drawn, s.lost, s.goals_for, s.goals_against FROM virtual_standings s JOIN virtual_teams t ON s.team_id = t.id WHERE s.season_id = ? ORDER BY s.points DESC"
     cursor.execute(q, (engine.current_season_id,))
