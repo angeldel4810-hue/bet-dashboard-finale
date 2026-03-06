@@ -1086,10 +1086,15 @@ window.admin = {
                         </div>
                     `).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
-                        ${b.status === 'pending' ? `
-                            <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
-                            <button onclick="admin.resolveBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 15px;">Perdente</button>
-                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : 'PERSA ❌'}</span>`}
+                        ${(() => {
+                            const isVirtual = b.selections.some(s => s.event_id && String(s.event_id).startsWith('v_'));
+                            if (b.status !== 'pending') return `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : 'PERSA ❌'}</span>`;
+                            if (isVirtual) return `<span style="color:var(--text-secondary); font-size:0.8rem;">⏳ Pagamento automatico</span>`;
+                            return `
+                                <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
+                                <button onclick="admin.resolveBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 15px;">Perdente</button>
+                            `;
+                        })()}
                     </div>
                 </div>
             `).join('');
@@ -1487,30 +1492,24 @@ window.virtual = {
 
             this.updateStatusUI();
 
-            if (statusChanged || matchdayChanged || state.virtual.status === 'LIVE' || state.virtual.status === 'FINISHED') {
+            if (statusChanged || matchdayChanged || state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
                 this.fetchMatches().catch(e => console.error("Error fetching matches:", e));
                 if (statusChanged || matchdayChanged) {
                     this.fetchStandings().catch(e => console.error("Error fetching standings:", e));
                     ui.fetchBalance();
-                    // Auto-aggiorna lo storico all'ultima giornata finita
-                    const fd = state.virtual.finishedMatchday || 0;
-                    if (fd > 0 && (this.historyDay === 0 || this.historyDay < fd)) {
-                        this.historyDay = fd;
-                        this.fetchAndRenderHistory().catch(e => console.error("History error:", e));
-                    }
                 }
             }
         }
     },
     async fetchMatches() {
-        // Quote sempre dalla giornata corrente (current_matchday)
+        // Carica le partite per il betting (sempre current_matchday)
         const matches = await api.request('/virtual/matches');
         if (matches) {
             state.virtual.matches = matches;
             this.renderMatches();
         }
-        // Tabellone live: durante LIVE e FINISHED
-        if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINISHED') {
+        // Carica le partite per il tabellone (usa finished_matchday durante FINISHED)
+        if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
             const liveMatches = await api.request('/virtual/live');
             if (liveMatches) {
                 state.virtual.liveMatches = liveMatches;
@@ -1529,81 +1528,45 @@ window.virtual = {
         const timerEl = document.getElementById('virtual-timer');
         if (!timerEl) return;
 
-        const phase = state.virtual.status;
-
-        if (phase === 'LIVE') {
-            timerEl.innerText = state.virtual.clock || 'LIVE';
+        if (state.virtual.status === 'BETTING' || state.virtual.status === 'FINISHED') {
+            const m = Math.floor(state.virtual.timeLeft / 60);
+            const s = state.virtual.timeLeft % 60;
+            timerEl.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+            timerEl.style.color = state.virtual.timeLeft < 30 ? 'var(--danger)' : 'var(--accent)';
+            document.getElementById('virtual-timer-label').innerText = 'Alla Giornata';
+        } else {
+            timerEl.innerText = 'LIVE';
             timerEl.style.color = 'var(--danger)';
             document.getElementById('virtual-timer-label').innerText = 'In Corso';
-        } else {
-            const t = state.virtual.timeLeft || 0;
-            const m = Math.floor(t / 60);
-            const s = t % 60;
-            timerEl.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
-            if (phase === 'FINISHED') {
-                timerEl.style.color = '#9b59b6';
-                document.getElementById('virtual-timer-label').innerText = 'Prossima Giornata';
-            } else {
-                timerEl.style.color = t < 30 ? 'var(--danger)' : 'var(--accent)';
-                document.getElementById('virtual-timer-label').innerText = 'Alla Giornata';
-            }
         }
     },
     updateStatusUI() {
-        const header    = document.getElementById('virtual-header');
-        const badge     = document.getElementById('virtual-status-badge');
+        const header = document.getElementById('virtual-header');
+        const badge = document.getElementById('virtual-status-badge');
         const liveBoard = document.getElementById('virtual-live-board');
-        const bettingRoom = document.getElementById('virtual-betting-room');
 
-        const phase          = state.virtual.status;
-        const currentMatchday  = state.virtual.currentMatchday  || 1;
-        const finishedMatchday = state.virtual.finishedMatchday || 0;
+        const currentMatchday = state.virtual.currentMatchday;
+        const finishedMatchday = state.virtual.finishedMatchday;
+        const displayDay = state.virtual.status === 'FINISHED' ? finishedMatchday : currentMatchday;
 
-        // Titolo:
-        // LIVE    → "Giornata X in corso"  (X = current = la giornata che sta girando)
-        // FINISHED → "Risultati Giornata X" + "(Prossima: Y)"
-        // BETTING  → "Giornata X - Scommetti ora"
-        if (header) {
-            if (phase === 'LIVE') {
-                header.innerText = `Giornata ${currentMatchday} — In Corso`;
-            } else if (phase === 'FINISHED') {
-                header.innerText = `Risultati Giornata ${finishedMatchday}`;
-            } else {
-                header.innerText = `Campionato Virtuale — Giornata ${currentMatchday}`;
-            }
-        }
-
+        if (header) header.innerText = `Campionato Virtuale - Giornata ${displayDay}`;
         if (badge) {
-            if (phase === 'LIVE') {
-                badge.innerText = `🔴 LIVE ${state.virtual.clock || ''}`;
-                badge.style.background = 'var(--danger)';
-            } else if (phase === 'FINISHED') {
-                badge.innerText = `✅ RISULTATI  |  🟢 Scommesse aperte G${currentMatchday}`;
-                badge.style.background = '#7b2fbf';
-            } else {
-                badge.innerText = `🟢 BETTING — Giornata ${currentMatchday}`;
+            if (state.virtual.status === 'BETTING') {
+                badge.innerText = 'BETTING';
                 badge.style.background = 'var(--accent)';
+            } else if (state.virtual.status === 'LIVE') {
+                badge.innerText = 'LIVE';
+                badge.style.background = 'var(--danger)';
+            } else if (state.virtual.status === 'FINISHED') {
+                badge.innerText = 'RISULTATI';
+                badge.style.background = '#9b59b6';
             }
         }
 
-        // Tabellone LIVE: visibile durante LIVE e FINISHED
-        if (liveBoard) {
-            if (phase === 'LIVE' || phase === 'FINISHED') {
-                liveBoard.classList.remove('hidden');
-            } else {
-                liveBoard.classList.add('hidden');
-            }
-        }
-
-        // Area scommesse: visibile sempre (BETTING + FINISHED), nascosta durante LIVE
-        if (bettingRoom) {
-            if (phase === 'LIVE') {
-                bettingRoom.style.opacity = '0.4';
-                bettingRoom.style.pointerEvents = 'none';
-            } else {
-                bettingRoom.style.opacity = '1';
-                bettingRoom.style.pointerEvents = 'auto';
-            }
+        if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
+            if (liveBoard) liveBoard.classList.remove('hidden');
+        } else {
+            if (liveBoard) liveBoard.classList.add('hidden');
         }
 
         this.updateTimerUI();
@@ -1611,79 +1574,25 @@ window.virtual = {
     renderStandings() {
         const tbody = document.getElementById('virtual-standings-body');
         if (!tbody) return;
+
         if (!state.virtual.standings || !Array.isArray(state.virtual.standings)) return;
 
-        // Aggiorna label giornata nella classifica
-        const dayLabel = document.getElementById('virtual-standings-day');
-        if (dayLabel) {
-            const played = state.virtual.standings.length > 0 ? (state.virtual.standings[0].played || 0) : 0;
-            dayLabel.innerText = played > 0 ? `dopo ${played}ª giornata` : 'Inizio stagione';
-        }
-
         try {
-            tbody.innerHTML = state.virtual.standings.map((s, i) => {
-                const gd = (s.gd !== undefined) ? s.gd : ((s.gf || 0) - (s.ga || 0));
-                const gdStr = gd > 0 ? `+${gd}` : `${gd}`;
-                const posColor = i === 0 ? '#FFD700' : (i < 4 ? '#00c3ff' : (i >= 17 ? '#ff4444' : 'inherit'));
-                return `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
-                    <td style="padding: 6px 3px; color:${posColor}; font-weight:bold; text-align:center;">${i + 1}</td>
-                    <td style="padding: 6px 3px;">
-                        <div style="display:flex; align-items:center; gap:5px; white-space:nowrap; overflow:hidden; max-width:100px;">
-                            <img src="${s.logo || ''}" style="width:13px;height:13px;object-fit:contain;flex-shrink:0;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
-                            <span style="overflow:hidden;text-overflow:ellipsis;font-size:0.77rem;">${s.team_name || '---'}</span>
-                        </div>
+            tbody.innerHTML = state.virtual.standings.map((s, i) => `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px 4px;">${i + 1}</td>
+                    <td style="padding: 8px 4px; display: flex; align-items: center; gap: 8px;">
+                        <img src="${s.logo || ''}" style="width: 16px; height: 16px; object-fit: contain;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
+                        ${s.team_name || '---'}
                     </td>
-                    <td style="padding:6px 3px;font-weight:900;text-align:center;color:var(--accent);">${s.points || 0}</td>
-                    <td style="padding:6px 3px;text-align:center;color:var(--text-secondary);">${s.played || 0}</td>
-                    <td style="padding:6px 3px;text-align:center;color:#00e676;">${s.won || 0}</td>
-                    <td style="padding:6px 3px;text-align:center;color:#ffeb3b;">${s.drawn || 0}</td>
-                    <td style="padding:6px 3px;text-align:center;color:#ff5252;">${s.lost || 0}</td>
-                    <td style="padding:6px 3px;text-align:center;color:${gd >= 0 ? '#00e676' : '#ff5252'};font-size:0.76rem;">${gdStr}</td>
-                </tr>`;
-            }).join('');
+                    <td style="padding: 8px 4px; font-weight: bold;">${s.points || 0}</td>
+                    <td style="padding: 8px 4px; color: var(--text-secondary);">${s.played || 0}</td>
+                </tr>
+            `).join('');
         } catch (e) {
             console.error("Error rendering standings:", e);
         }
     },
-    historyDay: 0,
-
-    async prevHistoryDay() {
-        if (this.historyDay <= 1) return;
-        this.historyDay--;
-        await this.fetchAndRenderHistory();
-    },
-    async nextHistoryDay() {
-        const maxDay = state.virtual.finishedMatchday || 0;
-        if (this.historyDay >= maxDay) return;
-        this.historyDay++;
-        await this.fetchAndRenderHistory();
-    },
-    async fetchAndRenderHistory() {
-        if (this.historyDay < 1) return;
-        const labelEl = document.getElementById('history-day-label');
-        const container = document.getElementById('virtual-history-results');
-        if (labelEl) labelEl.innerText = `Giornata ${this.historyDay}`;
-        const data = await api.request(`/virtual/history/${this.historyDay}`);
-        if (!container || !data || !Array.isArray(data)) return;
-        container.innerHTML = data.map(m => {
-            const hName = m.home_team?.name || '?';
-            const aName = m.away_team?.name || '?';
-            const fin = m.status === 'finished';
-            const score = fin ? `${m.home_score} - ${m.away_score}` : 'vs';
-            return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);padding:6px 8px;border-radius:5px;gap:6px;">
-                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${hName}</span>
-                <span style="background:#111;color:${fin ? '#FFD700' : '#aaa'};padding:2px 8px;border-radius:4px;font-weight:bold;font-family:monospace;white-space:nowrap;">${score}</span>
-                <span style="flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${aName}</span>
-            </div>`;
-        }).join('');
-        const maxDay = state.virtual.finishedMatchday || 0;
-        const btnPrev = document.getElementById('btn-prev-day');
-        const btnNext = document.getElementById('btn-next-day');
-        if (btnPrev) btnPrev.disabled = this.historyDay <= 1;
-        if (btnNext) btnNext.disabled = this.historyDay >= maxDay;
-    },
-
     expandedMatches: new Set(),
     toggleMatchOdds(matchId) {
         if (this.expandedMatches.has(matchId)) {
