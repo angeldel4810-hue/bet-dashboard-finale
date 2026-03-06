@@ -36,6 +36,7 @@ const state = {
         status: 'BETTING',
         timeLeft: 0,
         currentMatchday: 0,
+        finishedMatchday: 0,
         matches: [],
         standings: [],
         lastFetch: 0,
@@ -1446,6 +1447,7 @@ window.crash = {
 };
 
 window.virtual = {
+    historyDay: 0, // giornata visualizzata nello storico (0 = nessuna)
     init() {
         if (state.virtual.polling) clearInterval(state.virtual.polling);
         state.virtual.polling = setInterval(() => this.tick(), 1000);
@@ -1492,6 +1494,12 @@ window.virtual = {
                 if (statusChanged || matchdayChanged) {
                     this.fetchStandings().catch(e => console.error("Error fetching standings:", e));
                     ui.fetchBalance();
+                    // Aggiorna lo storico all'ultima giornata finita
+                    const fDay = state.virtual.finishedMatchday || 0;
+                    if (fDay > 0 && (this.historyDay === 0 || matchdayChanged)) {
+                        this.historyDay = fDay;
+                        this.fetchAndRenderHistory().catch(e => console.error("Error history:", e));
+                    }
                 }
             }
         }
@@ -1572,21 +1580,81 @@ window.virtual = {
 
         if (!state.virtual.standings || !Array.isArray(state.virtual.standings)) return;
 
+        const dayLabel = document.getElementById('virtual-standings-day');
+        if (dayLabel) {
+            const d = state.virtual.currentMatchday || 0;
+            dayLabel.innerText = d > 1 ? `Dopo ${d - 1}ª giornata` : '';
+        }
+
         try {
-            tbody.innerHTML = state.virtual.standings.map((s, i) => `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <td style="padding: 8px 4px;">${i + 1}</td>
-                    <td style="padding: 8px 4px; display: flex; align-items: center; gap: 8px;">
-                        <img src="${s.logo || ''}" style="width: 16px; height: 16px; object-fit: contain;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
-                        ${s.team_name || '---'}
+            tbody.innerHTML = state.virtual.standings.map((s, i) => {
+                const gd = (s.gd !== undefined) ? s.gd : ((s.gf || 0) - (s.ga || 0));
+                const gdStr = gd > 0 ? `+${gd}` : `${gd}`;
+                const posColor = i === 0 ? '#FFD700' : (i < 4 ? '#00c3ff' : (i >= 17 ? '#ff4444' : 'inherit'));
+                return `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                    <td style="padding: 6px 3px; color:${posColor}; font-weight:bold;">${i + 1}</td>
+                    <td style="padding: 6px 3px;">
+                        <div style="display:flex; align-items:center; gap:6px; white-space:nowrap; overflow:hidden; max-width:110px;">
+                            <img src="${s.logo || ''}" style="width:14px; height:14px; object-fit:contain; flex-shrink:0;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
+                            <span style="overflow:hidden; text-overflow:ellipsis;">${s.team_name || '---'}</span>
+                        </div>
                     </td>
-                    <td style="padding: 8px 4px; font-weight: bold;">${s.points || 0}</td>
-                    <td style="padding: 8px 4px; color: var(--text-secondary);">${s.played || 0}</td>
-                </tr>
-            `).join('');
+                    <td style="padding: 6px 3px; font-weight:900; text-align:center; color:var(--accent);">${s.points || 0}</td>
+                    <td style="padding: 6px 3px; text-align:center; color:var(--text-secondary);">${s.played || 0}</td>
+                    <td style="padding: 6px 3px; text-align:center; color:#00e676;">${s.won || 0}</td>
+                    <td style="padding: 6px 3px; text-align:center; color:#ffeb3b;">${s.drawn || 0}</td>
+                    <td style="padding: 6px 3px; text-align:center; color:#ff5252;">${s.lost || 0}</td>
+                    <td style="padding: 6px 3px; text-align:center; color:${gd >= 0 ? '#00e676' : '#ff5252'};">${gdStr}</td>
+                </tr>`;
+            }).join('');
         } catch (e) {
             console.error("Error rendering standings:", e);
         }
+    },
+
+    async prevHistoryDay() {
+        const maxDay = (state.virtual.finishedMatchday || 0);
+        if (this.historyDay <= 1) return;
+        this.historyDay = Math.max(1, this.historyDay - 1);
+        await this.fetchAndRenderHistory();
+    },
+
+    async nextHistoryDay() {
+        const maxDay = (state.virtual.finishedMatchday || 0);
+        if (this.historyDay >= maxDay) return;
+        this.historyDay = Math.min(maxDay, this.historyDay + 1);
+        await this.fetchAndRenderHistory();
+    },
+
+    async fetchAndRenderHistory() {
+        if (this.historyDay < 1) return;
+        const labelEl = document.getElementById('history-day-label');
+        const container = document.getElementById('virtual-history-results');
+        if (labelEl) labelEl.innerText = `Giornata ${this.historyDay}`;
+
+        const data = await api.request(`/virtual/history/${this.historyDay}`);
+        if (!container || !data || !Array.isArray(data)) return;
+
+        container.innerHTML = data.map(m => {
+            const hName = (m.home_team && m.home_team.name) ? m.home_team.name : '?';
+            const aName = (m.away_team && m.away_team.name) ? m.away_team.name : '?';
+            const finished = m.status === 'finished';
+            const scoreText = finished ? `${m.home_score} - ${m.away_score}` : 'vs';
+            return `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px; gap:8px;">
+                <span style="flex:1; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${hName}</span>
+                <span style="background:#111; color:${finished ? '#FFD700' : '#aaa'}; padding:3px 10px; border-radius:4px; font-weight:bold; font-size:0.82rem; font-family:monospace; white-space:nowrap;">${scoreText}</span>
+                <span style="flex:1; text-align:right; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${aName}</span>
+            </div>`;
+        }).join('');
+
+        // Aggiorna bottoni navigazione
+        const maxDay = state.virtual.finishedMatchday || 0;
+        const btnPrev = document.getElementById('btn-prev-day');
+        const btnNext = document.getElementById('btn-next-day');
+        if (btnPrev) btnPrev.disabled = this.historyDay <= 1;
+        if (btnNext) btnNext.disabled = this.historyDay >= maxDay;
     },
     expandedMatches: new Set(),
     toggleMatchOdds(matchId) {
