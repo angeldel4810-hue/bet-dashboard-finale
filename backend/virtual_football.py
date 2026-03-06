@@ -294,7 +294,7 @@ def resolve_virtual_bets(conn, season_id, matchday):
                     b_data = cursor.fetchone()
                     u_id = b_data[0] if psql else b_data["user_id"]
                     win_amt = b_data[1] if psql else b_data["potential_win"]
-                    
+                    if psql:
                         cursor.execute("UPDATE bets SET status = 'won' WHERE id = %s", (b_id,))
                         cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (win_amt, u_id))
                         # Registro transazione
@@ -306,8 +306,6 @@ def resolve_virtual_bets(conn, season_id, matchday):
                         # Registro transazione
                         cursor.execute("INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?, 'credit', ?, (SELECT balance FROM users WHERE id = ?), (SELECT balance FROM users WHERE id = ?), 0, ?)", 
                                        (u_id, win_amt, u_id, u_id, f"Vincita Virtuale Schedina #{b_id}"))
-                        # Nota: balance_before su sqlite calcolato dopo l'update e' un po complicato, ma l'importante e' loggare.
-                        # Uso una query leggermente diversa per balance_before se possibile e coerente.
                         cursor.execute("UPDATE transactions SET balance_before = balance_after - ? WHERE id = (SELECT last_insert_rowid())", (win_amt,))
 
             except Exception as e_bet:
