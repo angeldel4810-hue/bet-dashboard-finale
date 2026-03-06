@@ -412,6 +412,57 @@ def simulate_markets(event: Dict[str, Any]):
             ]
         })
 
+    # 7. COMBO 1X2 + GG/NG
+    if 'combo_1x2_btts' not in m_keys and h2h:
+        h_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['home_team']), None)
+        a_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['away_team']), None)
+        x_price = next((o['price'] for o in h2h['outcomes'] if o['name'] in ['Draw', 'Pareggio', 'X']), None)
+        # Prendi GG/NG dal mercato btts (già simulato sopra)
+        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
+        gg_price = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'), None) if btts_m else None
+        ng_price = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None) if btts_m else None
+        if h_price and x_price and a_price and gg_price and ng_price:
+            MARGIN = 0.90  # margine bookmaker
+            combo_btts = []
+            for res_name, res_price in [("1", h_price), ("X", x_price), ("2", a_price)]:
+                for btts_name, btts_price in [("GG", gg_price), ("NG", ng_price)]:
+                    combo_price = round(res_price * btts_price * MARGIN, 2)
+                    combo_price = max(1.05, combo_price)
+                    combo_btts.append({"name": f"{res_name}+{btts_name}", "price": combo_price})
+            m_list.append({"key": "combo_1x2_btts", "outcomes": combo_btts})
+
+    # 8. COMBO 1X2 + OVER/UNDER (tutte le soglie disponibili)
+    if 'combo_1x2_ou' not in m_keys and h2h and totals:
+        h_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['home_team']), None)
+        a_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['away_team']), None)
+        x_price = next((o['price'] for o in h2h['outcomes'] if o['name'] in ['Draw', 'Pareggio', 'X']), None)
+        if h_price and x_price and a_price:
+            MARGIN = 0.90
+            combo_ou = []
+            # Raggruppa outcomes per punto (es. 1.5, 2.5, 3.5, 4.5)
+            lines = {}
+            for o in totals['outcomes']:
+                pt = o.get('point')
+                if pt is not None:
+                    if pt not in lines:
+                        lines[pt] = {}
+                    if 'Over' in o['name']:
+                        lines[pt]['over'] = o['price']
+                    elif 'Under' in o['name']:
+                        lines[pt]['under'] = o['price']
+            for pt in sorted(lines.keys()):
+                over_p  = lines[pt].get('over')
+                under_p = lines[pt].get('under')
+                for res_name, res_price in [("1", h_price), ("X", x_price), ("2", a_price)]:
+                    if over_p:
+                        cp = round(res_price * over_p * MARGIN, 2)
+                        combo_ou.append({"name": f"{res_name}+Over {pt}", "price": max(1.05, cp), "point": pt})
+                    if under_p:
+                        cp = round(res_price * under_p * MARGIN, 2)
+                        combo_ou.append({"name": f"{res_name}+Under {pt}", "price": max(1.05, cp), "point": pt})
+            if combo_ou:
+                m_list.append({"key": "combo_1x2_ou", "outcomes": combo_ou})
+
 def get_sports(api_key: str): return []
 
 def get_odds_betsapi2_rapidapi(api_key: str, sport_id: str = "1") -> List[Dict[str, Any]]:
