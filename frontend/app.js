@@ -1480,6 +1480,7 @@ window.virtual = {
             state.virtual.status = data.phase || 'BETTING';
             state.virtual.timeLeft = data.timer || 0;
             state.virtual.currentMatchday = data.matchday || 0;
+            state.virtual.finishedMatchday = data.finished_matchday || 0;
             state.virtual.clock = data.clock || "0'";
             state.virtual.actionText = data.action_text || '';
             state.virtual.lastFetch = Date.now();
@@ -1539,7 +1540,11 @@ window.virtual = {
         const badge = document.getElementById('virtual-status-badge');
         const liveBoard = document.getElementById('virtual-live-board');
 
-        if (header) header.innerText = `Campionato Virtuale - Giornata ${state.virtual.currentMatchday}`;
+        const currentMatchday = state.virtual.currentMatchday;
+        const finishedMatchday = state.virtual.finishedMatchday;
+        const displayDay = state.virtual.status === 'FINISHED' ? finishedMatchday : currentMatchday;
+
+        if (header) header.innerText = `Campionato Virtuale - Giornata ${displayDay}`;
         if (badge) {
             if (state.virtual.status === 'BETTING') {
                 badge.innerText = 'BETTING';
