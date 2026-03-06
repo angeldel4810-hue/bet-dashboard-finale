@@ -1080,15 +1080,21 @@ window.admin = {
                         <span style="font-weight:bold; color:var(--accent)">Giocata di: ${b.username}</span>
                         <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => `
-                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
-                        </div>
-                    `).join('')}
-                    <div style="margin-top:0.8rem; display:flex; gap:10px;">
+                    ${b.selections.map(s => {
+                        const isVirtual = s.event_id && String(s.event_id).startsWith('v_');
+                        const selStatus = s.status || 'pending';
+                        const selColor = selStatus === 'won' ? 'var(--success)' : selStatus === 'lost' ? 'var(--danger)' : 'inherit';
+                        const resultBadge = isVirtual && s.match_result
+                            ? `<span style="margin-left:6px; background:rgba(255,255,255,0.12); padding:1px 7px; border-radius:4px; font-weight:bold; letter-spacing:1px;">${s.match_result}</span>`
+                            : (isVirtual ? `<span style="margin-left:6px; opacity:0.5; font-size:0.75rem;">in corso</span>` : '');
+                        return `<div style="font-size:0.85rem; margin-bottom:4px; display:flex; align-items:center; gap:4px; color:${selColor};">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}${resultBadge}
+                        </div>`;
+                    }).join('')}
+                    <div style="margin-top:0.8rem; display:flex; align-items:center; gap:10px;">
                         ${(() => {
                             const isVirtual = b.selections.some(s => s.event_id && String(s.event_id).startsWith('v_'));
-                            if (b.status !== 'pending') return `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : 'PERSA ❌'}</span>`;
+                            if (b.status !== 'pending') return `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : 'RIMBORSATA 🔄'}</span>`;
                             if (isVirtual) return `<span style="color:var(--text-secondary); font-size:0.8rem;">⏳ Pagamento automatico</span>`;
                             return `
                                 <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
