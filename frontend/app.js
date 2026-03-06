@@ -1452,6 +1452,14 @@ window.virtual = {
         this.fetchStatus();
         this.fetchStandings();
         this.fetchMatches();
+
+        // Optional: polling for my-bets if on bets section
+        if (state.betsPolling) clearInterval(state.betsPolling);
+        state.betsPolling = setInterval(() => {
+            if (!document.getElementById('section-bets').classList.contains('hidden')) {
+                bets.loadHistory();
+            }
+        }, 5000);
     },
     async tick() {
         if (state.virtual.status === 'BETTING' && state.virtual.timeLeft > 0) {
