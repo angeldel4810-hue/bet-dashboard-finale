@@ -209,6 +209,7 @@ def resolve_virtual_bets(conn, season_id, matchday):
             h_g = r[1] if psql else r["home_score"]
             a_g = r[2] if psql else r["away_score"]
             
+            # --- LOGICA CALCOLO RISULTATI ---
             results = set()
             # 1X2
             res_1x2 = "1" if h_g > a_g else ("X" if h_g == a_g else "2")
@@ -223,7 +224,7 @@ def resolve_virtual_bets(conn, season_id, matchday):
                     results.add(f"Under {threshold}")
                     results.add(f"{res_1x2}+Under {threshold}")
             
-            # GG/NG (nota: la selezione si chiama "Goal" e "No Goal" per 1X2 standard)
+            # GG/NG
             gg_str = "Goal" if (h_g > 0 and a_g > 0) else "No Goal"
             gg_combo = "GG" if (h_g > 0 and a_g > 0) else "NG"
             results.add(gg_str)
@@ -238,6 +239,7 @@ def resolve_virtual_bets(conn, season_id, matchday):
                 results.add(f"Esatto {exact_str}")
             else:
                 results.add("Esatto Altro")
+            # -------------------------------
             
             match_results[f"v_{m_id}"] = results
 
@@ -293,12 +295,21 @@ def resolve_virtual_bets(conn, season_id, matchday):
                     u_id = b_data[0] if psql else b_data["user_id"]
                     win_amt = b_data[1] if psql else b_data["potential_win"]
                     
-                    if psql:
                         cursor.execute("UPDATE bets SET status = 'won' WHERE id = %s", (b_id,))
                         cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (win_amt, u_id))
+                        # Registro transazione
+                        cursor.execute("INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s, 'credit', %s, (SELECT balance FROM users WHERE id = %s) - %s, (SELECT balance FROM users WHERE id = %s), 0, %s)", 
+                                       (u_id, win_amt, u_id, win_amt, u_id, f"Vincita Virtuale Schedina #{b_id}"))
                     else:
                         cursor.execute("UPDATE bets SET status = 'won' WHERE id = ?", (b_id,))
                         cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (win_amt, u_id))
+                        # Registro transazione
+                        cursor.execute("INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?, 'credit', ?, (SELECT balance FROM users WHERE id = ?), (SELECT balance FROM users WHERE id = ?), 0, ?)", 
+                                       (u_id, win_amt, u_id, u_id, f"Vincita Virtuale Schedina #{b_id}"))
+                        # Nota: balance_before su sqlite calcolato dopo l'update e' un po complicato, ma l'importante e' loggare.
+                        # Uso una query leggermente diversa per balance_before se possibile e coerente.
+                        cursor.execute("UPDATE transactions SET balance_before = balance_after - ? WHERE id = (SELECT last_insert_rowid())", (win_amt,))
+
             except Exception as e_bet:
                 print(f"[Virtual Resolve] Errore risoluzione schedina {b_id}: {e_bet}")
     except Exception as e:
