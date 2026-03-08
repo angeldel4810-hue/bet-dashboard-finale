@@ -146,7 +146,7 @@ def finalize_matchday(season_id, matchday):
     finally:
         conn.close()
 
-    # Connessione SEPARATA per non avere lock PostgreSQL
+    # Connessione NUOVA e separata per evitare lock PostgreSQL
     resolve_virtual_bets(season_id, matchday)
 
 
@@ -158,13 +158,14 @@ def resolve_virtual_bets(season_id, matchday):
         row = cursor.fetchone()
         pay_mode = (row[0] if psql else row["value"]) if row else 'auto'
         if pay_mode != 'auto':
-            print(f"[Virtual Bets] Modalita manuale — skip pagamento automatico")
+            print(f"[Virtual Bets] Modalita manuale - skip pagamento automatico giornata {matchday}")
             return
 
         cursor.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
         adm_row = cursor.fetchone()
         admin_id = (adm_row[0] if psql else adm_row["id"]) if adm_row else 1
 
+        # Risultati partite di questa giornata
         cursor.execute(
             "SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = %s AND matchday = %s AND status = 'finished'" if psql
             else "SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = ? AND matchday = ? AND status = 'finished'",
@@ -193,8 +194,9 @@ def resolve_virtual_bets(season_id, matchday):
             print(f"[Virtual Bets] Nessuna partita finished per giornata {matchday}")
             return
 
-        print(f"[Virtual Bets] Giornata {matchday} — partite: {list(results.keys())}")
+        print(f"[Virtual Bets] Giornata {matchday} - partite: {list(results.keys())}")
 
+        # Solo scommesse che hanno selezioni in QUESTA giornata
         event_ids = list(results.keys())
         placeholders = ",".join(["%s"] * len(event_ids)) if psql else ",".join(["?"] * len(event_ids))
         cursor.execute(f"""
@@ -204,7 +206,7 @@ def resolve_virtual_bets(season_id, matchday):
             WHERE b.status = 'pending' AND bs.event_id IN ({placeholders})
         """, event_ids)
         pending_bets = cursor.fetchall()
-        print(f"[Virtual Bets] Scommesse pending: {len(pending_bets)}")
+        print(f"[Virtual Bets] Scommesse pending trovate: {len(pending_bets)}")
 
         for b in pending_bets:
             bid, uid, win = (b[0], b[1], b[2]) if psql else (b["id"], b["user_id"], b["potential_win"])
@@ -265,12 +267,12 @@ def resolve_virtual_bets(season_id, matchday):
                     else "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?, 'credit', ?, ?, ?, ?, ?)",
                     (uid, float(win), prev, nxt, admin_id, f"Vincita Virtuale #{bid}")
                 )
-                print(f"[Virtual Bets] #{bid} VINTA — {win}euro a utente {uid}")
+                print(f"[Virtual Bets] #{bid} VINTA - {win}euro a utente {uid}")
             else:
-                print(f"[Virtual Bets] #{bid} ancora pending (ha selezioni su giornate future)")
+                print(f"[Virtual Bets] #{bid} ancora pending (selezioni su giornate future)")
 
         conn.commit()
-        print(f"[Virtual Bets] Giornata {matchday} OK")
+        print(f"[Virtual Bets] Giornata {matchday} risolta OK")
 
     except Exception as e:
         print(f"[Virtual Bets Error] {traceback.format_exc()}")
