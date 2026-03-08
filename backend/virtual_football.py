@@ -108,8 +108,10 @@ def finalize_matchday(season_id, matchday):
             mid, h_id, a_id = (m[0], m[1], m[2]) if psql else (m["id"], m["home_team_id"], m["away_team_id"])
             h_g, a_g = (m[3], m[4]) if psql else (m["home_score"], m["away_score"])
             h_p, a_p = (3, 0) if h_g > a_g else ((1, 1) if h_g == a_g else (0, 3))
+            
             h_w, h_d, h_l = (1, 0, 0) if h_p == 3 else ((0, 1, 0) if h_p == 1 else (0, 0, 1))
             a_w, a_d, a_l = (0, 0, 1) if h_p == 3 else ((0, 1, 0) if h_p == 1 else (1, 0, 0))
+
             def upd_st(tid, pts, w, d, l, gf, ga):
                 par = (season_id, tid, pts, w, d, l, gf, ga)
                 if psql:
@@ -132,152 +134,105 @@ def finalize_matchday(season_id, matchday):
                         lost = lost + excluded.lost, goals_for = goals_for + excluded.goals_for,
                         goals_against = goals_against + excluded.goals_against
                     """, par)
+            
             upd_st(h_id, h_p, h_w, h_d, h_l, h_g, a_g)
             upd_st(a_id, a_p, a_w, a_d, a_l, a_g, h_g)
             cursor.execute("UPDATE virtual_matches SET status = 'finished' WHERE id = %s" if psql else "UPDATE virtual_matches SET status = 'finished' WHERE id = ?", (mid,))
+        
         conn.commit()
+        resolve_virtual_bets(conn, season_id, matchday)
     except Exception as e:
         print(f"[Finalize Error] {traceback.format_exc()}")
     finally:
         conn.close()
-    # Risoluzione scommesse in task asincrono SEPARATO, dopo che la conn e' chiusa
-    asyncio.create_task(_async_resolve_bets(season_id, matchday))
 
-async def _async_resolve_bets(season_id, matchday):
-    """Attende 2s poi risolve le scommesse su connessione fresca."""
-    await asyncio.sleep(2)
+def resolve_virtual_bets(conn, season_id, matchday):
+    cursor = conn.cursor(); psql = check_is_psql(conn)
+
+    # Controlla modalità pagamento: se 'manual', non fare nulla
     try:
-        resolve_virtual_bets(season_id, matchday)
-    except Exception as e:
-        print(f"[AsyncResolve ERROR] {traceback.format_exc()}")
+        cursor.execute("SELECT value FROM settings WHERE key = 'virtual_pay_mode'")
+        row = cursor.fetchone()
+        pay_mode = (row[0] if psql else row["value"]) if row else "auto"
+    except:
+        pay_mode = "auto"
+    if pay_mode == "manual":
+        print("[VirtualResolve] Modalità manuale: pagamento automatico disabilitato.")
+        return
 
-def resolve_virtual_bets(season_id, matchday):
-    """Connessione propria, risolve e paga le scommesse della giornata."""
-    conn = get_db()
-    cursor = conn.cursor()
-    pg = check_is_psql(conn)
-    try:
-        # Admin id per le transazioni
-        cursor.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
-        adm = cursor.fetchone()
-        admin_id = (adm[0] if pg else adm["id"]) if adm else 1
+    cursor.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
+    adm_row = cursor.fetchone()
+    admin_id = adm_row[0] if adm_row else 1
+    
+    cursor.execute("SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = %s AND matchday = %s" if psql else "SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = ? AND matchday = ?", (season_id, matchday))
+    results = {}
+    for r in cursor.fetchall():
+        mid, hg, ag = (r[0], r[1], r[2]) if psql else (r["id"], r["home_score"], r["away_score"])
+        es = set()
+        r1x2 = "1" if hg > ag else ("X" if hg == ag else "2")
+        es.add(r1x2)
+        total_goals = hg + ag
+        for t in [1.5, 2.5, 3.5, 4.5]:
+            lbl = f"Over {t}" if total_goals > t else f"Under {t}"
+            es.add(lbl); es.add(f"{r1x2}+{lbl}")
+        gg_val = "Goal" if (hg > 0 and ag > 0) else "No Goal"
+        gg_c = "GG" if (hg > 0 and ag > 0) else "NG"
+        es.add(gg_val); es.add(f"{r1x2}+{gg_c}")
+        ex = f"{hg}-{ag}"
+        es.add(f"Esatto {ex}"); es.add(ex)
+        if ex not in {"0-0","1-0","0-1","1-1","2-0","0-2","2-1","1-2","2-2","3-0","0-3","3-1","1-3","3-2","2-3"}:
+            es.add("Esatto Altro"); es.add("Altro")
+        results[f"v_{mid}"] = es
 
-        # Costruisce risultati vincenti per questa giornata
-        cursor.execute(
-            "SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = %s AND matchday = %s" if pg
-            else "SELECT id, home_score, away_score FROM virtual_matches WHERE season_id = ? AND matchday = ?",
-            (season_id, matchday))
-        winning = {}
-        for r in cursor.fetchall():
-            mid = r[0] if pg else r["id"]
-            hg  = r[1] if pg else r["home_score"]
-            ag  = r[2] if pg else r["away_score"]
-            evid = f"v_{mid}"
-            w = set()
-            res = "1" if hg > ag else ("X" if hg == ag else "2")
-            w.add(res)
-            total = hg + ag
-            is_gg = (hg > 0 and ag > 0)
-            w.add("Goal" if is_gg else "No Goal")
-            w.add("GG" if is_gg else "NG")
-            w.add(f"{res}+{'GG' if is_gg else 'NG'}")
-            for thr in [1.5, 2.5, 3.5, 4.5]:
-                ou = f"Over {thr}" if total > thr else f"Under {thr}"
-                w.add(ou); w.add(f"{res}+{ou}")
-            sc = f"{hg}-{ag}"
-            w.add(sc); w.add(f"Esatto {sc}")
-            KNOWN = {"0-0","1-0","0-1","1-1","2-0","0-2","2-1","1-2","2-2",
-                     "3-0","0-3","3-1","1-3","3-2","2-3","3-3","4-0","0-4","4-1","1-4"}
-            if sc not in KNOWN:
-                w.add("Altro"); w.add("Esatto Altro")
-            winning[evid] = w
-
-        if not winning:
-            print(f"[VirtualResolve] Nessuna partita per giornata {matchday}")
-            return
-
-        print(f"[VirtualResolve] Giornata {matchday}: {len(winning)} partite")
-
-        # Trova le bet pending con selezioni su questa giornata
-        eids = tuple(winning.keys())
-        ph = ",".join(["%s" if pg else "?"] * len(eids))
-        cursor.execute(
-            f"SELECT DISTINCT b.id, b.user_id, b.potential_win "
-            f"FROM bets b JOIN bet_selections bs ON b.id = bs.bet_id "
-            f"WHERE b.status = 'pending' AND bs.event_id IN ({ph})",
-            eids)
-        bets = cursor.fetchall()
-        print(f"[VirtualResolve] Bet da processare: {len(bets)}")
-
-        for b in bets:
-            bid = b[0] if pg else b["id"]
-            uid = b[1] if pg else b["user_id"]
-            pot = float(b[2] if pg else b["potential_win"])
-
-            cursor.execute(
-                "SELECT id, event_id, selection, status FROM bet_selections WHERE bet_id = %s" if pg
-                else "SELECT id, event_id, selection, status FROM bet_selections WHERE bet_id = ?",
-                (bid,))
-            sels = cursor.fetchall()
-
-            for s in sels:
-                sel_id    = s[0] if pg else s["id"]
-                evid      = s[1] if pg else s["event_id"]
-                selection = s[2] if pg else s["selection"]
-                sel_st    = s[3] if pg else s["status"]
-                if evid in winning and sel_st == "pending":
-                    nst = "won" if selection in winning[evid] else "lost"
-                    cursor.execute(
-                        "UPDATE bet_selections SET status = %s WHERE id = %s" if pg
-                        else "UPDATE bet_selections SET status = ? WHERE id = ?",
-                        (nst, sel_id))
-            conn.commit()
-
-            cursor.execute(
-                "SELECT status FROM bet_selections WHERE bet_id = %s" if pg
-                else "SELECT status FROM bet_selections WHERE bet_id = ?",
-                (bid,))
-            stati = [r[0] if pg else r["status"] for r in cursor.fetchall()]
-            print(f"[VirtualResolve] bet#{bid} stati={stati}")
-
-            if "lost" in stati:
-                cursor.execute(
-                    "UPDATE bets SET status = 'lost' WHERE id = %s" if pg
-                    else "UPDATE bets SET status = 'lost' WHERE id = ?", (bid,))
-                conn.commit()
-                print(f"[VirtualResolve] bet#{bid} LOST")
-            elif "pending" not in stati and stati and all(s == "won" for s in stati):
-                cursor.execute(
-                    "SELECT balance FROM users WHERE id = %s" if pg
-                    else "SELECT balance FROM users WHERE id = ?", (uid,))
-                row  = cursor.fetchone()
-                prev = float(row[0] if pg else row["balance"])
-                nxt  = prev + pot
-                cursor.execute(
-                    "UPDATE users SET balance = %s WHERE id = %s" if pg
-                    else "UPDATE users SET balance = ? WHERE id = ?", (nxt, uid))
-                cursor.execute(
-                    "UPDATE bets SET status = 'won' WHERE id = %s" if pg
-                    else "UPDATE bets SET status = 'won' WHERE id = ?", (bid,))
-                cursor.execute(
-                    "INSERT INTO transactions (user_id,type,amount,balance_before,balance_after,admin_id,reason) "
-                    "VALUES (%s,'credit',%s,%s,%s,%s,%s)" if pg else
-                    "INSERT INTO transactions (user_id,type,amount,balance_before,balance_after,admin_id,reason) "
-                    "VALUES (?,'credit',?,?,?,?,?)",
-                    (uid, pot, prev, nxt, admin_id, f"Vincita Virtuale bet#{bid}"))
-                conn.commit()
-                print(f"[VirtualResolve] bet#{bid} WON +{pot} utente#{uid}")
+    # Seleziona scommesse PENDING che hanno selezioni per questo matchday
+    q_bets = """
+        SELECT DISTINCT b.id, b.user_id, b.potential_win 
+        FROM bets b 
+        JOIN bet_selections bs ON b.id = bs.bet_id 
+        WHERE b.status = 'pending' AND bs.event_id LIKE 'v_%'
+    """
+    cursor.execute(q_bets)
+    all_pending = cursor.fetchall()
+    
+    for b in all_pending:
+        bid, uid, win = (b[0], b[1], b[2]) if psql else (b["id"], b["user_id"], b["potential_win"])
+        
+        # Aggiorna lo stato delle selezioni individuali
+        cursor.execute("SELECT event_id, selection FROM bet_selections WHERE bet_id = %s" if psql else "SELECT event_id, selection FROM bet_selections WHERE bet_id = ?", (bid,))
+        selections = cursor.fetchall()
+        
+        all_resolved = True
+        is_won = True
+        
+        for s in selections:
+            evid, sel = (s[0], s[1]) if psql else (s["event_id"], s["selection"])
+            if evid in results:
+                # La selezione appartiene a questa giornata
+                clean_sel = sel.replace("Esatto ", "")
+                res_match = results[evid]
+                sel_won = (sel in res_match or clean_sel in res_match)
+                st = 'won' if sel_won else 'lost'
+                cursor.execute("UPDATE bet_selections SET status = %s WHERE bet_id = %s AND event_id = %s" if psql else "UPDATE bet_selections SET status = ? WHERE bet_id = ? AND event_id = ?", (st, bid, evid))
+                if not sel_won: is_won = False
             else:
-                print(f"[VirtualResolve] bet#{bid} pending (giornate future)")
+                # La selezione potrebbe appartenere a un'altra giornata o a un evento reale
+                cursor.execute("SELECT status FROM bet_selections WHERE bet_id = %s AND event_id = %s" if psql else "SELECT status FROM bet_selections WHERE bet_id = ? AND event_id = ?", (bid, evid))
+                curr_st = cursor.fetchone()[0]
+                if curr_st == 'pending': all_resolved = False
+                if curr_st == 'lost': is_won = False
 
-        print(f"[VirtualResolve] Giornata {matchday} completata.")
-    except Exception as e:
-        print(f"[VirtualResolve ERROR] {traceback.format_exc()}")
-        try: conn.rollback()
-        except: pass
-    finally:
-        conn.close()
-
+        if not is_won:
+            cursor.execute("UPDATE bets SET status = 'lost' WHERE id = %s" if psql else "UPDATE bets SET status = 'lost' WHERE id = ?", (bid,))
+        elif all_resolved: # Se tutte le selezioni sono 'won' e non ce ne sono altre 'pending'
+            cursor.execute("SELECT balance FROM users WHERE id = %s" if psql else "SELECT balance FROM users WHERE id = ?", (uid,))
+            prev = float(cursor.fetchone()[0])
+            nxt = prev + win
+            cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if psql else "UPDATE users SET balance = ? WHERE id = ?", (nxt, uid))
+            cursor.execute("UPDATE bets SET status = 'won' WHERE id = %s" if psql else "UPDATE bets SET status = 'won' WHERE id = ?", (bid,))
+            cursor.execute("INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s, 'credit', %s, %s, %s, %s, %s)" if psql else "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?, 'credit', ?, ?, ?, ?, ?)", (uid, win, prev, nxt, admin_id, f"Vincita Virtuale #{bid}"))
+            print(f"[Virtual Payout] Paid {win}eur to user {uid} for bet #{bid}")
+            
+    conn.commit()
 
 def generate_fixtures(season_id, conn):
     cursor = conn.cursor(); psql = check_is_psql(conn)

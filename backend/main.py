@@ -330,7 +330,6 @@ async def get_user_detail(user_id: int):
                 sels = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s) > 8 else "pending"} for s in s_rows]
             else:
                 sels = [dict(sr) for sr in s_rows]
-            # Per selezioni virtuali aggiungo risultato partita
             for sel in sels:
                 eid = sel.get("event_id", "")
                 if eid and str(eid).startswith("v_"):
