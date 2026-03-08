@@ -883,29 +883,63 @@ window.admin = {
             if (overroundEl) overroundEl.value = settings.overround;
             if (houseEdgeEl) houseEdgeEl.value = settings.crash_house_edge || '3';
             if (virtualEdgeEl) virtualEdgeEl.value = settings.virtual_house_edge || '15';
-            admin._setVirtualToggleUI(settings.virtual_pay_mode === 'auto');
             if (apiKeyEl) apiKeyEl.value = settings.apikey || '';
             if (sourceEl) sourceEl.value = settings.odds_source || 'manual';
+
+            // Inserisce il toggle se non esiste ancora
+            admin._injectVirtualPayToggle(settings.virtual_pay_mode === 'auto');
         }
     },
-    _setVirtualToggleUI(isAuto) {
-        const cb    = document.getElementById('virtual-pay-checkbox');
-        const knob  = document.getElementById('virtual-pay-knob');
-        const slider = document.getElementById('virtual-pay-slider');
-        const label = document.getElementById('virtual-pay-mode-label');
-        if (!cb) return;
-        cb.checked = isAuto;
-        if (isAuto) {
-            slider.style.background = '#22c55e';
-            knob.style.left = '29px';
-            label.textContent = 'Automatico';
-            label.style.color = '#22c55e';
-        } else {
-            slider.style.background = '#555';
-            knob.style.left = '3px';
-            label.textContent = 'Manuale';
-            label.style.color = '#888';
+
+    _injectVirtualPayToggle(isAuto) {
+        // Se il toggle esiste già, aggiorna solo lo stato
+        if (document.getElementById('vpt-checkbox')) {
+            document.getElementById('vpt-checkbox').checked = isAuto;
+            admin._updateToggleUI(isAuto);
+            return;
         }
+        // Cerca il bottone "Salva Impostazioni" e inserisce il toggle prima di esso
+        const saveBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Salva Impostazioni'));
+        if (!saveBtn) return;
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = \`
+            <div id="vpt-box" style="margin-bottom:1.2rem; padding:1.2rem; background:rgba(255,255,255,0.04); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <div style="font-weight:bold; font-size:0.95rem;">🤖 Pagamento Scommesse Virtuali</div>
+                        <div style="color:#888; font-size:0.8rem; margin-top:4px;">
+                            <b>Automatico:</b> paga/perde a fine giornata &nbsp;|&nbsp; <b>Manuale:</b> decidi tu dall'admin utente
+                        </div>
+                    </div>
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                        <span id="vpt-label" style="font-size:0.9rem; font-weight:bold; color:#888; min-width:90px; text-align:right;">Manuale</span>
+                        <span style="position:relative; display:inline-block; width:54px; height:28px; flex-shrink:0;">
+                            <input type="checkbox" id="vpt-checkbox" style="position:absolute; opacity:0; width:54px; height:28px; margin:0; cursor:pointer; z-index:10;">
+                            <span id="vpt-track" style="position:absolute; top:0; left:0; right:0; bottom:0; background:#555; border-radius:14px; pointer-events:none; transition:background 0.2s;"></span>
+                            <span id="vpt-knob" style="position:absolute; top:3px; left:3px; width:22px; height:22px; background:white; border-radius:50%; pointer-events:none; transition:left 0.2s; box-shadow:0 1px 4px rgba(0,0,0,0.5);"></span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+        \`;
+        saveBtn.parentNode.insertBefore(wrapper.firstElementChild, saveBtn);
+        document.getElementById('vpt-checkbox').addEventListener('change', function() {
+            admin._updateToggleUI(this.checked);
+        });
+        admin._updateToggleUI(isAuto);
+    },
+
+    _updateToggleUI(isAuto) {
+        const cb = document.getElementById('vpt-checkbox');
+        const track = document.getElementById('vpt-track');
+        const knob = document.getElementById('vpt-knob');
+        const label = document.getElementById('vpt-label');
+        if (!track) return;
+        if (cb) cb.checked = isAuto;
+        track.style.background = isAuto ? '#22c55e' : '#555';
+        knob.style.left = isAuto ? '29px' : '3px';
+        label.textContent = isAuto ? 'Automatico' : 'Manuale';
+        label.style.color = isAuto ? '#22c55e' : '#888';
     },
 
     async saveSettings() {
@@ -914,7 +948,7 @@ window.admin = {
         const virtual_house_edge = document.getElementById('setting-virtual-house-edge').value;
         const apikey = document.getElementById('setting-apikey').value;
         const odds_source = document.getElementById('setting-source').value;
-        const cb = document.getElementById('virtual-pay-checkbox');
+        const cb = document.getElementById('vpt-checkbox');
         const virtual_pay_mode = (cb && cb.checked) ? 'auto' : 'manual';
         await api.request('/settings', {
             method: 'POST',
@@ -1825,10 +1859,4 @@ window.onload = () => {
         dashboard.init();
         router.navigate('odds');
     }
-};
-
-
-// Callback globale per il toggle pagamento virtuale
-window._onVirtualPayChange = function(isChecked) {
-    if (window.admin) window.admin._setVirtualToggleUI(isChecked);
 };
