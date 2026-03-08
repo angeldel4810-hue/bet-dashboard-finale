@@ -231,8 +231,7 @@ window.ui = {
                 const outcomesHtml = m.outcomes.map(o => {
                     let name = o.name;
                     if (m.key === 'btts') {
-                        if (name === 'Yes' || name === 'Goal') name = 'Goal';
-                        else name = 'No Goal';
+                        name = (name === 'Yes' ? 'Goal' : 'No Goal');
                     } else if (m.key.includes('totals') && o.point !== undefined) {
                         if (!name.includes(o.point.toString())) {
                             name = `${o.name} ${o.point}`;
@@ -337,7 +336,7 @@ window.setteMezzo = {
         const amountInput = document.getElementById('sm-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
+        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/sette-mezzo/deal', {
@@ -483,7 +482,7 @@ window.blackjack = {
         const amountInput = document.getElementById('bj-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
+        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/blackjack/deal', {
@@ -885,73 +884,19 @@ window.admin = {
             if (virtualEdgeEl) virtualEdgeEl.value = settings.virtual_house_edge || '15';
             if (apiKeyEl) apiKeyEl.value = settings.apikey || '';
             if (sourceEl) sourceEl.value = settings.odds_source || 'manual';
-
-            const isAuto = settings.virtual_pay_mode === 'auto';
-            if (!document.getElementById('vpt-box')) {
-                var saveBtn = null;
-                var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    if (btns[i].textContent.trim() === 'Salva Impostazioni') { saveBtn = btns[i]; break; }
-                }
-                if (saveBtn) {
-                    var box = document.createElement('div');
-                    box.id = 'vpt-box';
-                    box.style.cssText = 'margin-bottom:1.2rem;padding:1.2rem;background:rgba(255,255,255,0.05);border-radius:12px;border:1px solid rgba(255,255,255,0.1);';
-                    var inner = document.createElement('div');
-                    inner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;';
-                    inner.innerHTML = '<div><div style="font-weight:bold;">🤖 Pagamento Scommesse Virtuali</div><div style="color:#888;font-size:0.8rem;margin-top:4px;"><b>Automatico</b>: paga a fine giornata | <b>Manuale</b>: decidi tu</div></div>';
-                    var right = document.createElement('div');
-                    right.style.cssText = 'display:flex;align-items:center;gap:10px;';
-                    var lbl = document.createElement('span');
-                    lbl.id = 'vpt-label';
-                    lbl.style.cssText = 'font-weight:bold;color:#888;min-width:90px;text-align:right;';
-                    lbl.textContent = 'Manuale';
-                    var track = document.createElement('div');
-                    track.id = 'vpt-track';
-                    track.style.cssText = 'width:54px;height:28px;border-radius:14px;background:#555;position:relative;cursor:pointer;transition:background 0.2s;';
-                    var knob = document.createElement('div');
-                    knob.id = 'vpt-knob';
-                    knob.style.cssText = 'width:22px;height:22px;background:white;border-radius:50%;position:absolute;top:3px;left:3px;transition:left 0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.5);pointer-events:none;';
-                    track.appendChild(knob);
-                    right.appendChild(lbl);
-                    right.appendChild(track);
-                    inner.appendChild(right);
-                    box.appendChild(inner);
-                    saveBtn.parentNode.insertBefore(box, saveBtn);
-                    track.addEventListener('click', function() {
-                        window._vptState = !window._vptState;
-                        admin._applyToggle(window._vptState);
-                    });
-                }
-            }
-            window._vptState = isAuto;
-            admin._applyToggle(isAuto);
         }
     },
-
-    _applyToggle(isAuto) {
-        var track = document.getElementById('vpt-track');
-        var knob  = document.getElementById('vpt-knob');
-        var label = document.getElementById('vpt-label');
-        if (!track) return;
-        track.style.background = isAuto ? '#22c55e' : '#555';
-        knob.style.left = isAuto ? '29px' : '3px';
-        label.textContent = isAuto ? 'Automatico' : 'Manuale';
-        label.style.color = isAuto ? '#22c55e' : '#888';
-    },
-
     async saveSettings() {
         const overround = document.getElementById('setting-overround').value;
         const crash_house_edge = document.getElementById('setting-crash-house-edge').value;
         const virtual_house_edge = document.getElementById('setting-virtual-house-edge').value;
         const apikey = document.getElementById('setting-apikey').value;
         const odds_source = document.getElementById('setting-source').value;
-        const virtual_pay_mode = window._vptState ? 'auto' : 'manual';
         await api.request('/settings', {
             method: 'POST',
-            body: JSON.stringify({ overround, crash_house_edge, virtual_house_edge, apikey, odds_source, virtual_pay_mode })
+            body: JSON.stringify({ overround, crash_house_edge, virtual_house_edge, apikey, odds_source })
         });
-        state.settings = null;
+        state.settings = null; // Forza il refresh al prossimo render
         dashboard.fetchOdds();
         alert('Impostazioni salvate!');
     },
@@ -1004,24 +949,17 @@ window.admin = {
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
                          <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(function(s) {
-                        var isVirt = s.event_id && String(s.event_id).indexOf('v_') === 0;
-                        var selSt = s.status || 'pending';
-                        var selCol = selSt === 'won' ? '#22c55e' : (selSt === 'lost' ? '#ef4444' : 'rgba(255,255,255,0.85)');
-                        var badge = '';
-                        if (isVirt) {
-                            badge = s.match_result
-                                ? '<span style="margin-left:8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);padding:2px 10px;border-radius:5px;font-weight:bold;">' + s.match_result + '</span>'
-                                : '<span style="margin-left:8px;opacity:0.4;font-size:0.75rem;">⏳ in corso</span>';
-                        }
-                        return '<div style="font-size:0.85rem;margin-bottom:5px;color:' + selCol + ';">• ' + s.home_team + ' vs ' + s.away_team + ': <b>' + s.selection + '</b> @' + s.odds.toFixed(2) + badge + '</div>';
-                    }).join('')}
+                    ${b.selections.map(s => `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
+                        </div>
+                    `).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
                             <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;">P</button>
                             <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;">A</button>
-                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : b.status === 'cancelled' ? 'RIMBORSATA 🔄' : b.status.toUpperCase()}</span>`}
+                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status}</span>`}
                     </div>
                 </div>
             `).join('');
@@ -1437,7 +1375,7 @@ window.crash = {
         const amountInput = document.getElementById('crash-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const amount = parseFloat(rawVal);
-        if (isNaN(amount) || amount < 1.00) return alert("Scommessa minima €1.00");
+        if (isNaN(amount) || amount < 0.20) return alert("Scommessa minima €0.20");
         if (amount > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/crash/bet', {
