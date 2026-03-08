@@ -140,26 +140,30 @@ def finalize_matchday(season_id, matchday):
             cursor.execute("UPDATE virtual_matches SET status = 'finished' WHERE id = %s" if psql else "UPDATE virtual_matches SET status = 'finished' WHERE id = ?", (mid,))
         
         conn.commit()
-        resolve_virtual_bets(conn, season_id, matchday)
     except Exception as e:
         print(f"[Finalize Error] {traceback.format_exc()}")
     finally:
         conn.close()
-
-def resolve_virtual_bets(conn, season_id, matchday):
-    cursor = conn.cursor(); psql = check_is_psql(conn)
-
-    # Controlla modalità pagamento: se 'manual', non fare nulla
+    # Risolve le scommesse con connessione separata (evita lock PostgreSQL)
     try:
-        cursor.execute("SELECT value FROM settings WHERE key = 'virtual_pay_mode'")
+        resolve_virtual_bets(season_id, matchday)
+    except Exception as e:
+        print(f"[Finalize] resolve_virtual_bets error: {e}")
+
+def resolve_virtual_bets(season_id, matchday):
+    conn = get_db()
+    cursor = conn.cursor(); psql = check_is_psql(conn)
+    try:
+        cursor.execute("SELECT value FROM settings WHERE key = %s" if psql else "SELECT value FROM settings WHERE key = ?", ("virtual_pay_mode",))
         row = cursor.fetchone()
         pay_mode = (row[0] if psql else row["value"]) if row else "auto"
-    except:
+    except Exception as e:
+        print(f"[VirtualResolve] Errore lettura setting: {e}")
         pay_mode = "auto"
     if pay_mode == "manual":
-        print("[VirtualResolve] Modalità manuale: pagamento automatico disabilitato.")
+        print("[VirtualResolve] Modalità MANUALE — pagamento automatico disabilitato.")
+        conn.close()
         return
-
     cursor.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
     adm_row = cursor.fetchone()
     admin_id = adm_row[0] if adm_row else 1
@@ -233,6 +237,7 @@ def resolve_virtual_bets(conn, season_id, matchday):
             print(f"[Virtual Payout] Paid {win}eur to user {uid} for bet #{bid}")
             
     conn.commit()
+    conn.close()
 
 def generate_fixtures(season_id, conn):
     cursor = conn.cursor(); psql = check_is_psql(conn)
