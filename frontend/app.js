@@ -886,56 +886,39 @@ window.admin = {
             if (apiKeyEl) apiKeyEl.value = settings.apikey || '';
             if (sourceEl) sourceEl.value = settings.odds_source || 'manual';
 
-            // Inserisce il toggle se non esiste ancora
-            admin._injectVirtualPayToggle(settings.virtual_pay_mode === 'auto');
+            // Crea il toggle se non esiste, altrimenti aggiorna
+            const isAuto = settings.virtual_pay_mode === 'auto';
+            if (!document.getElementById('vpt-box')) {
+                const saveBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Salva Impostazioni');
+                if (saveBtn) {
+                    const box = document.createElement('div');
+                    box.id = 'vpt-box';
+                    box.style.cssText = 'margin-bottom:1.2rem;padding:1.2rem;background:rgba(255,255,255,0.05);border-radius:12px;border:1px solid rgba(255,255,255,0.1);';
+                    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">'
+                        + '<div><div style="font-weight:bold;">🤖 Pagamento Scommesse Virtuali</div>'
+                        + '<div style="color:#888;font-size:0.8rem;margin-top:4px;"><b>Automatico</b>: paga a fine giornata &nbsp;|&nbsp; <b>Manuale</b>: decidi tu</div></div>'
+                        + '<div style="display:flex;align-items:center;gap:10px;">'
+                        + '<span id="vpt-label" style="font-weight:bold;color:#888;min-width:90px;text-align:right;">Manuale</span>'
+                        + '<div id="vpt-track" style="width:54px;height:28px;border-radius:14px;background:#555;position:relative;cursor:pointer;">'
+                        + '<div id="vpt-knob" style="width:22px;height:22px;background:white;border-radius:50%;position:absolute;top:3px;left:3px;transition:left 0.2s;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>'
+                        + '</div></div></div>';
+                    saveBtn.parentNode.insertBefore(box, saveBtn);
+                    document.getElementById('vpt-track').addEventListener('click', function() {
+                        window._vptState = !window._vptState;
+                        admin._applyToggle(window._vptState);
+                    });
+                }
+            }
+            window._vptState = isAuto;
+            admin._applyToggle(isAuto);
         }
     },
 
-    _injectVirtualPayToggle(isAuto) {
-        // Se il toggle esiste già, aggiorna solo lo stato
-        if (document.getElementById('vpt-checkbox')) {
-            document.getElementById('vpt-checkbox').checked = isAuto;
-            admin._updateToggleUI(isAuto);
-            return;
-        }
-        // Cerca il bottone "Salva Impostazioni" e inserisce il toggle prima di esso
-        const saveBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Salva Impostazioni'));
-        if (!saveBtn) return;
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = \`
-            <div id="vpt-box" style="margin-bottom:1.2rem; padding:1.2rem; background:rgba(255,255,255,0.04); border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
-                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-                    <div>
-                        <div style="font-weight:bold; font-size:0.95rem;">🤖 Pagamento Scommesse Virtuali</div>
-                        <div style="color:#888; font-size:0.8rem; margin-top:4px;">
-                            <b>Automatico:</b> paga/perde a fine giornata &nbsp;|&nbsp; <b>Manuale:</b> decidi tu dall'admin utente
-                        </div>
-                    </div>
-                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-                        <span id="vpt-label" style="font-size:0.9rem; font-weight:bold; color:#888; min-width:90px; text-align:right;">Manuale</span>
-                        <span style="position:relative; display:inline-block; width:54px; height:28px; flex-shrink:0;">
-                            <input type="checkbox" id="vpt-checkbox" style="position:absolute; opacity:0; width:54px; height:28px; margin:0; cursor:pointer; z-index:10;">
-                            <span id="vpt-track" style="position:absolute; top:0; left:0; right:0; bottom:0; background:#555; border-radius:14px; pointer-events:none; transition:background 0.2s;"></span>
-                            <span id="vpt-knob" style="position:absolute; top:3px; left:3px; width:22px; height:22px; background:white; border-radius:50%; pointer-events:none; transition:left 0.2s; box-shadow:0 1px 4px rgba(0,0,0,0.5);"></span>
-                        </span>
-                    </label>
-                </div>
-            </div>
-        \`;
-        saveBtn.parentNode.insertBefore(wrapper.firstElementChild, saveBtn);
-        document.getElementById('vpt-checkbox').addEventListener('change', function() {
-            admin._updateToggleUI(this.checked);
-        });
-        admin._updateToggleUI(isAuto);
-    },
-
-    _updateToggleUI(isAuto) {
-        const cb = document.getElementById('vpt-checkbox');
+    _applyToggle(isAuto) {
         const track = document.getElementById('vpt-track');
-        const knob = document.getElementById('vpt-knob');
+        const knob  = document.getElementById('vpt-knob');
         const label = document.getElementById('vpt-label');
         if (!track) return;
-        if (cb) cb.checked = isAuto;
         track.style.background = isAuto ? '#22c55e' : '#555';
         knob.style.left = isAuto ? '29px' : '3px';
         label.textContent = isAuto ? 'Automatico' : 'Manuale';
@@ -948,8 +931,7 @@ window.admin = {
         const virtual_house_edge = document.getElementById('setting-virtual-house-edge').value;
         const apikey = document.getElementById('setting-apikey').value;
         const odds_source = document.getElementById('setting-source').value;
-        const cb = document.getElementById('vpt-checkbox');
-        const virtual_pay_mode = (cb && cb.checked) ? 'auto' : 'manual';
+        const virtual_pay_mode = window._vptState ? 'auto' : 'manual';
         await api.request('/settings', {
             method: 'POST',
             body: JSON.stringify({ overround, crash_house_edge, virtual_house_edge, apikey, odds_source, virtual_pay_mode })
@@ -1013,19 +995,15 @@ window.admin = {
                         const selCol = selSt === 'won' ? '#22c55e' : selSt === 'lost' ? 'var(--danger)' : 'rgba(255,255,255,0.85)';
                         const resBadge = isVirt
                             ? (s.match_result
-                                ? `<span style="margin-left:8px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); padding:2px 10px; border-radius:5px; font-weight:bold; font-size:0.88rem; letter-spacing:1px;">${s.match_result}</span>`
-                                : `<span style="margin-left:8px; opacity:0.4; font-size:0.75rem;">⏳ in corso</span>`)
+                                ? '<span style="margin-left:8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);padding:2px 10px;border-radius:5px;font-weight:bold;font-size:0.88rem;letter-spacing:1px;">' + s.match_result + '</span>'
+                                : '<span style="margin-left:8px;opacity:0.4;font-size:0.75rem;">⏳ in corso</span>')
                             : '';
-                        return `<div style="font-size:0.85rem; margin-bottom:5px; display:flex; align-items:center; flex-wrap:wrap; gap:2px; color:${selCol};">
-                            • ${s.home_team} vs ${s.away_team}: <b style="margin:0 4px;">${s.selection}</b> @${s.odds.toFixed(2)}${resBadge}
-                        </div>`;
+                        return '<div style="font-size:0.85rem;margin-bottom:5px;display:flex;align-items:center;flex-wrap:wrap;gap:2px;color:' + selCol + ';">• ' + s.home_team + ' vs ' + s.away_team + ': <b style="margin:0 4px;">' + s.selection + '</b> @' + s.odds.toFixed(2) + resBadge + '</div>';
                     }).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                         ${b.status !== 'pending'
-                            ? `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : b.status === 'cancelled' ? 'RIMBORSATA 🔄' : b.status.toUpperCase()}</span>`
-                            : `<button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
-                               <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;">P</button>
-                               <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;">A</button>`
+                            ? '<span style="text-transform:uppercase;font-weight:bold;">' + (b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : b.status === 'cancelled' ? 'RIMBORSATA 🔄' : b.status.toUpperCase()) + '</span>'
+                            : '<button onclick="admin.forceUserBet(' + b.id + ', 'won')" style="background:var(--success);width:auto;padding:5px 10px;">V</button><button onclick="admin.forceUserBet(' + b.id + ', 'lost')" style="background:var(--danger);width:auto;padding:5px 10px;">P</button><button onclick="admin.forceUserBet(' + b.id + ', 'cancelled')" style="background:var(--text-secondary);width:auto;padding:5px 10px;">A</button>'
                         }
                     </div>
                 </div>
