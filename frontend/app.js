@@ -888,29 +888,24 @@ window.admin = {
             if (sourceEl) sourceEl.value = settings.odds_source || 'manual';
         }
     },
-    _virtualPayAuto: false,
-
     _setVirtualToggleUI(isAuto) {
-        this._virtualPayAuto = isAuto;
-        const toggle = document.getElementById('virtual-pay-toggle');
-        const knob   = document.getElementById('virtual-pay-knob');
-        const label  = document.getElementById('virtual-pay-mode-label');
-        if (!toggle) return;
+        const cb    = document.getElementById('virtual-pay-checkbox');
+        const knob  = document.getElementById('virtual-pay-knob');
+        const slider = document.getElementById('virtual-pay-slider');
+        const label = document.getElementById('virtual-pay-mode-label');
+        if (!cb) return;
+        cb.checked = isAuto;
         if (isAuto) {
-            toggle.style.background = '#22c55e';
+            slider.style.background = '#22c55e';
             knob.style.left = '29px';
             label.textContent = 'Automatico';
             label.style.color = '#22c55e';
         } else {
-            toggle.style.background = '#555';
+            slider.style.background = '#555';
             knob.style.left = '3px';
             label.textContent = 'Manuale';
             label.style.color = '#888';
         }
-    },
-
-    toggleVirtualPayMode() {
-        this._setVirtualToggleUI(!this._virtualPayAuto);
     },
 
     async saveSettings() {
@@ -919,7 +914,8 @@ window.admin = {
         const virtual_house_edge = document.getElementById('setting-virtual-house-edge').value;
         const apikey = document.getElementById('setting-apikey').value;
         const odds_source = document.getElementById('setting-source').value;
-        const virtual_pay_mode = this._virtualPayAuto ? 'auto' : 'manual';
+        const cb = document.getElementById('virtual-pay-checkbox');
+        const virtual_pay_mode = (cb && cb.checked) ? 'auto' : 'manual';
         await api.request('/settings', {
             method: 'POST',
             body: JSON.stringify({ overround, crash_house_edge, virtual_house_edge, apikey, odds_source, virtual_pay_mode })
@@ -1832,7 +1828,7 @@ window.onload = () => {
 };
 
 
-// Toggle globale per il pagamento virtuale (usato dall'HTML inline)
-window._toggleVirtualPay = function() {
-    if (window.admin) window.admin.toggleVirtualPayMode();
+// Callback globale per il toggle pagamento virtuale
+window._onVirtualPayChange = function(isChecked) {
+    if (window.admin) window.admin._setVirtualToggleUI(isChecked);
 };
