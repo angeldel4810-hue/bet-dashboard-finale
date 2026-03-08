@@ -902,10 +902,10 @@ window.admin = {
             label.textContent = 'Automatico';
             label.style.color = '#22c55e';
         } else {
-            toggle.style.background = 'var(--text-secondary)';
+            toggle.style.background = '#555';
             knob.style.left = '3px';
             label.textContent = 'Manuale';
-            label.style.color = 'var(--text-secondary)';
+            label.style.color = '#888';
         }
     },
 
@@ -993,9 +993,9 @@ window.admin = {
                     <div style="margin-top:0.8rem; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                         ${b.status !== 'pending'
                             ? `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : b.status === 'cancelled' ? 'RIMBORSATA 🔄' : b.status.toUpperCase()}</span>`
-                            : `<button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;" title="Vincente">V</button>
-                               <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;" title="Perdente">P</button>
-                               <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;" title="Rimborsa">A</button>`
+                            : `<button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
+                               <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;">P</button>
+                               <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;">A</button>`
                         }
                     </div>
                 </div>
@@ -1829,4 +1829,10 @@ window.onload = () => {
         dashboard.init();
         router.navigate('odds');
     }
+};
+
+
+// Toggle globale per il pagamento virtuale (usato dall'HTML inline)
+window._toggleVirtualPay = function() {
+    if (window.admin) window.admin.toggleVirtualPayMode();
 };
