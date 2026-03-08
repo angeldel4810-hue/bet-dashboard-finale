@@ -231,7 +231,8 @@ window.ui = {
                 const outcomesHtml = m.outcomes.map(o => {
                     let name = o.name;
                     if (m.key === 'btts') {
-                        name = (name === 'Yes' ? 'Goal' : 'No Goal');
+                        if (name === 'Yes' || name === 'Goal') name = 'Goal';
+                        else name = 'No Goal';
                     } else if (m.key.includes('totals') && o.point !== undefined) {
                         if (!name.includes(o.point.toString())) {
                             name = `${o.name} ${o.point}`;
@@ -883,8 +884,6 @@ window.admin = {
             if (houseEdgeEl) houseEdgeEl.value = settings.crash_house_edge || '3';
             if (virtualEdgeEl) virtualEdgeEl.value = settings.virtual_house_edge || '15';
             admin._setVirtualToggleUI(settings.virtual_pay_mode === 'auto');
-            // Toggle pagamento virtuale
-            admin._setVirtualToggleUI(settings.virtual_pay_mode === 'auto');
             if (apiKeyEl) apiKeyEl.value = settings.apikey || '';
             if (sourceEl) sourceEl.value = settings.odds_source || 'manual';
         }
@@ -898,10 +897,10 @@ window.admin = {
         const label  = document.getElementById('virtual-pay-mode-label');
         if (!toggle) return;
         if (isAuto) {
-            toggle.style.background = 'var(--success)';
-            knob.style.left = '27px';
+            toggle.style.background = '#22c55e';
+            knob.style.left = '29px';
             label.textContent = 'Automatico';
-            label.style.color = 'var(--success)';
+            label.style.color = '#22c55e';
         } else {
             toggle.style.background = 'var(--text-secondary)';
             knob.style.left = '3px';
@@ -918,14 +917,14 @@ window.admin = {
         const overround = document.getElementById('setting-overround').value;
         const crash_house_edge = document.getElementById('setting-crash-house-edge').value;
         const virtual_house_edge = document.getElementById('setting-virtual-house-edge').value;
-        const virtual_pay_mode = admin._virtualPayAuto ? 'auto' : 'manual';
         const apikey = document.getElementById('setting-apikey').value;
         const odds_source = document.getElementById('setting-source').value;
+        const virtual_pay_mode = this._virtualPayAuto ? 'auto' : 'manual';
         await api.request('/settings', {
             method: 'POST',
             body: JSON.stringify({ overround, crash_house_edge, virtual_house_edge, apikey, odds_source, virtual_pay_mode })
         });
-        state.settings = null; // Forza il refresh al prossimo render
+        state.settings = null;
         dashboard.fetchOdds();
         alert('Impostazioni salvate!');
     },
@@ -978,17 +977,26 @@ window.admin = {
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
                          <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => `
-                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
-                        </div>
-                    `).join('')}
-                    <div style="margin-top:0.8rem; display:flex; gap:10px;">
-                        ${b.status === 'pending' ? `
-                            <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
-                            <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;">P</button>
-                            <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;">A</button>
-                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status}</span>`}
+                    ${b.selections.map(s => {
+                        const isVirt = s.event_id && String(s.event_id).startsWith('v_');
+                        const selSt  = s.status || 'pending';
+                        const selCol = selSt === 'won' ? '#22c55e' : selSt === 'lost' ? 'var(--danger)' : 'rgba(255,255,255,0.85)';
+                        const resBadge = isVirt
+                            ? (s.match_result
+                                ? `<span style="margin-left:8px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); padding:2px 10px; border-radius:5px; font-weight:bold; font-size:0.88rem; letter-spacing:1px;">${s.match_result}</span>`
+                                : `<span style="margin-left:8px; opacity:0.4; font-size:0.75rem;">⏳ in corso</span>`)
+                            : '';
+                        return `<div style="font-size:0.85rem; margin-bottom:5px; display:flex; align-items:center; flex-wrap:wrap; gap:2px; color:${selCol};">
+                            • ${s.home_team} vs ${s.away_team}: <b style="margin:0 4px;">${s.selection}</b> @${s.odds.toFixed(2)}${resBadge}
+                        </div>`;
+                    }).join('')}
+                    <div style="margin-top:0.8rem; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        ${b.status !== 'pending'
+                            ? `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : b.status === 'lost' ? 'PERSA ❌' : b.status === 'cancelled' ? 'RIMBORSATA 🔄' : b.status.toUpperCase()}</span>`
+                            : `<button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;" title="Vincente">V</button>
+                               <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;" title="Perdente">P</button>
+                               <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;" title="Rimborsa">A</button>`
+                        }
                     </div>
                 </div>
             `).join('');
