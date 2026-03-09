@@ -336,7 +336,7 @@ window.setteMezzo = {
         const amountInput = document.getElementById('sm-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/sette-mezzo/deal', {
@@ -482,7 +482,7 @@ window.blackjack = {
         const amountInput = document.getElementById('bj-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/blackjack/deal', {
@@ -1262,12 +1262,25 @@ window.bets = {
                         <span style="color:var(--text-secondary)">ID: #${bet.id} | ${dateStr}</span>
                         <span style="font-weight:bold; color:${bet.status === 'won' ? 'var(--success)' : bet.status === 'lost' ? 'var(--danger)' : 'var(--accent)'}">${bet.status.toUpperCase()}</span>
                     </div>
-                    ${(bet.selections || []).map(s => `
-                        <div style="margin-bottom:8px; font-size:0.9rem;">
-                            <b>${s.selection || '---'}</b> <span style="color:var(--text-secondary)">@${(s.odds || 0).toFixed(2)}</span><br>
-                            ${s.home_team || '---'} vs ${s.away_team || '---'} (${s.market || '---'})
-                        </div>
-                    `).join('')}
+                    ${(bet.selections || []).map(s => {
+                        const isVirtual = String(s.event_id || '').startsWith('v_');
+                        let badge = '';
+                        if (isVirtual) {
+                            if (s.status === 'won') badge = '<span style="background:var(--success);color:#fff;padding:2px 7px;border-radius:4px;font-size:0.75rem;font-weight:bold;margin-left:6px;">✓ VINTA</span>';
+                            else if (s.status === 'lost') badge = '<span style="background:var(--danger);color:#fff;padding:2px 7px;border-radius:4px;font-size:0.75rem;font-weight:bold;margin-left:6px;">✗ PERSA</span>';
+                            else badge = '<span style="background:var(--accent);color:#fff;padding:2px 7px;border-radius:4px;font-size:0.75rem;font-weight:bold;margin-left:6px;">⏳</span>';
+                        }
+                        const borderColor = s.status === 'won' ? 'var(--success)' : s.status === 'lost' ? 'var(--danger)' : 'var(--accent)';
+                        return '<div style="margin-bottom:8px;font-size:0.9rem;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:6px;border-left:3px solid ' + borderColor + '">' +
+                            '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' +
+                            '<b>' + (s.selection || '---') + '</b>' +
+                            '<span style="color:var(--text-secondary)">@' + (s.odds || 0).toFixed(2) + '</span>' +
+                            badge +
+                            '</div>' +
+                            '<div style="color:var(--text-secondary);font-size:0.8rem;margin-top:2px;">' +
+                            (s.home_team || '---') + ' vs ' + (s.away_team || '---') + ' (' + (s.market || '---') + ')' +
+                            '</div></div>';
+                    }).join('')}
                     <div style="margin-top:1rem; display:flex; justify-content:space-between; font-weight:bold;">
                         <span>Importo: €${(bet.amount || 0).toFixed(2)}</span>
                         <span>Potential Win: €${(bet.potential_win || 0).toFixed(2)}</span>
@@ -1375,7 +1388,7 @@ window.crash = {
         const amountInput = document.getElementById('crash-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const amount = parseFloat(rawVal);
-        if (isNaN(amount) || amount < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(amount) || amount < 1.00) return alert("Scommessa minima €1.00");
         if (amount > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/crash/bet', {
