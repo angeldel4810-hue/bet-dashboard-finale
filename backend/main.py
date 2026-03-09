@@ -51,16 +51,16 @@ async def startup_event():
 async def login(username: str = Body(...), password: str = Body(...)):
     conn = get_db()
     cursor = conn.cursor()
-    
-    # Check if we are in PostgreSQL or SQLite
     is_postgres = hasattr(conn, 'get_dsn_parameters')
-    query = "SELECT * FROM users WHERE username = %s" if is_postgres else "SELECT * FROM users WHERE username = ?"
-    cursor.execute(query, (username,))
     
+    # Usa SELECT esplicito per evitare problemi con ordine colonne
+    query = "SELECT id, username, password_hash, role, balance, status FROM users WHERE username = %s" if is_postgres else "SELECT id, username, password_hash, role, balance, status FROM users WHERE username = ?"
+    cursor.execute(query, (username,))
     user_row = cursor.fetchone()
+    
     if not user_row:
         conn.close()
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
 
     if is_postgres:
         user = {
@@ -68,21 +68,60 @@ async def login(username: str = Body(...), password: str = Body(...)):
             'username': user_row[1],
             'password_hash': user_row[2],
             'role': user_row[3],
+            'balance': user_row[4],
             'status': user_row[5]
         }
     else:
         user = dict(user_row)
-        
+    
     conn.close()
     
-    if not user or not verify_password(password, user['password_hash']):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not verify_password(password, user['password_hash']):
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
         
     if user['status'] == 'blocked':
         raise HTTPException(status_code=403, detail="Account bloccato. Contatta l'amministratore.")
     
     access_token = create_access_token(data={"sub": user['username'], "role": user['role'], "id": user['id']})
     return {"access_token": access_token, "token_type": "bearer", "role": user['role']}
+
+
+@app.post("/api/admin/reset-admin-password")
+async def reset_admin_password(data: dict = Body(...)):
+    """Endpoint di emergenza per resettare password admin (protetto da secret)"""
+    secret = data.get("secret", "")
+    new_password = data.get("password", "admin123")
+    if secret != "simusbet_reset_2024":
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    new_hash = get_password_hash(new_password)
+    
+    if is_postgres:
+        cursor.execute("SELECT id FROM users WHERE username = 'admin'")
+        exists = cursor.fetchone()
+        if exists:
+            cursor.execute("UPDATE users SET password_hash = %s WHERE username = 'admin'", (new_hash,))
+        else:
+            cursor.execute(
+                "INSERT INTO users (username, password_hash, role, balance, status) VALUES ('admin', %s, 'admin', 1000.0, 'active')",
+                (new_hash,)
+            )
+    else:
+        cursor.execute("SELECT id FROM users WHERE username = 'admin'")
+        exists = cursor.fetchone()
+        if exists:
+            cursor.execute("UPDATE users SET password_hash = ? WHERE username = 'admin'", (new_hash,))
+        else:
+            cursor.execute(
+                "INSERT INTO users (username, password_hash, role, balance, status) VALUES ('admin', ?, 'admin', 1000.0, 'active')",
+                (new_hash,)
+            )
+    conn.commit()
+    conn.close()
+    return {"message": f"Password admin resettata a '{new_password}'"}
 
 # Helper to fetch settings (used frequently)
 def fetch_all_settings(conn):

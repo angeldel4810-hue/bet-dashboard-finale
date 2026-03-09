@@ -176,13 +176,29 @@ def init_db():
                 "INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING",
                 (k, v)
             )
-        # Admin default - genera hash al momento senza import circolare
+        # Admin default - crea o aggiorna se hash non valido
         import bcrypt as _bcrypt
         admin_hash = _bcrypt.hashpw('admin123'.encode(), _bcrypt.gensalt()).decode()
-        cursor.execute(
-            "INSERT INTO users (username, password_hash, role, balance, status) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (username) DO NOTHING",
-            ('admin', admin_hash, 'admin', 1000.0, 'active')
-        )
+        cursor.execute("SELECT id FROM users WHERE username = 'admin'")
+        existing_admin = cursor.fetchone()
+        if existing_admin:
+            # Aggiorna sempre l hash per sicurezza ad ogni avvio se non valido
+            cursor.execute("SELECT password_hash FROM users WHERE username = 'admin'")
+            old_hash = cursor.fetchone()
+            old_hash_val = old_hash[0] if old_hash else None
+            try:
+                valid = _bcrypt.checkpw('admin123'.encode(), old_hash_val.encode()) if old_hash_val else False
+            except Exception:
+                valid = False
+            if not valid:
+                cursor.execute("UPDATE users SET password_hash = %s, role = 'admin', status = 'active' WHERE username = 'admin'", (admin_hash,))
+                print("[DB] Password admin aggiornata")
+        else:
+            cursor.execute(
+                "INSERT INTO users (username, password_hash, role, balance, status) VALUES (%s, %s, %s, %s, %s)",
+                ('admin', admin_hash, 'admin', 1000.0, 'active')
+            )
+            print("[DB] Utente admin creato")
     else:
         cursor.executescript("""
             CREATE TABLE IF NOT EXISTS users (
