@@ -107,8 +107,8 @@ def finalize_matchday(season_id, matchday):
         for m in matches:
             mid, h_id, a_id = (m[0], m[1], m[2]) if psql else (m["id"], m["home_team_id"], m["away_team_id"])
             h_g, a_g = (m[3], m[4]) if psql else (m["home_score"], m["away_score"])
-            h_p = (3, 0) if h_g > a_g else ((1, 1) if h_g == a_g else (0, 3))
-            h_p, a_p = h_p[0], h_p[1]
+            h_p = 3 if h_g > a_g else (1 if h_g == a_g else 0)
+            a_p = 0 if h_g > a_g else (1 if h_g == a_g else 3)
             h_w, h_d, h_l = (1,0,0) if h_p==3 else ((0,1,0) if h_p==1 else (0,0,1))
             a_w, a_d, a_l = (0,0,1) if h_p==3 else ((0,1,0) if h_p==1 else (1,0,0))
 
@@ -140,20 +140,18 @@ def finalize_matchday(season_id, matchday):
         conn.commit()
     except Exception as e:
         print(f"[Finalize Error] {traceback.format_exc()}")
-       resolve_virtual_bets(season_id, matchday)
+        try: conn.rollback()
         except: pass
     finally:
         conn.close()
 
-    # Connessione NUOVA separata - evita lock PostgreSQL
-   def resolve_virtual_bets(season_id, matchday):
-    conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
+    # Connessione NUOVA separata per evitare lock PostgreSQL
+    resolve_virtual_bets(season_id, matchday)
 
 
 def resolve_virtual_bets(season_id, matchday):
     conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
     try:
-        # Controlla modalita pagamento
         cursor.execute("SELECT value FROM settings WHERE key='virtual_pay_mode'")
         row = cursor.fetchone()
         pay_mode = (row[0] if psql else row["value"]) if row else 'auto'
@@ -222,8 +220,8 @@ def resolve_virtual_bets(season_id, matchday):
                 print(f"[Virtual Bets] #{bid} PERSA")
             elif all_resolved:
                 cursor.execute("SELECT balance FROM users WHERE id=%s" if psql else "SELECT balance FROM users WHERE id=?", (uid,))
-conn.commit()
-    conn.close()                nxt = prev + float(win)
+                prev = float(cursor.fetchone()[0])
+                nxt = prev + float(win)
                 cursor.execute("UPDATE users SET balance=%s WHERE id=%s" if psql else "UPDATE users SET balance=? WHERE id=?", (nxt,uid))
                 cursor.execute("UPDATE bets SET status='won' WHERE id=%s" if psql else "UPDATE bets SET status='won' WHERE id=?", (bid,))
                 cursor.execute(
