@@ -51,14 +51,10 @@ window.api = {
 
         try {
             const response = await fetch(`/api${path}`, { ...options, headers });
-            if (response.status === 401) {
-                auth.logout();
-                return null;
-            }
+            if (response.status === 401) { auth.logout(); return null; }
             const data = await response.json();
             if (!response.ok) {
-                const msg = data?.detail || data?.error || 'Errore del server';
-                alert(msg);
+                alert(data?.detail || data?.error || 'Errore del server');
                 return null;
             }
             return data;
@@ -334,18 +330,6 @@ const router = {
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
-        if (section === 'blackjack') {
-            // Reset stato se non c'è una partita in corso
-            if (!state.blackjack.game_id || !['playing'].includes(state.blackjack.status)) {
-                state.blackjack = { status: null, game_id: null };
-            }
-            if (window.blackjack) blackjack.updateUI();
-        }
-        if (section === 'sette-mezzo') {
-            if (!state.setteMezzo || !['playing'].includes(state.setteMezzo.status)) {
-                state.setteMezzo = { status: null, game_id: null };
-            }
-        }
         if (section === 'virtual') virtual.init();
     }
 };
@@ -968,21 +952,11 @@ window.admin = {
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
                          <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => {
-                        const isVirtual = String(s.event_id || '').startsWith('v_');
-                        let statusBadge = '';
-                        let resultBadge = '';
-                        if (isVirtual) {
-                            if (s.status === 'won') statusBadge = '<span style="background:var(--success);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">✓ VINTA</span>';
-                            else if (s.status === 'lost') statusBadge = '<span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">✗ PERSA</span>';
-                            else statusBadge = '<span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">⏳</span>';
-                            if (s.result) resultBadge = '<span style="background:#222;color:#ffd700;padding:2px 8px;border-radius:3px;font-size:0.8rem;font-weight:bold;margin-left:6px;border:1px solid #ffd70055;">⚽ ' + s.result + '</span>';
-                        }
-                        return '<div style="font-size:0.85rem;margin-bottom:5px;padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:5px;display:flex;align-items:center;flex-wrap:wrap;gap:3px;">' +
-                            '• <b>' + (s.home_team||'') + ' vs ' + (s.away_team||'') + '</b>' +
-                            '&nbsp;→ <b>' + (s.selection||'') + '</b> @' + (s.odds||0).toFixed(2) +
-                            resultBadge + statusBadge + '</div>';
-                    }).join('')}
+                    ${b.selections.map(s => `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
+                        </div>
+                    `).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
@@ -999,30 +973,20 @@ window.admin = {
         if (detail.transactions.length === 0) {
             txContainer.innerHTML = '<p>Nessuna transazione.</p>';
         } else {
-            txContainer.innerHTML = detail.transactions.map(t => {
-                const reason = t.reason || '';
-                let icon = '💰'; let categoryLabel = 'Ricarica/Admin';
-                if (reason.includes('Crash')) { icon = '🚀'; categoryLabel = 'Casino - Crash'; }
-                else if (reason.includes('Blackjack')) { icon = '🃏'; categoryLabel = 'Casino - Blackjack'; }
-                else if (reason.includes('Sette')) { icon = '🎴'; categoryLabel = 'Casino - Sette e Mezzo'; }
-                else if (reason.includes('Virtuale') || reason.includes('Virtual')) { icon = '⚽'; categoryLabel = 'Calcio Virtuale'; }
-                else if (t.type === 'admin_adjustment') { icon = '⚙️'; categoryLabel = 'Modifica Admin'; }
-                else if (t.type === 'debit') { icon = '📤'; }
-                const amtColor = t.amount >= 0 ? 'var(--success)' : 'var(--danger)';
-                const amtStr = (t.amount >= 0 ? '+' : '') + parseFloat(t.amount).toFixed(2);
-                const ts = t.timestamp ? new Date(t.timestamp).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-                return `<div style="border-bottom:1px solid var(--border-color);padding:8px 0;display:flex;justify-content:space-between;align-items:center;">
+            txContainer.innerHTML = detail.transactions.map(t => `
+                <div style="border-bottom: 1px solid var(--border-color); padding: 8px 0; display: flex; justify-content: space-between;">
                     <div>
-                        <div style="font-weight:bold;color:${amtColor};font-size:1rem;">${icon} ${amtStr}€</div>
-                        <div style="color:var(--accent);font-size:0.72rem;font-weight:600;">${categoryLabel}</div>
-                        <div style="color:var(--text-secondary);font-size:0.72rem;">${reason}</div>
+                        <div style="font-weight: bold; color: ${t.amount >= 0 ? 'var(--success)' : 'var(--danger)'}">
+                            ${t.amount >= 0 ? '+' : ''}${t.amount.toFixed(2)}
+                        </div>
+                        <div style="color: var(--text-secondary); font-size: 0.75rem;">${t.type} - ${t.reason || ''}</div>
                     </div>
-                    <div style="text-align:right;min-width:70px;">
-                        <div style="font-size:0.85rem;">€${parseFloat(t.balance_after).toFixed(2)}</div>
-                        <div style="color:var(--text-secondary);font-size:0.7rem;">${ts}</div>
+                    <div style="text-align: right;">
+                        <div>€${t.balance_after.toFixed(2)}</div>
+                        <div style="color: var(--text-secondary); font-size: 0.75rem;">${new Date(t.timestamp).toLocaleDateString()}</div>
                     </div>
-                </div>`;
-            }).join('');
+                </div>
+            `).join('');
         }
 
         document.getElementById('user-table-body').closest('div.admin-section').classList.add('hidden');
@@ -1119,21 +1083,11 @@ window.admin = {
                         <span style="font-weight:bold; color:var(--accent)">Giocata di: ${b.username}</span>
                         <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => {
-                        const isVirtual = String(s.event_id || '').startsWith('v_');
-                        let statusBadge = '';
-                        let resultBadge = '';
-                        if (isVirtual) {
-                            if (s.status === 'won') statusBadge = '<span style="background:var(--success);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">✓ VINTA</span>';
-                            else if (s.status === 'lost') statusBadge = '<span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">✗ PERSA</span>';
-                            else statusBadge = '<span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">⏳</span>';
-                            if (s.result) resultBadge = '<span style="background:#222;color:#ffd700;padding:2px 8px;border-radius:3px;font-size:0.8rem;font-weight:bold;margin-left:6px;border:1px solid #ffd70055;">⚽ ' + s.result + '</span>';
-                        }
-                        return '<div style="font-size:0.85rem;margin-bottom:5px;padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:5px;display:flex;align-items:center;flex-wrap:wrap;gap:3px;">' +
-                            '• <b>' + (s.home_team||'') + ' vs ' + (s.away_team||'') + '</b>' +
-                            '&nbsp;→ <b>' + (s.selection||'') + '</b> @' + (s.odds||0).toFixed(2) +
-                            resultBadge + statusBadge + '</div>';
-                    }).join('')}
+                    ${b.selections.map(s => `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
+                        </div>
+                    `).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
@@ -1395,15 +1349,14 @@ window.crash = {
                 btn.onclick = () => crash.placeBet();
                 amountInput.disabled = false;
             } else {
-                btn.innerText = 'SCOMMESSA PIAZZATA ✓';
+                btn.innerText = 'SCOMMESSA PIAZZATA';
                 btn.style.background = 'var(--text-secondary)';
                 btn.disabled = true;
-                amountInput.disabled = true;
             }
         } else if (state.crash.status === 'running') {
             if (state.crash.activeBet) {
                 const payout = (state.crash.activeBet.amount * state.crash.multiplier).toFixed(2);
-                btn.innerText = `💰 INCASSA €${payout}`;
+                btn.innerText = `INCASSA €${payout}`;
                 btn.style.background = 'var(--success)';
                 btn.disabled = false;
                 btn.onclick = () => crash.cashOut();
@@ -1414,12 +1367,11 @@ window.crash = {
             }
             amountInput.disabled = true;
         } else {
-            // Crashed o stato iniziale sconosciuto
-            btn.innerText = state.crash.status === 'crashed' ? 'CRASHATO 💥' : 'SCOMMETTI';
-            btn.style.background = state.crash.status === 'crashed' ? 'var(--danger)' : 'var(--accent)';
-            btn.disabled = state.crash.status === 'crashed';
-            btn.onclick = state.crash.status !== 'crashed' ? () => crash.placeBet() : null;
-            amountInput.disabled = state.crash.status === 'crashed';
+            // Crashed
+            btn.innerText = 'CRASHATO';
+            btn.style.background = 'var(--danger)';
+            btn.disabled = true;
+            amountInput.disabled = true;
         }
     },
     async placeBet() {
@@ -1815,13 +1767,13 @@ window.virtual = {
                 const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
 
                 return `
-                    <div style="display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:6px; background:rgba(255,255,255,0.03); padding:10px 8px; border-radius:8px; border:${border}; width:100%; box-sizing:border-box;">
-                        <span style="font-size:0.8rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left;">${hName}</span>
-                        <span style="background:#000; color:${scoreColor}; padding:4px 8px; border-radius:4px; font-weight:900; text-align:center; font-family:monospace; font-size:1rem; border:1px solid #333; white-space:nowrap; flex-shrink:0;">
-                            ${m.home_score || 0} - ${m.away_score || 0}
-                        </span>
-                        <span style="font-size:0.8rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right;">${aName}</span>
-                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
+                    <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${hName}</span>
+                    <span style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
+                        ${m.home_score || 0} - ${m.away_score || 0}
+                    </span>
+                    <span style="font-size: 0.85rem; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${aName}</span>
+                </div>
                     `;
             }).join('');
         } catch (e) {
