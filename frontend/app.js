@@ -20,7 +20,7 @@ const state = {
         dealer_hand: [],
         player_score: 0,
         dealer_score: 0,
-        status: 'betting', // betting, playing, win, loss, bust, push
+        status: null,
         bet: 0
     },
     sette_mezzo: {
@@ -55,9 +55,16 @@ window.api = {
                 auth.logout();
                 return null;
             }
-            return await response.json();
+            const data = await response.json();
+            if (!response.ok) {
+                const msg = data?.detail || data?.error || 'Errore del server';
+                alert(msg);
+                return null;
+            }
+            return data;
         } catch (e) {
             console.error('API Error:', e);
+            alert('Errore di connessione al server');
             return null;
         }
     }
@@ -327,6 +334,18 @@ const router = {
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
+        if (section === 'blackjack') {
+            // Reset stato se non c'è una partita in corso
+            if (!state.blackjack.game_id || !['playing'].includes(state.blackjack.status)) {
+                state.blackjack = { status: null, game_id: null };
+            }
+            if (window.blackjack) blackjack.updateUI();
+        }
+        if (section === 'sette-mezzo') {
+            if (!state.setteMezzo || !['playing'].includes(state.setteMezzo.status)) {
+                state.setteMezzo = { status: null, game_id: null };
+            }
+        }
         if (section === 'virtual') virtual.init();
     }
 };
@@ -1373,20 +1392,21 @@ window.crash = {
                 btn.innerText = 'SCOMMETTI';
                 btn.style.background = 'var(--accent)';
                 btn.disabled = false;
-                btn.onclick = () => this.placeBet();
+                btn.onclick = () => crash.placeBet();
                 amountInput.disabled = false;
             } else {
-                btn.innerText = 'SCOMMESSA PIAZZATA';
+                btn.innerText = 'SCOMMESSA PIAZZATA ✓';
                 btn.style.background = 'var(--text-secondary)';
                 btn.disabled = true;
+                amountInput.disabled = true;
             }
         } else if (state.crash.status === 'running') {
             if (state.crash.activeBet) {
                 const payout = (state.crash.activeBet.amount * state.crash.multiplier).toFixed(2);
-                btn.innerText = `INCASSA €${payout}`;
+                btn.innerText = `💰 INCASSA €${payout}`;
                 btn.style.background = 'var(--success)';
                 btn.disabled = false;
-                btn.onclick = () => this.cashOut();
+                btn.onclick = () => crash.cashOut();
             } else {
                 btn.innerText = 'IN CORSO...';
                 btn.style.background = 'var(--text-secondary)';
@@ -1394,11 +1414,12 @@ window.crash = {
             }
             amountInput.disabled = true;
         } else {
-            // Crashed
-            btn.innerText = 'CRASHATO';
-            btn.style.background = 'var(--danger)';
-            btn.disabled = true;
-            amountInput.disabled = true;
+            // Crashed o stato iniziale sconosciuto
+            btn.innerText = state.crash.status === 'crashed' ? 'CRASHATO 💥' : 'SCOMMETTI';
+            btn.style.background = state.crash.status === 'crashed' ? 'var(--danger)' : 'var(--accent)';
+            btn.disabled = state.crash.status === 'crashed';
+            btn.onclick = state.crash.status !== 'crashed' ? () => crash.placeBet() : null;
+            amountInput.disabled = state.crash.status === 'crashed';
         }
     },
     async placeBet() {
