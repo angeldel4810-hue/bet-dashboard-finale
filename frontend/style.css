@@ -547,29 +547,19 @@ table tr:hover td {
         display: none !important;
     }
 
-    /* Spazio sotto il contenuto per non essere coperto dalla nav fissa */
-    #main-dashboard {
-        padding-bottom: 70px;
-    }
-
     /* Barra di navigazione mobile in basso */
     .mobile-nav {
         display: flex !important;
         position: fixed;
         bottom: 0;
         left: 0;
-        right: 0;
         width: 100%;
         background: #161b22;
         border-top: 1px solid var(--border-color);
         padding: 10px 0;
-        padding-bottom: calc(10px + env(safe-area-inset-bottom));
         justify-content: space-around;
-        z-index: 99999;
+        z-index: 1000;
         backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        transform: translateZ(0);
-        -webkit-transform: translateZ(0);
     }
 
     .mobile-nav-item {
@@ -648,12 +638,6 @@ table tr:hover td {
 
 .mobile-nav {
     display: none;
-}
-
-/* Fix iOS: nessun overflow sul body che rompe il fixed */
-html, body {
-    overflow-x: hidden;
-    height: 100%;
 }
 
 /* Selected Odds Highlighting */
@@ -829,5 +813,14 @@ html, body {
 @media (max-width: 900px) {
     .virtual-layout {
         grid-template-columns: 1fr !important;
+    }
+}
+/* Fix mobile tabellone virtuale */
+@media (max-width: 500px) {
+    #virtual-live-matches {
+        grid-template-columns: 1fr !important;
+    }
+    #virtual-live-board {
+        padding: 1rem 0.6rem !important;
     }
 }

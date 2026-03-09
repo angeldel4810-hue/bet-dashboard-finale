@@ -949,11 +949,19 @@ window.admin = {
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
                          <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => `
-                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
-                        </div>
-                    `).join('')}
+                    ${b.selections.map(s => {
+                        const isVirtual = String(s.event_id || '').startsWith('v_');
+                        let resultHtml = '';
+                        if (isVirtual) {
+                            if (s.status === 'won') resultHtml = ' <span style="background:var(--success);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">✓ VINTA</span>';
+                            else if (s.status === 'lost') resultHtml = ' <span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">✗ PERSA</span>';
+                            else resultHtml = ' <span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">⏳</span>';
+                        }
+                        return '<div style="font-size:0.85rem;margin-bottom:5px;padding:5px 8px;background:rgba(0,0,0,0.2);border-radius:5px;">' +
+                            '• <b>' + (s.home_team||'') + ' vs ' + (s.away_team||'') + '</b>' +
+                            ' → <b>' + (s.selection||'') + '</b> @' + (s.odds||0).toFixed(2) +
+                            resultHtml + '</div>';
+                    }).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
@@ -1080,11 +1088,19 @@ window.admin = {
                         <span style="font-weight:bold; color:var(--accent)">Giocata di: ${b.username}</span>
                         <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => `
-                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
-                        </div>
-                    `).join('')}
+                    ${b.selections.map(s => {
+                        const isVirtual = String(s.event_id || '').startsWith('v_');
+                        let resultHtml = '';
+                        if (isVirtual) {
+                            if (s.status === 'won') resultHtml = ' <span style="background:var(--success);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">✓ VINTA</span>';
+                            else if (s.status === 'lost') resultHtml = ' <span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">✗ PERSA</span>';
+                            else resultHtml = ' <span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">⏳</span>';
+                        }
+                        return '<div style="font-size:0.85rem;margin-bottom:5px;padding:5px 8px;background:rgba(0,0,0,0.2);border-radius:5px;">' +
+                            '• <b>' + (s.home_team||'') + ' vs ' + (s.away_team||'') + '</b>' +
+                            ' → <b>' + (s.selection||'') + '</b> @' + (s.odds||0).toFixed(2) +
+                            resultHtml + '</div>';
+                    }).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
@@ -1262,25 +1278,12 @@ window.bets = {
                         <span style="color:var(--text-secondary)">ID: #${bet.id} | ${dateStr}</span>
                         <span style="font-weight:bold; color:${bet.status === 'won' ? 'var(--success)' : bet.status === 'lost' ? 'var(--danger)' : 'var(--accent)'}">${bet.status.toUpperCase()}</span>
                     </div>
-                    ${(bet.selections || []).map(s => {
-                        const isVirtual = String(s.event_id || '').startsWith('v_');
-                        let badge = '';
-                        if (isVirtual) {
-                            if (s.status === 'won') badge = '<span style="background:var(--success);color:#fff;padding:2px 7px;border-radius:4px;font-size:0.75rem;font-weight:bold;margin-left:6px;">✓ VINTA</span>';
-                            else if (s.status === 'lost') badge = '<span style="background:var(--danger);color:#fff;padding:2px 7px;border-radius:4px;font-size:0.75rem;font-weight:bold;margin-left:6px;">✗ PERSA</span>';
-                            else badge = '<span style="background:var(--accent);color:#fff;padding:2px 7px;border-radius:4px;font-size:0.75rem;font-weight:bold;margin-left:6px;">⏳</span>';
-                        }
-                        const borderColor = s.status === 'won' ? 'var(--success)' : s.status === 'lost' ? 'var(--danger)' : 'var(--accent)';
-                        return '<div style="margin-bottom:8px;font-size:0.9rem;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:6px;border-left:3px solid ' + borderColor + '">' +
-                            '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' +
-                            '<b>' + (s.selection || '---') + '</b>' +
-                            '<span style="color:var(--text-secondary)">@' + (s.odds || 0).toFixed(2) + '</span>' +
-                            badge +
-                            '</div>' +
-                            '<div style="color:var(--text-secondary);font-size:0.8rem;margin-top:2px;">' +
-                            (s.home_team || '---') + ' vs ' + (s.away_team || '---') + ' (' + (s.market || '---') + ')' +
-                            '</div></div>';
-                    }).join('')}
+                    ${(bet.selections || []).map(s => `
+                        <div style="margin-bottom:8px; font-size:0.9rem;">
+                            <b>${s.selection || '---'}</b> <span style="color:var(--text-secondary)">@${(s.odds || 0).toFixed(2)}</span><br>
+                            ${s.home_team || '---'} vs ${s.away_team || '---'} (${s.market || '---'})
+                        </div>
+                    `).join('')}
                     <div style="margin-top:1rem; display:flex; justify-content:space-between; font-weight:bold;">
                         <span>Importo: €${(bet.amount || 0).toFixed(2)}</span>
                         <span>Potential Win: €${(bet.potential_win || 0).toFixed(2)}</span>
@@ -1777,13 +1780,13 @@ window.virtual = {
                 const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
 
                 return `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
-                    <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${hName}</span>
-                    <span style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
-                        ${m.home_score || 0} - ${m.away_score || 0}
-                    </span>
-                    <span style="font-size: 0.85rem; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${aName}</span>
-                </div>
+                    <div style="display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:6px; background:rgba(255,255,255,0.03); padding:10px 8px; border-radius:8px; border:${border}; width:100%; box-sizing:border-box;">
+                        <span style="font-size:0.8rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left;">${hName}</span>
+                        <span style="background:#000; color:${scoreColor}; padding:4px 8px; border-radius:4px; font-weight:900; text-align:center; font-family:monospace; font-size:1rem; border:1px solid #333; white-space:nowrap; flex-shrink:0;">
+                            ${m.home_score || 0} - ${m.away_score || 0}
+                        </span>
+                        <span style="font-size:0.8rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right;">${aName}</span>
+                    </div>
                     `;
             }).join('');
         } catch (e) {
