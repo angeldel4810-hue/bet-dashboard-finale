@@ -140,13 +140,14 @@ def finalize_matchday(season_id, matchday):
         conn.commit()
     except Exception as e:
         print(f"[Finalize Error] {traceback.format_exc()}")
-        try: conn.rollback()
+       resolve_virtual_bets(season_id, matchday)
         except: pass
     finally:
         conn.close()
 
     # Connessione NUOVA separata - evita lock PostgreSQL
-    resolve_virtual_bets(season_id, matchday)
+   def resolve_virtual_bets(season_id, matchday):
+    conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
 
 
 def resolve_virtual_bets(season_id, matchday):
