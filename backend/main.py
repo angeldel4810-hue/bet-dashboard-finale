@@ -16,6 +16,14 @@ from backend.virtual_football import router as virtual_router, run_virtual_footb
 
 is_postgres = os.environ.get("DATABASE_URL") is not None
 
+def log_transaction(cursor, is_postgres, user_id, tx_type, amount, balance_before, balance_after, reason):
+    """Registra una transazione nel DB."""
+    q = """INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason)
+           VALUES (%s, %s, %s, %s, %s, NULL, %s)""" if is_postgres else         """INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason)
+           VALUES (?, ?, ?, ?, ?, NULL, ?)"""
+    cursor.execute(q, (user_id, tx_type, amount, balance_before, balance_after, reason))
+
+
 app = FastAPI(title="Simus Bet Dashboard API")
 
 # CORS middleware
@@ -326,10 +334,32 @@ async def get_user_detail(user_id: int):
             
             cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
             s_rows = cursor.fetchall()
-            if is_postgres:
-                bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
-            else:
-                bet['selections'] = [dict(sr) for sr in s_rows]
+            selections = []
+            for s in s_rows:
+                if is_postgres:
+                    sel = {"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": None, "result": None}
+                else:
+                    sel = dict(s)
+                    sel["result"] = None
+                # Se scommessa virtuale, recupera risultato partita
+                ev_id = sel.get("event_id", "")
+                if str(ev_id).startswith("v_"):
+                    try:
+                        match_id = int(str(ev_id)[2:])
+                        cursor.execute("SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?", (match_id,))
+                        mrow = cursor.fetchone()
+                        if mrow:
+                            hs = mrow[0] if is_postgres else mrow["home_score"]
+                            as_ = mrow[1] if is_postgres else mrow["away_score"]
+                            ms = mrow[2] if is_postgres else mrow["status"]
+                            if ms == "finished":
+                                sel["result"] = f"{hs}-{as_}"
+                            else:
+                                sel["result"] = ms
+                    except Exception:
+                        pass
+                selections.append(sel)
+            bet['selections'] = selections
             bets.append(bet)
         
         user_data['bets'] = bets
@@ -435,10 +465,28 @@ async def list_all_bets():
             
         cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
         s_rows = cursor.fetchall()
-        if is_postgres:
-            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
-        else:
-            bet['selections'] = [dict(sr) for sr in s_rows]
+        selections = []
+        for s in s_rows:
+            if is_postgres:
+                sel = {"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": None, "result": None}
+            else:
+                sel = dict(s)
+                sel["result"] = None
+            ev_id = sel.get("event_id", "")
+            if str(ev_id).startswith("v_"):
+                try:
+                    match_id = int(str(ev_id)[2:])
+                    cursor.execute("SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?", (match_id,))
+                    mrow = cursor.fetchone()
+                    if mrow:
+                        hs = mrow[0] if is_postgres else mrow["home_score"]
+                        as_ = mrow[1] if is_postgres else mrow["away_score"]
+                        ms = mrow[2] if is_postgres else mrow["status"]
+                        sel["result"] = f"{hs}-{as_}" if ms == "finished" else ms
+                except Exception:
+                    pass
+            selections.append(sel)
+        bet['selections'] = selections
         bets_list.append(bet)
         
     conn.close()
@@ -585,14 +633,17 @@ async def place_crash_bet(amount: float = Body(..., embed=True), user = Depends(
         conn.close()
         raise HTTPException(status_code=400, detail="Saldo insufficiente")
     
-    # Detract balance
-    u_update = "UPDATE users SET balance = balance - %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance - ? WHERE id = ?"
-    cursor.execute(u_update, (amount, u_id))
+    # Detract balance + log
+    bal_before_c = float(balance)
+    bal_after_c = bal_before_c - amount
+    u_update = "UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?"
+    cursor.execute(u_update, (bal_after_c, u_id))
     
     # Save bet
     bet_query = "INSERT INTO crash_bets (user_id, amount, status) VALUES (%s, %s, 'pending') RETURNING id" if is_postgres else "INSERT INTO crash_bets (user_id, amount, status) VALUES (?, ?, 'pending')"
     cursor.execute(bet_query, (u_id, amount))
     bet_id = cursor.fetchone()[0] if is_postgres else cursor.lastrowid
+    log_transaction(cursor, is_postgres, u_id, 'debit', -amount, bal_before_c, bal_after_c, f"Crash Game - Puntata #{bet_id}")
     
     conn.commit()
     conn.close()
@@ -623,9 +674,15 @@ async def crash_cashout(bet_id: int = Body(..., embed=True), user = Depends(get_
     bet_update = "UPDATE crash_bets SET cashout_multiplier = %s, payout = %s, status = 'won' WHERE id = %s" if is_postgres else "UPDATE crash_bets SET cashout_multiplier = ?, payout = ?, status = 'won' WHERE id = ?"
     cursor.execute(bet_update, (multiplier, payout, bet_id))
     
-    # Update balance
-    u_update = "UPDATE users SET balance = balance + %s WHERE username = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE username = ?"
-    cursor.execute(u_update, (payout, user['username']))
+    # Update balance + log transazione
+    cursor.execute("SELECT balance FROM users WHERE username = %s" if is_postgres else "SELECT balance FROM users WHERE username = ?", (user['username'],))
+    bal_before = float(cursor.fetchone()[0])
+    bal_after = bal_before + payout
+    u_update = "UPDATE users SET balance = %s WHERE username = %s" if is_postgres else "UPDATE users SET balance = ? WHERE username = ?"
+    cursor.execute(u_update, (bal_after, user['username']))
+    cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (user['username'],))
+    u_id_crash = cursor.fetchone()[0]
+    log_transaction(cursor, is_postgres, u_id_crash, 'credit', payout, bal_before, bal_after, f"Crash Game - Cashout @{multiplier:.2f}x (puntata €{active_bet['amount']:.2f})")
     
     conn.commit()
     conn.close()
@@ -696,9 +753,10 @@ async def sm_deal(data: dict, current_user = Depends(get_current_user)):
         conn.close()
         return JSONResponse({"error": "Saldo insufficiente"}, status_code=400)
     
-    # Deduct bet
+    # Deduct bet + log
     new_balance = balance - bet
     cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (new_balance, u_id))
+    log_transaction(cursor, is_postgres, u_id, 'debit', -bet, balance, new_balance, "Sette e Mezzo - Puntata")
     conn.commit()
     conn.close()
     
@@ -708,7 +766,12 @@ async def sm_deal(data: dict, current_user = Depends(get_current_user)):
     if result["status"] in ["win_natural", "push"]:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (result["payout"], u_id))
+        cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (u_id,))
+        sm_bal_b = float(cursor.fetchone()[0])
+        sm_bal_a = sm_bal_b + result["payout"]
+        cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (sm_bal_a, u_id))
+        status_label = "7½ Naturale" if result["status"] == "win_natural" else "Pareggio"
+        log_transaction(cursor, is_postgres, u_id, 'credit', result["payout"], sm_bal_b, sm_bal_a, f"Sette e Mezzo - {status_label} (vincita €{result['payout']:.2f})")
         conn.commit()
         conn.close()
         
@@ -734,8 +797,13 @@ async def sm_stand(data: dict, current_user = Depends(get_current_user)):
         if not u_id:
             cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
             u_id = cursor.fetchone()[0]
-            
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (result["payout"], u_id))
+        
+        cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (u_id,))
+        sm_s_bb = float(cursor.fetchone()[0])
+        sm_s_ba = sm_s_bb + result["payout"]
+        cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (sm_s_ba, u_id))
+        sm_lbl = "Vittoria" if result["status"] == "win" else "Pareggio"
+        log_transaction(cursor, is_postgres, u_id, 'credit', result["payout"], sm_s_bb, sm_s_ba, f"Sette e Mezzo - {sm_lbl} (vincita €{result['payout']:.2f})")
         conn.commit()
         conn.close()
         
@@ -767,9 +835,10 @@ async def bj_deal(data: dict, current_user = Depends(get_current_user)):
         conn.close()
         return JSONResponse({"error": "Saldo insufficiente"}, status_code=400)
     
-    # Deduct bet
+    # Deduct bet + log
     new_balance = balance - bet
     cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (new_balance, u_id))
+    log_transaction(cursor, is_postgres, u_id, 'debit', -bet, balance, new_balance, "Blackjack - Puntata")
     conn.commit()
     conn.close()
     
@@ -780,7 +849,13 @@ async def bj_deal(data: dict, current_user = Depends(get_current_user)):
         payout = bet * 2.5 if result["status"] == "win_bj" else (bet * 2 if result["status"] == "win" else bet)
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
+        is_postgres2 = hasattr(conn, 'get_dsn_parameters')
+        cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres2 else "SELECT balance FROM users WHERE id = ?", (u_id,))
+        bj_bb = float(cursor.fetchone()[0])
+        bj_ba = bj_bb + payout
+        cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres2 else "UPDATE users SET balance = ? WHERE id = ?", (bj_ba, u_id))
+        bj_lbl = "Blackjack!" if result["status"] == "win_bj" else ("Vittoria" if result["status"] == "win" else "Pareggio")
+        log_transaction(cursor, is_postgres2, u_id, 'credit', payout, bj_bb, bj_ba, f"Blackjack - {bj_lbl} (vincita €{payout:.2f})")
         conn.commit()
         conn.close()
         
@@ -822,7 +897,11 @@ async def bj_stand(data: dict, current_user = Depends(get_current_user)):
             cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
             u_id = cursor.fetchone()[0]
 
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
+        cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (u_id,))
+        bjs_bb = float(cursor.fetchone()[0]); bjs_ba = bjs_bb + payout
+        cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (bjs_ba, u_id))
+        bjs_lbl = "Vittoria" if result["status"] == "win" else "Pareggio"
+        log_transaction(cursor, is_postgres, u_id, 'credit', payout, bjs_bb, bjs_ba, f"Blackjack - {bjs_lbl} (vincita €{payout:.2f})")
         conn.commit()
         conn.close()
         
@@ -870,6 +949,7 @@ async def bj_split(data: dict, current_user = Depends(get_current_user)):
     
     new_balance = balance - bet
     cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (new_balance, u_id))
+    log_transaction(cursor, is_postgres, u_id, 'debit', -bet, balance, new_balance, "Blackjack - Split (puntata aggiuntiva)")
     conn.commit()
     conn.close()
     
@@ -907,6 +987,7 @@ async def bj_double(data: dict, current_user = Depends(get_current_user)):
     
     new_balance = balance - bet
     cursor.execute("UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?", (new_balance, u_id))
+    log_transaction(cursor, is_postgres, u_id, 'debit', -bet, balance, new_balance, "Blackjack - Double Down")
     conn.commit()
     
     result = bj_engine.double_down(game_id)
