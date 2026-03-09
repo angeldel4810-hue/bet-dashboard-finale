@@ -550,16 +550,19 @@ table tr:hover td {
     /* Barra di navigazione mobile in basso */
     .mobile-nav {
         display: flex !important;
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
         background: #161b22;
         border-top: 1px solid var(--border-color);
         padding: 10px 0;
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
         justify-content: space-around;
-        z-index: 1000;
+        z-index: 99999 !important;
         backdrop-filter: blur(10px);
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
     }
 
     .mobile-nav-item {
