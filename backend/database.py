@@ -176,11 +176,12 @@ def init_db():
                 "INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING",
                 (k, v)
             )
-        # Admin default
-        from backend.auth import get_password_hash
+        # Admin default - genera hash al momento senza import circolare
+        import bcrypt as _bcrypt
+        admin_hash = _bcrypt.hashpw('admin123'.encode(), _bcrypt.gensalt()).decode()
         cursor.execute(
             "INSERT INTO users (username, password_hash, role, balance, status) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (username) DO NOTHING",
-            ('admin', get_password_hash('admin123'), 'admin', 1000.0, 'active')
+            ('admin', admin_hash, 'admin', 1000.0, 'active')
         )
     else:
         cursor.executescript("""
@@ -305,6 +306,12 @@ def init_db():
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_house_edge', '15');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_pay_mode', 'auto');
         """)
+        import bcrypt as _bcrypt
+        admin_hash = _bcrypt.hashpw('admin123'.encode(), _bcrypt.gensalt()).decode()
+        cursor.execute(
+            "INSERT OR IGNORE INTO users (username, password_hash, role, balance, status) VALUES (?, ?, ?, ?, ?)",
+            ('admin', admin_hash, 'admin', 1000.0, 'active')
+        )
 
     conn.commit()
     print("[DB] Inizializzazione OK")
