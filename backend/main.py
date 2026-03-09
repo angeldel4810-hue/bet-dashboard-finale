@@ -12,6 +12,7 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from backend.crash import crash_engine
 import backend.sette_mezzo as sm
+from backend.blackjack import bj_engine
 from backend.virtual_football import router as virtual_router, run_virtual_football_loop
 
 is_postgres = os.environ.get("DATABASE_URL") is not None
@@ -810,8 +811,6 @@ async def sm_stand(data: dict, current_user = Depends(get_current_user)):
     return result
 
 # --- Blackjack Endpoints ---
-from backend.blackjack import bj_engine
-
 @app.post("/api/blackjack/deal")
 async def bj_deal(data: dict, current_user = Depends(get_current_user)):
     bet = float(data.get("bet", 0))
