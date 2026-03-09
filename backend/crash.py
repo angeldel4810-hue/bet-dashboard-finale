@@ -82,7 +82,7 @@ class CrashEngine:
             res = cursor.fetchone()
             if res:
                 # Valore nel DB è in percentuale (es. "3" -> 0.03)
-                house_edge = float(res[0] if isinstance(res, tuple) else res['value']) / 100
+                house_edge = float(res['value']) / 100
             conn.close()
         except:
             pass
