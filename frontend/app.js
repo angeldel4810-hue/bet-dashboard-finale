@@ -951,16 +951,18 @@ window.admin = {
                     </div>
                     ${b.selections.map(s => {
                         const isVirtual = String(s.event_id || '').startsWith('v_');
-                        let resultHtml = '';
+                        let statusBadge = '';
+                        let resultBadge = '';
                         if (isVirtual) {
-                            if (s.status === 'won') resultHtml = ' <span style="background:var(--success);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">✓ VINTA</span>';
-                            else if (s.status === 'lost') resultHtml = ' <span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">✗ PERSA</span>';
-                            else resultHtml = ' <span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">⏳</span>';
+                            if (s.status === 'won') statusBadge = '<span style="background:var(--success);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">✓ VINTA</span>';
+                            else if (s.status === 'lost') statusBadge = '<span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">✗ PERSA</span>';
+                            else statusBadge = '<span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">⏳</span>';
+                            if (s.result) resultBadge = '<span style="background:#222;color:#ffd700;padding:2px 8px;border-radius:3px;font-size:0.8rem;font-weight:bold;margin-left:6px;border:1px solid #ffd70055;">⚽ ' + s.result + '</span>';
                         }
-                        return '<div style="font-size:0.85rem;margin-bottom:5px;padding:5px 8px;background:rgba(0,0,0,0.2);border-radius:5px;">' +
+                        return '<div style="font-size:0.85rem;margin-bottom:5px;padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:5px;display:flex;align-items:center;flex-wrap:wrap;gap:3px;">' +
                             '• <b>' + (s.home_team||'') + ' vs ' + (s.away_team||'') + '</b>' +
-                            ' → <b>' + (s.selection||'') + '</b> @' + (s.odds||0).toFixed(2) +
-                            resultHtml + '</div>';
+                            '&nbsp;→ <b>' + (s.selection||'') + '</b> @' + (s.odds||0).toFixed(2) +
+                            resultBadge + statusBadge + '</div>';
                     }).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
@@ -978,20 +980,30 @@ window.admin = {
         if (detail.transactions.length === 0) {
             txContainer.innerHTML = '<p>Nessuna transazione.</p>';
         } else {
-            txContainer.innerHTML = detail.transactions.map(t => `
-                <div style="border-bottom: 1px solid var(--border-color); padding: 8px 0; display: flex; justify-content: space-between;">
+            txContainer.innerHTML = detail.transactions.map(t => {
+                const reason = t.reason || '';
+                let icon = '💰'; let categoryLabel = 'Ricarica/Admin';
+                if (reason.includes('Crash')) { icon = '🚀'; categoryLabel = 'Casino - Crash'; }
+                else if (reason.includes('Blackjack')) { icon = '🃏'; categoryLabel = 'Casino - Blackjack'; }
+                else if (reason.includes('Sette')) { icon = '🎴'; categoryLabel = 'Casino - Sette e Mezzo'; }
+                else if (reason.includes('Virtuale') || reason.includes('Virtual')) { icon = '⚽'; categoryLabel = 'Calcio Virtuale'; }
+                else if (t.type === 'admin_adjustment') { icon = '⚙️'; categoryLabel = 'Modifica Admin'; }
+                else if (t.type === 'debit') { icon = '📤'; }
+                const amtColor = t.amount >= 0 ? 'var(--success)' : 'var(--danger)';
+                const amtStr = (t.amount >= 0 ? '+' : '') + parseFloat(t.amount).toFixed(2);
+                const ts = t.timestamp ? new Date(t.timestamp).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+                return `<div style="border-bottom:1px solid var(--border-color);padding:8px 0;display:flex;justify-content:space-between;align-items:center;">
                     <div>
-                        <div style="font-weight: bold; color: ${t.amount >= 0 ? 'var(--success)' : 'var(--danger)'}">
-                            ${t.amount >= 0 ? '+' : ''}${t.amount.toFixed(2)}
-                        </div>
-                        <div style="color: var(--text-secondary); font-size: 0.75rem;">${t.type} - ${t.reason || ''}</div>
+                        <div style="font-weight:bold;color:${amtColor};font-size:1rem;">${icon} ${amtStr}€</div>
+                        <div style="color:var(--accent);font-size:0.72rem;font-weight:600;">${categoryLabel}</div>
+                        <div style="color:var(--text-secondary);font-size:0.72rem;">${reason}</div>
                     </div>
-                    <div style="text-align: right;">
-                        <div>€${t.balance_after.toFixed(2)}</div>
-                        <div style="color: var(--text-secondary); font-size: 0.75rem;">${new Date(t.timestamp).toLocaleDateString()}</div>
+                    <div style="text-align:right;min-width:70px;">
+                        <div style="font-size:0.85rem;">€${parseFloat(t.balance_after).toFixed(2)}</div>
+                        <div style="color:var(--text-secondary);font-size:0.7rem;">${ts}</div>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
 
         document.getElementById('user-table-body').closest('div.admin-section').classList.add('hidden');
@@ -1090,16 +1102,18 @@ window.admin = {
                     </div>
                     ${b.selections.map(s => {
                         const isVirtual = String(s.event_id || '').startsWith('v_');
-                        let resultHtml = '';
+                        let statusBadge = '';
+                        let resultBadge = '';
                         if (isVirtual) {
-                            if (s.status === 'won') resultHtml = ' <span style="background:var(--success);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">✓ VINTA</span>';
-                            else if (s.status === 'lost') resultHtml = ' <span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">✗ PERSA</span>';
-                            else resultHtml = ' <span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;">⏳</span>';
+                            if (s.status === 'won') statusBadge = '<span style="background:var(--success);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">✓ VINTA</span>';
+                            else if (s.status === 'lost') statusBadge = '<span style="background:var(--danger);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">✗ PERSA</span>';
+                            else statusBadge = '<span style="background:var(--accent);color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7rem;margin-left:4px;">⏳</span>';
+                            if (s.result) resultBadge = '<span style="background:#222;color:#ffd700;padding:2px 8px;border-radius:3px;font-size:0.8rem;font-weight:bold;margin-left:6px;border:1px solid #ffd70055;">⚽ ' + s.result + '</span>';
                         }
-                        return '<div style="font-size:0.85rem;margin-bottom:5px;padding:5px 8px;background:rgba(0,0,0,0.2);border-radius:5px;">' +
+                        return '<div style="font-size:0.85rem;margin-bottom:5px;padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:5px;display:flex;align-items:center;flex-wrap:wrap;gap:3px;">' +
                             '• <b>' + (s.home_team||'') + ' vs ' + (s.away_team||'') + '</b>' +
-                            ' → <b>' + (s.selection||'') + '</b> @' + (s.odds||0).toFixed(2) +
-                            resultHtml + '</div>';
+                            '&nbsp;→ <b>' + (s.selection||'') + '</b> @' + (s.odds||0).toFixed(2) +
+                            resultBadge + statusBadge + '</div>';
                     }).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
