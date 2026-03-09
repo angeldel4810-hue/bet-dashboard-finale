@@ -3,13 +3,54 @@ import sqlite3
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+class PgRow:
+    """Wrapper che permette accesso per indice E per nome colonna su psycopg2"""
+    def __init__(self, row, description):
+        self._data = list(row) if row else []
+        self._keys = [d[0] for d in description] if description else []
+        self._dict = dict(zip(self._keys, self._data))
+    def __getitem__(self, key):
+        if isinstance(key, int): return self._data[key]
+        return self._dict[key]
+    def __contains__(self, key): return key in self._dict
+    def get(self, key, default=None): return self._dict.get(key, default)
+    def keys(self): return self._keys
+    def __bool__(self): return bool(self._data)
+
+class PgCursorWrapper:
+    """Wrapper cursor psycopg2 che restituisce PgRow compatibili con sqlite3.Row"""
+    def __init__(self, cursor):
+        self._cur = cursor
+    def execute(self, q, p=None):
+        if p is None: self._cur.execute(q)
+        else: self._cur.execute(q, p)
+        return self
+    def executemany(self, q, p): return self._cur.executemany(q, p)
+    def fetchone(self):
+        row = self._cur.fetchone()
+        if row is None: return None
+        return PgRow(row, self._cur.description)
+    def fetchall(self):
+        rows = self._cur.fetchall()
+        return [PgRow(r, self._cur.description) for r in rows]
+    def __getattr__(self, name): return getattr(self._cur, name)
+
+class PgConnWrapper:
+    """Wrapper connessione che usa PgCursorWrapper"""
+    def __init__(self, conn):
+        self._conn = conn
+    def cursor(self): return PgCursorWrapper(self._conn.cursor())
+    def commit(self): self._conn.commit()
+    def rollback(self): self._conn.rollback()
+    def close(self): self._conn.close()
+    def get_dsn_parameters(self): return self._conn.get_dsn_parameters()
+    def __getattr__(self, name): return getattr(self._conn, name)
+
 def get_db():
     if DATABASE_URL:
         import psycopg2
-        import psycopg2.extras
         conn = psycopg2.connect(DATABASE_URL)
-        conn.cursor_factory = psycopg2.extras.RealDictCursor
-        return conn
+        return PgConnWrapper(conn)
     else:
         conn = sqlite3.connect("database.db")
         conn.row_factory = sqlite3.Row
