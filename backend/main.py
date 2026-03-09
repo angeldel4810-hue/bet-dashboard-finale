@@ -811,6 +811,7 @@ async def sm_stand(data: dict, current_user = Depends(get_current_user)):
     return result
 
 # --- Blackjack Endpoints ---
+
 @app.post("/api/blackjack/deal")
 async def bj_deal(data: dict, current_user = Depends(get_current_user)):
     bet = float(data.get("bet", 0))
