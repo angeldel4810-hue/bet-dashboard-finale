@@ -20,7 +20,7 @@ const state = {
         dealer_hand: [],
         player_score: 0,
         dealer_score: 0,
-        status: null,
+        status: null, // null=attesa, playing, win, loss, bust, push
         bet: 0
     },
     sette_mezzo: {
@@ -339,7 +339,7 @@ window.setteMezzo = {
         const amountInput = document.getElementById('sm-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/sette-mezzo/deal', {
@@ -485,7 +485,7 @@ window.blackjack = {
         const amountInput = document.getElementById('bj-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/blackjack/deal', {
@@ -1346,7 +1346,7 @@ window.crash = {
                 btn.innerText = 'SCOMMETTI';
                 btn.style.background = 'var(--accent)';
                 btn.disabled = false;
-                btn.onclick = () => crash.placeBet();
+                btn.onclick = () => this.placeBet();
                 amountInput.disabled = false;
             } else {
                 btn.innerText = 'SCOMMESSA PIAZZATA';
@@ -1359,7 +1359,7 @@ window.crash = {
                 btn.innerText = `INCASSA €${payout}`;
                 btn.style.background = 'var(--success)';
                 btn.disabled = false;
-                btn.onclick = () => crash.cashOut();
+                btn.onclick = () => this.cashOut();
             } else {
                 btn.innerText = 'IN CORSO...';
                 btn.style.background = 'var(--text-secondary)';
@@ -1378,7 +1378,7 @@ window.crash = {
         const amountInput = document.getElementById('crash-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const amount = parseFloat(rawVal);
-        if (isNaN(amount) || amount < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(amount) || amount < 1.00) return alert("Scommessa minima €1.00");
         if (amount > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/crash/bet', {
