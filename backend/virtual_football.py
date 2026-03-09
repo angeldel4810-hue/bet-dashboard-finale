@@ -222,8 +222,8 @@ def resolve_virtual_bets(season_id, matchday):
                 print(f"[Virtual Bets] #{bid} PERSA")
             elif all_resolved:
                 cursor.execute("SELECT balance FROM users WHERE id=%s" if psql else "SELECT balance FROM users WHERE id=?", (uid,))
-                prev = float(cursor.fetchone()[0])
-                nxt = prev + float(win)
+conn.commit()
+    conn.close()                nxt = prev + float(win)
                 cursor.execute("UPDATE users SET balance=%s WHERE id=%s" if psql else "UPDATE users SET balance=? WHERE id=?", (nxt,uid))
                 cursor.execute("UPDATE bets SET status='won' WHERE id=%s" if psql else "UPDATE bets SET status='won' WHERE id=?", (bid,))
                 cursor.execute(
