@@ -604,8 +604,8 @@ async def websocket_crash(websocket: WebSocket):
 
 @app.post("/api/crash/bet")
 async def place_crash_bet(amount: float = Body(..., embed=True), user = Depends(get_current_user)):
-    if amount < 1.00:
-        raise HTTPException(status_code=400, detail="Scommessa minima €1.00")
+    if amount < 0.20:
+        raise HTTPException(status_code=400, detail="Scommessa minima €0.20")
     if crash_engine.status != "waiting":
         raise HTTPException(status_code=400, detail="Round già iniziato o in corso")
     
@@ -712,7 +712,7 @@ async def resolve_bet(data: Dict[str, Any] = Body(...)):
 @app.post("/api/sette-mezzo/deal")
 async def sm_deal(data: dict, current_user = Depends(get_current_user)):
     bet = float(data.get("bet", 0))
-    if bet < 1.00: return JSONResponse({"error": "Scommessa minima €1.00"}, status_code=400)
+    if bet < 0.20: return JSONResponse({"error": "Scommessa minima €0.20"}, status_code=400)
     
     conn = get_db()
     cursor = conn.cursor()
@@ -780,7 +780,7 @@ async def sm_stand(data: dict, current_user = Depends(get_current_user)):
 @app.post("/api/blackjack/deal")
 async def bj_deal(data: dict, current_user = Depends(get_current_user)):
     bet = float(data.get("bet", 0))
-    if bet < 1.00: return JSONResponse({"error": "Scommessa minima €1.00"}, status_code=400)
+    if bet < 0.20: return JSONResponse({"error": "Scommessa minima €0.20"}, status_code=400)
     
     conn = get_db()
     cursor = conn.cursor()
