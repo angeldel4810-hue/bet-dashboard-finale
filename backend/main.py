@@ -326,58 +326,78 @@ async def get_user_detail(user_id: int):
         conn = get_db()
         cursor = conn.cursor()
         is_postgres = hasattr(conn, 'get_dsn_parameters')
-        
-        # User info
-        cursor.execute("SELECT id, username, role, balance, status FROM users WHERE id = %s" if is_postgres else "SELECT id, username, role, balance, status FROM users WHERE id = ?", (user_id,))
+
+        # User info - SELECT esplicito per nome colonna
+        q = "SELECT id, username, role, balance, status FROM users WHERE id = %s" if is_postgres else "SELECT id, username, role, balance, status FROM users WHERE id = ?"
+        cursor.execute(q, (user_id,))
         u = cursor.fetchone()
         if not u:
             conn.close()
             raise HTTPException(status_code=404, detail="Utente non trovato")
-        
-        if is_postgres:
-            user_data = {"id": u[0], "username": u[1], "role": u[2], "balance": u[3], "status": u[4], "created_at": datetime.now().isoformat()}
-        else:
-            user_data = dict(u)
-            user_data['created_at'] = datetime.now().isoformat()
 
-        # Bets
-        cursor.execute("SELECT * FROM bets WHERE user_id = %s ORDER BY created_at DESC" if is_postgres else "SELECT * FROM bets WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+        user_data = {
+            "id": u['id'],
+            "username": u['username'],
+            "role": u['role'],
+            "balance": float(u['balance']),
+            "status": u['status'],
+            "created_at": datetime.now().isoformat()
+        }
+
+        # Bets - SELECT esplicito
+        bq = "SELECT id, user_id, amount, total_odds, potential_win, status, created_at FROM bets WHERE user_id = %s ORDER BY created_at DESC" if is_postgres else "SELECT id, user_id, amount, total_odds, potential_win, status, created_at FROM bets WHERE user_id = ? ORDER BY created_at DESC"
+        cursor.execute(bq, (user_id,))
         b_rows = cursor.fetchall()
         bets = []
         for r in b_rows:
-            if is_postgres:
-                bet = {"id": r[0], "user_id": r[1], "amount": r[2], "total_odds": r[3], "potential_win": r[4], "status": r[5], "created_at": r[6]}
-            else:
-                bet = dict(r)
-            
-            cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
+            bet = {
+                "id": r['id'],
+                "user_id": r['user_id'],
+                "amount": float(r['amount']),
+                "total_odds": float(r['total_odds']),
+                "potential_win": float(r['potential_win']),
+                "status": r['status'],
+                "created_at": str(r['created_at'])
+            }
+            sq = "SELECT id, bet_id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT id, bet_id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = ?"
+            cursor.execute(sq, (bet['id'],))
             s_rows = cursor.fetchall()
-            if is_postgres:
-                sels = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s._keys) > 8 else "pending"} for s in s_rows]
-            else:
-                sels = [dict(sr) for sr in s_rows]
+            sels = [{
+                "id": s['id'], "bet_id": s['bet_id'], "event_id": s['event_id'],
+                "market": s['market'], "selection": s['selection'],
+                "odds": float(s['odds']) if s['odds'] else 0,
+                "home_team": s['home_team'], "away_team": s['away_team'],
+                "status": s['status'] if s['status'] else 'pending'
+            } for s in s_rows]
             bet['selections'] = _enrich_selections_with_result(cursor, sels, is_postgres)
             bets.append(bet)
-        
+
         user_data['bets'] = bets
 
         # Transactions
         try:
-            cursor.execute("SELECT * FROM transactions WHERE user_id = %s ORDER BY timestamp DESC" if is_postgres else "SELECT * FROM transactions WHERE user_id = ? ORDER BY timestamp DESC", (user_id,))
+            tq = "SELECT id, user_id, type, amount, balance_before, balance_after, admin_id, reason, timestamp FROM transactions WHERE user_id = %s ORDER BY timestamp DESC" if is_postgres else "SELECT id, user_id, type, amount, balance_before, balance_after, admin_id, reason, timestamp FROM transactions WHERE user_id = ? ORDER BY timestamp DESC"
+            cursor.execute(tq, (user_id,))
             t_rows = cursor.fetchall()
-            if is_postgres:
-                user_data['transactions'] = [{"id": t[0], "user_id": t[1], "type": t[2], "amount": t[3], "balance_before": t[4], "balance_after": t[5], "admin_id": t[6], "reason": t[7], "timestamp": t[8]} for t in t_rows]
-            else:
-                user_data['transactions'] = [dict(tr) for tr in t_rows]
+            user_data['transactions'] = [{
+                "id": t['id'], "type": t['type'],
+                "amount": float(t['amount']) if t['amount'] else 0,
+                "balance_before": float(t['balance_before']) if t['balance_before'] else 0,
+                "balance_after": float(t['balance_after']) if t['balance_after'] else 0,
+                "reason": t['reason'], "timestamp": str(t['timestamp'])
+            } for t in t_rows]
         except Exception as tx_err:
             print(f"Error fetching transactions: {tx_err}")
             user_data['transactions'] = []
 
         conn.close()
         return user_data
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"General error in get_user_detail: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
 @app.post("/api/admin/users/{user_id}/status", dependencies=[Depends(check_admin)])
 async def update_user_status(user_id: int, data: Dict[str, str] = Body(...)):
