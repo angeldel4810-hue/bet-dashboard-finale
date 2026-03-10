@@ -129,14 +129,8 @@ async def fetch_odds(user = Depends(get_current_user)):
         odds_list = []
         for r in rows:
             # Map index-based if postgres
-            if is_postgres:
-                o = {
-                    'id': r[0], 'sport_title': r[1], 'home_team': r[2], 'away_team': r[3],
-                    'commence_time': r[4], 'price_home': r[5], 'price_draw': r[6], 'price_away': r[7],
-                    'price_over': r[8], 'price_under': r[9], 'price_goal': r[10], 'price_nogoal': r[11]
-                }
-            else:
-                o = dict(r)
+            o = dict(r) if not isinstance(r, dict) else r
+            o = {k: o[k] for k in ['id','sport_title','home_team','away_team','commence_time','price_home','price_draw','price_away','price_over','price_under','price_goal','price_nogoal'] if k in o}
                 
             markets = []
             h2h_outcomes = [
@@ -253,10 +247,7 @@ async def list_users():
     cursor.execute("SELECT id, username, role, balance, status FROM users")
     rows = cursor.fetchall()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
-    if is_postgres:
-        users = [{"id": r[0], "username": r[1], "role": r[2], "balance": r[3], "status": r[4]} for r in rows]
-    else:
-        users = [dict(row) for row in rows]
+    users = [{"id": r["id"], "username": r["username"], "role": r["role"], "balance": float(r["balance"]), "status": r["status"]} for r in rows]
     conn.close()
     return users
 
@@ -468,17 +459,21 @@ async def list_all_bets():
     
     bets_list = []
     for r in rows:
-        if is_postgres:
-            bet = {"id": r[0], "user_id": r[1], "amount": r[2], "total_odds": r[3], "potential_win": r[4], "status": r[5], "created_at": r[6], "username": r[7]}
-        else:
-            bet = dict(r)
-            
-        cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
-        s_rows = cursor.fetchall()
-        if is_postgres:
-            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
-        else:
-            bet['selections'] = [dict(sr) for sr in s_rows]
+        bet = {"id": r["id"], "user_id": r["user_id"], "amount": float(r["amount"]), "total_odds": float(r["total_odds"]), "potential_win": float(r["potential_win"]), "status": r["status"], "created_at": str(r["created_at"]), "username": r["username"]}
+        cursor.execute("SELECT id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = ?", (bet["id"],))
+        sels = []
+        for s in cursor.fetchall():
+            sel = {"id": s["id"], "event_id": s["event_id"], "market": s["market"], "selection": s["selection"], "odds": float(s["odds"] or 0), "home_team": s["home_team"], "away_team": s["away_team"], "status": s["status"] or "pending"}
+            if str(sel["event_id"] or "").startswith("v_"):
+                mid = str(sel["event_id"]).replace("v_", "")
+                try:
+                    cursor.execute("SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?", (mid,))
+                    m = cursor.fetchone()
+                    if m:
+                        sel["match_result"] = f"{m['home_score']}-{m['away_score']}" if m["status"] == "finished" else ("In corso" if m["status"] == "playing" else "In attesa")
+                except Exception: pass
+            sels.append(sel)
+        bet["selections"] = sels
         bets_list.append(bet)
         
     conn.close()
@@ -500,18 +495,21 @@ async def get_my_bets_history(user = Depends(get_current_user)):
     
     bets_list = []
     for r in rows:
-        if is_postgres:
-            bet = {"id": r[0], "user_id": r[1], "amount": r[2], "total_odds": r[3], "potential_win": r[4], "status": r[5], "created_at": r[6]}
-        else:
-            bet = dict(r)
-            
-        s_query = "SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?"
-        cursor.execute(s_query, (bet['id'],))
-        s_rows = cursor.fetchall()
-        if is_postgres:
-            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
-        else:
-            bet['selections'] = [dict(sr) for sr in s_rows]
+        bet = {"id": r["id"], "user_id": r["user_id"], "amount": float(r["amount"]), "total_odds": float(r["total_odds"]), "potential_win": float(r["potential_win"]), "status": r["status"], "created_at": str(r["created_at"])}
+        cursor.execute("SELECT id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = ?", (bet["id"],))
+        sels = []
+        for s in cursor.fetchall():
+            sel = {"id": s["id"], "event_id": s["event_id"], "market": s["market"], "selection": s["selection"], "odds": float(s["odds"] or 0), "home_team": s["home_team"], "away_team": s["away_team"], "status": s["status"] or "pending"}
+            if str(sel["event_id"] or "").startswith("v_"):
+                mid = str(sel["event_id"]).replace("v_", "")
+                try:
+                    cursor.execute("SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?", (mid,))
+                    m = cursor.fetchone()
+                    if m:
+                        sel["match_result"] = f"{m['home_score']}-{m['away_score']}" if m["status"] == "finished" else ("In corso" if m["status"] == "playing" else "In attesa")
+                except Exception: pass
+            sels.append(sel)
+        bet["selections"] = sels
         bets_list.append(bet)
         
     conn.close()
@@ -691,10 +689,7 @@ async def resolve_bet(data: Dict[str, Any] = Body(...)):
         conn.close()
         raise HTTPException(status_code=404, detail="Scommessa non trovata")
     
-    if is_postgres:
-        b_user_id, b_amount, b_win, b_status = bet[0], bet[1], bet[2], bet[3]
-    else:
-        b_user_id, b_amount, b_win, b_status = bet['user_id'], bet['amount'], bet['potential_win'], bet['status']
+    b_user_id, b_amount, b_win, b_status = bet['user_id'], float(bet['amount']), float(bet['potential_win']), bet['status']
 
     if b_status != 'pending':
         conn.close()
