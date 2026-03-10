@@ -296,108 +296,101 @@ async def create_user(data: dict):
     return {"message": f"Utente '{username}' creato con successo"}
 
 @app.get("/api/admin/users/{user_id}/detail", dependencies=[Depends(check_admin)])
-
-def _enrich_selections_with_result(cursor, selections_raw, is_postgres):
-    """Aggiunge match_result alle selezioni virtuali"""
-    out = []
-    for s in selections_raw:
-        sel = dict(s) if not isinstance(s, dict) else s
-        event_id = str(sel.get('event_id', ''))
-        if event_id.startswith('v_'):
-            match_id = event_id.replace('v_', '')
-            try:
-                q = "SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?"
-                cursor.execute(q, (match_id,))
-                m = cursor.fetchone()
-                if m:
-                    if m['status'] == 'finished':
-                        sel['match_result'] = f"{m['home_score']}-{m['away_score']}"
-                    elif m['status'] == 'playing':
-                        sel['match_result'] = 'In corso'
-                    else:
-                        sel['match_result'] = 'In attesa'
-            except Exception:
-                sel['match_result'] = None
-        out.append(sel)
-    return out
-
 async def get_user_detail(user_id: int):
     try:
         conn = get_db()
         cursor = conn.cursor()
         is_postgres = hasattr(conn, 'get_dsn_parameters')
 
-        # User info - SELECT esplicito per nome colonna
-        q = "SELECT id, username, role, balance, status FROM users WHERE id = %s" if is_postgres else "SELECT id, username, role, balance, status FROM users WHERE id = ?"
-        cursor.execute(q, (user_id,))
+        cursor.execute(
+            "SELECT id, username, role, balance, status FROM users WHERE id = %s" if is_postgres
+            else "SELECT id, username, role, balance, status FROM users WHERE id = ?",
+            (user_id,)
+        )
         u = cursor.fetchone()
         if not u:
             conn.close()
             raise HTTPException(status_code=404, detail="Utente non trovato")
 
         user_data = {
-            "id": u['id'],
-            "username": u['username'],
-            "role": u['role'],
-            "balance": float(u['balance']),
-            "status": u['status'],
+            "id": u["id"], "username": u["username"], "role": u["role"],
+            "balance": float(u["balance"]), "status": u["status"],
             "created_at": datetime.now().isoformat()
         }
 
-        # Bets - SELECT esplicito
-        bq = "SELECT id, user_id, amount, total_odds, potential_win, status, created_at FROM bets WHERE user_id = %s ORDER BY created_at DESC" if is_postgres else "SELECT id, user_id, amount, total_odds, potential_win, status, created_at FROM bets WHERE user_id = ? ORDER BY created_at DESC"
-        cursor.execute(bq, (user_id,))
-        b_rows = cursor.fetchall()
+        cursor.execute(
+            "SELECT id, user_id, amount, total_odds, potential_win, status, created_at FROM bets WHERE user_id = %s ORDER BY created_at DESC" if is_postgres
+            else "SELECT id, user_id, amount, total_odds, potential_win, status, created_at FROM bets WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,)
+        )
         bets = []
-        for r in b_rows:
+        for r in cursor.fetchall():
             bet = {
-                "id": r['id'],
-                "user_id": r['user_id'],
-                "amount": float(r['amount']),
-                "total_odds": float(r['total_odds']),
-                "potential_win": float(r['potential_win']),
-                "status": r['status'],
-                "created_at": str(r['created_at'])
+                "id": r["id"], "amount": float(r["amount"]),
+                "total_odds": float(r["total_odds"]), "potential_win": float(r["potential_win"]),
+                "status": r["status"], "created_at": str(r["created_at"])
             }
-            sq = "SELECT id, bet_id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT id, bet_id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = ?"
-            cursor.execute(sq, (bet['id'],))
-            s_rows = cursor.fetchall()
-            sels = [{
-                "id": s['id'], "bet_id": s['bet_id'], "event_id": s['event_id'],
-                "market": s['market'], "selection": s['selection'],
-                "odds": float(s['odds']) if s['odds'] else 0,
-                "home_team": s['home_team'], "away_team": s['away_team'],
-                "status": s['status'] if s['status'] else 'pending'
-            } for s in s_rows]
-            bet['selections'] = _enrich_selections_with_result(cursor, sels, is_postgres)
+            cursor.execute(
+                "SELECT id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = %s" if is_postgres
+                else "SELECT id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = ?",
+                (bet["id"],)
+            )
+            sels = []
+            for s in cursor.fetchall():
+                sel = {
+                    "id": s["id"], "event_id": s["event_id"], "market": s["market"],
+                    "selection": s["selection"], "odds": float(s["odds"] or 0),
+                    "home_team": s["home_team"], "away_team": s["away_team"],
+                    "status": s["status"] or "pending"
+                }
+                if str(sel["event_id"] or "").startswith("v_"):
+                    mid = str(sel["event_id"]).replace("v_", "")
+                    try:
+                        cursor.execute(
+                            "SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres
+                            else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?",
+                            (mid,)
+                        )
+                        m = cursor.fetchone()
+                        if m:
+                            if m["status"] == "finished":
+                                sel["match_result"] = f"{m['home_score']}-{m['away_score']}"
+                            elif m["status"] == "playing":
+                                sel["match_result"] = "In corso"
+                            else:
+                                sel["match_result"] = "In attesa"
+                    except Exception:
+                        pass
+                sels.append(sel)
+            bet["selections"] = sels
             bets.append(bet)
 
-        user_data['bets'] = bets
+        user_data["bets"] = bets
 
-        # Transactions
         try:
-            tq = "SELECT id, user_id, type, amount, balance_before, balance_after, admin_id, reason, timestamp FROM transactions WHERE user_id = %s ORDER BY timestamp DESC" if is_postgres else "SELECT id, user_id, type, amount, balance_before, balance_after, admin_id, reason, timestamp FROM transactions WHERE user_id = ? ORDER BY timestamp DESC"
-            cursor.execute(tq, (user_id,))
-            t_rows = cursor.fetchall()
-            user_data['transactions'] = [{
-                "id": t['id'], "type": t['type'],
-                "amount": float(t['amount']) if t['amount'] else 0,
-                "balance_before": float(t['balance_before']) if t['balance_before'] else 0,
-                "balance_after": float(t['balance_after']) if t['balance_after'] else 0,
-                "reason": t['reason'], "timestamp": str(t['timestamp'])
-            } for t in t_rows]
+            cursor.execute(
+                "SELECT id, type, amount, balance_before, balance_after, reason, timestamp FROM transactions WHERE user_id = %s ORDER BY timestamp DESC" if is_postgres
+                else "SELECT id, type, amount, balance_before, balance_after, reason, timestamp FROM transactions WHERE user_id = ? ORDER BY timestamp DESC",
+                (user_id,)
+            )
+            user_data["transactions"] = [{
+                "id": t["id"], "type": t["type"],
+                "amount": float(t["amount"] or 0),
+                "balance_before": float(t["balance_before"] or 0),
+                "balance_after": float(t["balance_after"] or 0),
+                "reason": t["reason"], "timestamp": str(t["timestamp"])
+            } for t in cursor.fetchall()]
         except Exception as tx_err:
-            print(f"Error fetching transactions: {tx_err}")
-            user_data['transactions'] = []
+            print(f"Transactions error: {tx_err}")
+            user_data["transactions"] = []
 
         conn.close()
         return user_data
     except HTTPException:
         raise
     except Exception as e:
-        print(f"General error in get_user_detail: {e}")
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/admin/users/{user_id}/status", dependencies=[Depends(check_admin)])
 async def update_user_status(user_id: int, data: Dict[str, str] = Body(...)):
@@ -483,10 +476,9 @@ async def list_all_bets():
         cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
         s_rows = cursor.fetchall()
         if is_postgres:
-            sels = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s._keys) > 8 else "pending"} for s in s_rows]
+            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
         else:
-            sels = [dict(sr) for sr in s_rows]
-        bet['selections'] = _enrich_selections_with_result(cursor, sels, is_postgres)
+            bet['selections'] = [dict(sr) for sr in s_rows]
         bets_list.append(bet)
         
     conn.close()
@@ -516,29 +508,10 @@ async def get_my_bets_history(user = Depends(get_current_user)):
         s_query = "SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?"
         cursor.execute(s_query, (bet['id'],))
         s_rows = cursor.fetchall()
-        selections_out = []
-        for s in s_rows:
-            if is_postgres:
-                sel = {"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s._keys) > 8 else "pending"}
-            else:
-                sel = dict(s)
-            # Se selezione virtuale, aggiungi risultato partita
-            event_id = str(sel.get('event_id', ''))
-            if event_id.startswith('v_'):
-                match_id = event_id.replace('v_', '')
-                try:
-                    m_query = "SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?"
-                    cursor.execute(m_query, (match_id,))
-                    match_row = cursor.fetchone()
-                    if match_row:
-                        if match_row['status'] == 'finished':
-                            sel['match_result'] = f"{match_row['home_score']}-{match_row['away_score']}"
-                        else:
-                            sel['match_result'] = match_row['status']
-                except Exception:
-                    sel['match_result'] = None
-            selections_out.append(sel)
-        bet['selections'] = selections_out
+        if is_postgres:
+            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
+        else:
+            bet['selections'] = [dict(sr) for sr in s_rows]
         bets_list.append(bet)
         
     conn.close()
