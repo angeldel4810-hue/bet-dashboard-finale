@@ -331,8 +331,8 @@ async def get_user_detail(user_id: int):
                 "status": r["status"], "created_at": str(r["created_at"])
             }
             cursor.execute(
-                "SELECT id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = %s" if is_postgres
-                else "SELECT id, event_id, market, selection, odds, home_team, away_team, status FROM bet_selections WHERE bet_id = ?",
+                "SELECT id, event_id, market, selection, odds, home_team, away_team FROM bet_selections WHERE bet_id = %s" if is_postgres
+                else "SELECT id, event_id, market, selection, odds, home_team, away_team FROM bet_selections WHERE bet_id = ?",
                 (bet["id"],)
             )
             sels = []
@@ -341,7 +341,7 @@ async def get_user_detail(user_id: int):
                     "id": s["id"], "event_id": s["event_id"], "market": s["market"],
                     "selection": s["selection"], "odds": float(s["odds"] or 0),
                     "home_team": s["home_team"], "away_team": s["away_team"],
-                    "status": s["status"] or "pending"
+                    "status": "pending"
                 }
                 if str(sel["event_id"] or "").startswith("v_"):
                     mid = str(sel["event_id"]).replace("v_", "")
