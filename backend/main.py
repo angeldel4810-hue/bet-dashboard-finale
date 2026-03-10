@@ -296,6 +296,31 @@ async def create_user(data: dict):
     return {"message": f"Utente '{username}' creato con successo"}
 
 @app.get("/api/admin/users/{user_id}/detail", dependencies=[Depends(check_admin)])
+
+def _enrich_selections_with_result(cursor, selections_raw, is_postgres):
+    """Aggiunge match_result alle selezioni virtuali"""
+    out = []
+    for s in selections_raw:
+        sel = dict(s) if not isinstance(s, dict) else s
+        event_id = str(sel.get('event_id', ''))
+        if event_id.startswith('v_'):
+            match_id = event_id.replace('v_', '')
+            try:
+                q = "SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?"
+                cursor.execute(q, (match_id,))
+                m = cursor.fetchone()
+                if m:
+                    if m['status'] == 'finished':
+                        sel['match_result'] = f"{m['home_score']}-{m['away_score']}"
+                    elif m['status'] == 'playing':
+                        sel['match_result'] = 'In corso'
+                    else:
+                        sel['match_result'] = 'In attesa'
+            except Exception:
+                sel['match_result'] = None
+        out.append(sel)
+    return out
+
 async def get_user_detail(user_id: int):
     try:
         conn = get_db()
@@ -328,9 +353,10 @@ async def get_user_detail(user_id: int):
             cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
             s_rows = cursor.fetchall()
             if is_postgres:
-                bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
+                sels = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s._keys) > 8 else "pending"} for s in s_rows]
             else:
-                bet['selections'] = [dict(sr) for sr in s_rows]
+                sels = [dict(sr) for sr in s_rows]
+            bet['selections'] = _enrich_selections_with_result(cursor, sels, is_postgres)
             bets.append(bet)
         
         user_data['bets'] = bets
@@ -437,9 +463,10 @@ async def list_all_bets():
         cursor.execute("SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?", (bet['id'],))
         s_rows = cursor.fetchall()
         if is_postgres:
-            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
+            sels = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s._keys) > 8 else "pending"} for s in s_rows]
         else:
-            bet['selections'] = [dict(sr) for sr in s_rows]
+            sels = [dict(sr) for sr in s_rows]
+        bet['selections'] = _enrich_selections_with_result(cursor, sels, is_postgres)
         bets_list.append(bet)
         
     conn.close()
@@ -469,10 +496,29 @@ async def get_my_bets_history(user = Depends(get_current_user)):
         s_query = "SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?"
         cursor.execute(s_query, (bet['id'],))
         s_rows = cursor.fetchall()
-        if is_postgres:
-            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
-        else:
-            bet['selections'] = [dict(sr) for sr in s_rows]
+        selections_out = []
+        for s in s_rows:
+            if is_postgres:
+                sel = {"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7], "status": s[8] if len(s._keys) > 8 else "pending"}
+            else:
+                sel = dict(s)
+            # Se selezione virtuale, aggiungi risultato partita
+            event_id = str(sel.get('event_id', ''))
+            if event_id.startswith('v_'):
+                match_id = event_id.replace('v_', '')
+                try:
+                    m_query = "SELECT home_score, away_score, status FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT home_score, away_score, status FROM virtual_matches WHERE id = ?"
+                    cursor.execute(m_query, (match_id,))
+                    match_row = cursor.fetchone()
+                    if match_row:
+                        if match_row['status'] == 'finished':
+                            sel['match_result'] = f"{match_row['home_score']}-{match_row['away_score']}"
+                        else:
+                            sel['match_result'] = match_row['status']
+                except Exception:
+                    sel['match_result'] = None
+            selections_out.append(sel)
+        bet['selections'] = selections_out
         bets_list.append(bet)
         
     conn.close()
