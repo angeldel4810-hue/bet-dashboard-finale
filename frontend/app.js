@@ -20,7 +20,7 @@ const state = {
         dealer_hand: [],
         player_score: 0,
         dealer_score: 0,
-        status: 'betting', // betting, playing, win, loss, bust, push
+        status: null,
         bet: 0
     },
     sette_mezzo: {
@@ -48,16 +48,18 @@ window.api = {
     async request(path, options = {}) {
         const headers = { 'Content-Type': 'application/json' };
         if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
-
         try {
             const response = await fetch(`/api${path}`, { ...options, headers });
-            if (response.status === 401) {
-                auth.logout();
+            if (response.status === 401) { auth.logout(); return null; }
+            const data = await response.json();
+            if (!response.ok) {
+                alert(data?.detail || data?.error || 'Errore del server');
                 return null;
             }
-            return await response.json();
+            return data;
         } catch (e) {
             console.error('API Error:', e);
+            alert('Errore di connessione al server');
             return null;
         }
     }
@@ -919,60 +921,48 @@ window.admin = {
     async openUserDetail(userId) {
         this.currentUserId = userId;
         const detail = await api.request(`/admin/users/${userId}/detail`);
+        if (!detail) return; // api.request mostra già l'errore
 
-        // Handle error response or missing data
-        if (!detail || detail.detail) {
-            alert("Errore nel caricamento dei dettagli: " + (detail ? detail.detail : "Connessione fallita"));
-            return;
-        }
-
-        // Safe population
         document.getElementById('detail-username').innerText = detail.username || '---';
         document.getElementById('detail-status').innerText = detail.status || '---';
         document.getElementById('detail-status').style.color = detail.status === 'blocked' ? 'var(--danger)' : 'var(--success)';
-
-        try {
-            document.getElementById('detail-created').innerText = detail.created_at ? new Date(detail.created_at).toLocaleDateString() : '---';
-        } catch (e) {
-            document.getElementById('detail-created').innerText = '---';
-        }
-
+        try { document.getElementById('detail-created').innerText = detail.created_at ? new Date(detail.created_at).toLocaleDateString() : '---'; } catch(e) {}
         document.getElementById('detail-balance').innerText = `€${(detail.balance || 0).toFixed(2)}`;
 
-        // Populate bets
         const betsContainer = document.getElementById('detail-bets-container');
-        if (detail.bets.length === 0) {
+        if (!detail.bets || detail.bets.length === 0) {
             betsContainer.innerHTML = '<p>Nessuna scommessa.</p>';
         } else {
-            betsContainer.innerHTML = detail.bets.map(b => `
-                <div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:8px; margin-bottom:1rem; border-left: 4px solid ${b.status === 'won' ? 'var(--success)' : b.status === 'lost' ? 'var(--danger)' : b.status === 'cancelled' ? 'var(--text-secondary)' : 'var(--accent)'}">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
-                         <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
+            betsContainer.innerHTML = detail.bets.map(b => {
+                const borderColor = b.status === 'won' ? 'var(--success)' : b.status === 'lost' ? 'var(--danger)' : b.status === 'cancelled' ? 'var(--text-secondary)' : 'var(--accent)';
+                const selHTML = (b.selections || []).map(s => {
+                    const isVirtual = (s.event_id || '').startsWith('v_');
+                    const r = s.match_result;
+                    const badge = isVirtual
+                        ? (r === 'In corso'
+                            ? `<span style="background:rgba(0,200,100,0.15);color:#00c864;border:1px solid rgba(0,200,100,0.4);border-radius:5px;padding:1px 6px;font-size:0.75rem;margin-left:5px;">⏱ In corso</span>`
+                            : r
+                                ? `<span style="background:rgba(255,200,0,0.12);color:#f5c842;border:1px solid rgba(245,200,66,0.35);border-radius:5px;padding:1px 6px;font-size:0.75rem;margin-left:5px;">⚽ ${r}</span>`
+                                : `<span style="opacity:0.4;font-size:0.75rem;margin-left:5px;">In attesa</span>`)
+                        : '';
+                    return `<div style="font-size:0.85rem;margin-bottom:4px;padding:3px 0;">
+                        • ${s.home_team||'?'} vs ${s.away_team||'?'}: <b>${s.selection||'?'}</b> @${(s.odds||0).toFixed(2)}${badge}
+                    </div>`;
+                }).join('');
+                const statusBtns = b.status === 'pending'
+                    ? `<button onclick="admin.forceUserBet(${b.id},'won')" style="background:var(--success);width:auto;padding:5px 10px;">V</button>
+                       <button onclick="admin.forceUserBet(${b.id},'lost')" style="background:var(--danger);width:auto;padding:5px 10px;">P</button>
+                       <button onclick="admin.forceUserBet(${b.id},'cancelled')" style="background:var(--text-secondary);width:auto;padding:5px 10px;">A</button>`
+                    : `<span style="text-transform:uppercase;font-weight:bold;">${b.status}</span>`;
+                return `<div style="background:rgba(255,255,255,0.05);padding:1rem;border-radius:8px;margin-bottom:1rem;border-left:4px solid ${borderColor}">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;">
+                        <span>€${(b.amount||0).toFixed(2)} → €${(b.potential_win||0).toFixed(2)}</span>
+                        <span style="opacity:0.6;font-size:0.8rem;">${b.created_at ? new Date(b.created_at).toLocaleString('it-IT') : ''}</span>
                     </div>
-
-                    ${b.selections.map(s => {
-                        const isVirtual = (s.event_id || '').startsWith('v_');
-                        const result = s.match_result;
-                        const resultBadge = isVirtual
-                            ? (result === 'In corso'
-                                ? `<span style="background:rgba(0,200,100,0.15); color:#00c864; border:1px solid rgba(0,200,100,0.4); border-radius:5px; padding:1px 7px; font-size:0.78rem; margin-left:5px;">⏱ In corso</span>`
-                                : result
-                                    ? `<span style="background:rgba(255,200,0,0.12); color:#f5c842; border:1px solid rgba(245,200,66,0.35); border-radius:5px; padding:1px 7px; font-size:0.78rem; margin-left:5px;">⚽ ${result}</span>`
-                                    : `<span style="opacity:0.5; font-size:0.78rem; margin-left:5px;">In attesa</span>`)
-                            : '';
-                        return `<div style="font-size:0.85rem; margin-bottom:4px; opacity:0.9;">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}${resultBadge}
-                        </div>`;
-                    }).join('')}
-                    <div style="margin-top:0.8rem; display:flex; gap:10px;">
-                        ${b.status === 'pending' ? `
-                            <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
-                            <button onclick="admin.forceUserBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 10px;">P</button>
-                            <button onclick="admin.forceUserBet(${b.id}, 'cancelled')" style="background:var(--text-secondary); width:auto; padding:5px 10px;">A</button>
-                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status}</span>`}
-                    </div>
-                </div>
-            `).join('');
+                    ${selHTML}
+                    <div style="margin-top:0.8rem;display:flex;gap:10px;">${statusBtns}</div>
+                </div>`;
+            }).join('');
         }
 
         // Populate transactions
@@ -1090,21 +1080,11 @@ window.admin = {
                         <span style="font-weight:bold; color:var(--accent)">Giocata di: ${b.username}</span>
                         <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-
-                    ${b.selections.map(s => {
-                        const isVirtual = (s.event_id || '').startsWith('v_');
-                        const result = s.match_result;
-                        const resultBadge = isVirtual
-                            ? (result === 'In corso'
-                                ? `<span style="background:rgba(0,200,100,0.15); color:#00c864; border:1px solid rgba(0,200,100,0.4); border-radius:5px; padding:1px 7px; font-size:0.78rem; margin-left:5px;">⏱ In corso</span>`
-                                : result
-                                    ? `<span style="background:rgba(255,200,0,0.12); color:#f5c842; border:1px solid rgba(245,200,66,0.35); border-radius:5px; padding:1px 7px; font-size:0.78rem; margin-left:5px;">⚽ ${result}</span>`
-                                    : `<span style="opacity:0.5; font-size:0.78rem; margin-left:5px;">In attesa</span>`)
-                            : '';
-                        return `<div style="font-size:0.85rem; margin-bottom:4px; opacity:0.9;">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}${resultBadge}
-                        </div>`;
-                    }).join('')}
+                    ${b.selections.map(s => `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
+                        </div>
+                    `).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
