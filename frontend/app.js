@@ -1441,39 +1441,38 @@ window.virtual = {
     applyMobileLayout() {
         if (window.innerWidth > 600) return;
         setTimeout(() => {
-            // Trova i 3 blocchi principali
-            const live = document.getElementById("virtual-live-board");
-            const matchesEl = document.getElementById("virtual-matches-container");
+            const live        = document.getElementById("virtual-live-board");
+            const matchesEl   = document.getElementById("virtual-matches-container");
             const standingsEl = document.getElementById("virtual-standings-body");
-
             if (!live || !matchesEl) return;
 
-            // Risale al blocco section contenitore del live board
-            const liveBlock = live;
-            // Blocco partite: il suo parent diretto (la card/section che lo contiene)
-            const matchesBlock = matchesEl.closest(".admin-section") || matchesEl.parentElement;
-            // Blocco classifica: il parent della table degli standings
-            const standingsBlock = standingsEl
-                ? (standingsEl.closest(".admin-section") || standingsEl.closest("table") || standingsEl.parentElement)
-                : null;
+            // Risale alle sezioni card contenitori
+            const getBlock = el => el.closest("[class*='admin-section']") || el.closest("[style*='border-radius']") || el.parentElement;
+            const liveBlock     = live;
+            const matchesBlock  = getBlock(matchesEl);
+            const standingsBlock = standingsEl ? getBlock(standingsEl) : null;
 
-            // Parent comune
+            // Trova il container comune più vicino
             const parent = liveBlock.parentElement;
             if (!parent) return;
 
-            // Imposta flex column sul parent
-            parent.style.display = "flex";
-            parent.style.flexDirection = "column";
+            // Imposta flex sul parent per usare order
+            parent.style.cssText += ";display:flex!important;flex-direction:column!important;gap:16px;";
 
-            // Sposta i nodi nell'ordine: live, matches, standings
-            parent.insertBefore(liveBlock, parent.firstChild);
-            if (matchesBlock && matchesBlock !== liveBlock) {
-                parent.insertBefore(matchesBlock, liveBlock.nextSibling);
+            // Assegna order direttamente agli elementi
+            liveBlock.style.order = "1";
+            matchesBlock.style.order = "2";
+            if (standingsBlock) standingsBlock.style.order = "3";
+
+            // Forza anche i match container interni a colonna singola
+            if (matchesEl) {
+                matchesEl.style.cssText += ";display:flex!important;flex-direction:column!important;gap:12px;";
             }
-            if (standingsBlock && standingsBlock !== liveBlock && standingsBlock !== matchesBlock) {
-                parent.appendChild(standingsBlock);
+            const liveMatches = document.getElementById("virtual-live-matches");
+            if (liveMatches) {
+                liveMatches.style.cssText += ";display:flex!important;flex-direction:column!important;gap:8px;";
             }
-        }, 300);
+        }, 400);
     },
     init() {
         if (state.virtual.polling) clearInterval(state.virtual.polling);
