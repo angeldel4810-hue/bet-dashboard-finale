@@ -1787,7 +1787,7 @@ window.onload = () => {
 const baccarat = {
     renderCard(c) {
         const isRed = c.suit === '♥' || c.suit === '♦';
-        return `<div style="background:white;color:${isRed?'#e17055':'#2d3436'};border-radius:8px;padding:8px 12px;min-width:48px;text-align:center;font-size:1.2rem;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.4);">
+        return `<div style="background:white;color:${isRed?'#e17055':'#2d3436'};border-radius:8px;padding:8px 10px;min-width:44px;text-align:center;font-size:1.1rem;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.4);">
             <div>${c.rank}</div><div>${c.suit}</div></div>`;
     },
 
@@ -1804,10 +1804,10 @@ const baccarat = {
         const btn = document.getElementById('bac-deal-btn');
         btn.disabled = true;
         document.getElementById('bac-result').style.display = 'none';
-        document.getElementById('bac-player-cards').innerHTML = '';
+        document.getElementById('bac-player-cards').innerHTML = '<span style="color:var(--text-secondary);font-size:0.85rem;">Distribuzione...</span>';
         document.getElementById('bac-banker-cards').innerHTML = '';
-        document.getElementById('bac-player-score').innerText = '0';
-        document.getElementById('bac-banker-score').innerText = '0';
+        document.getElementById('bac-player-score').innerText = '—';
+        document.getElementById('bac-banker-score').innerText = '—';
 
         const res = await api.request('/baccarat/deal', {
             method: 'POST',
@@ -1824,17 +1824,16 @@ const baccarat = {
 
         const labels = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' };
         let msg = '🎴 ' + labels[res.winner] + ' VINCE';
-        if (res.player_pair) msg += '\nCoppia Giocatore! 👑';
-        if (res.banker_pair) msg += '\nCoppia Banco! 👑';
-        msg += res.profit >= 0
-            ? '\n+€' + res.payout.toFixed(2)
-            : '\n-€' + Math.abs(res.profit).toFixed(2);
+        if (res.player_pair) msg += '\n👑 Coppia Giocatore!';
+        if (res.banker_pair) msg += '\n👑 Coppia Banco!';
+        const profit = res.profit;
+        msg += profit >= 0 ? '\n+€' + res.payout.toFixed(2) : '\n-€' + Math.abs(profit).toFixed(2);
 
         const el = document.getElementById('bac-result');
         el.style.display = 'block';
-        el.style.background = res.profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
-        el.style.color      = res.profit >= 0 ? '#00b894' : '#d63031';
-        el.style.border     = `1px solid ${res.profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)'}`;
+        el.style.background = profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
+        el.style.color      = profit >= 0 ? '#00b894' : '#d63031';
+        el.style.border     = `1px solid ${profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)'}`;
         el.innerText = msg;
 
         if (res.new_balance !== undefined) {

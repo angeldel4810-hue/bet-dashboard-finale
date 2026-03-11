@@ -147,11 +147,10 @@
                             sorte con le carte napoletane!</p>
                     </div>
                     <!-- Baccarat Card -->
-                    <div class="game-card" onclick="router.navigate('baccarat')"
-                        style="background: linear-gradient(135deg, #1a1b23 0%, #0d0e12 100%); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; cursor: pointer; transition: transform 0.3s, border-color 0.3s;">
-                        <div style="font-size: 3rem; margin-bottom: 1rem;">🎴</div>
-                        <h3 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Baccarat</h3>
-                        <p style="color: var(--text-secondary); font-size: 0.9rem;">Punto Banco — Punta su Giocatore, Banco e Pareggio!</p>
+                    <div class="game-card" onclick="router.navigate('baccarat')" style="background:linear-gradient(135deg,#1a1b23 0%,#0d0e12 100%);border:1px solid var(--border-color);border-radius:16px;padding:1.5rem;cursor:pointer;transition:transform 0.3s,border-color 0.3s;">
+                        <div style="font-size:3rem;margin-bottom:1rem;">🎴</div>
+                        <h3 style="font-size:1.5rem;margin-bottom:0.5rem;">Baccarat</h3>
+                        <p style="color:var(--text-secondary);font-size:0.9rem;">Punto Banco — Punta su Giocatore, Banco o Pareggio!</p>
                     </div>
                     <!-- Virtual Football Card -->
                     <div class="game-card" onclick="router.navigate('virtual')"
@@ -210,90 +209,77 @@
             <!-- Blackjack Game Section -->
             <!-- Baccarat Section -->
             <div id="section-baccarat" class="hidden">
-                <button onclick="router.navigate('casino')" style="margin-bottom:1rem; background:transparent; border:1px solid var(--border-color); width:auto; padding:5px 15px;">&larr; Torna al Casinò</button>
-                <div style="max-width:720px; margin:0 auto;">
-                    <h2 style="text-align:center; margin-bottom:1.5rem;">🎴 Baccarat — Punto Banco</h2>
-
-                    <!-- Tavolo carte -->
-                    <div style="background:var(--card-bg); border-radius:16px; border:1px solid var(--border-color); padding:2rem; margin-bottom:1.5rem;">
-                        <div style="margin-bottom:1.5rem;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-                                <span style="font-weight:bold; font-size:1.1rem; letter-spacing:1px;">BANCO</span>
-                                <span id="bac-banker-score" style="background:rgba(255,255,255,0.1); padding:4px 14px; border-radius:20px; font-weight:bold; font-size:1.1rem;">0</span>
+                <button onclick="router.navigate('casino')" style="margin-bottom:1rem;background:transparent;border:1px solid var(--border-color);width:auto;padding:5px 15px;">&larr; Torna al Casinò</button>
+                <div style="max-width:680px;margin:0 auto;padding:0 0.5rem;">
+                    <h2 style="text-align:center;margin-bottom:1.5rem;">🎴 Baccarat</h2>
+                    <!-- Tavolo -->
+                    <div style="background:var(--card-bg);border-radius:16px;border:1px solid var(--border-color);padding:1.5rem;margin-bottom:1rem;">
+                        <div style="margin-bottom:1.2rem;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                                <span style="font-weight:bold;">BANCO</span>
+                                <span id="bac-banker-score" style="background:rgba(255,255,255,0.1);padding:3px 12px;border-radius:20px;font-weight:bold;">0</span>
                             </div>
-                            <div id="bac-banker-cards" style="display:flex; gap:10px; min-height:90px; align-items:center; flex-wrap:wrap;"></div>
+                            <div id="bac-banker-cards" style="display:flex;flex-wrap:wrap;gap:6px;min-height:70px;align-items:center;"></div>
                         </div>
-                        <div style="border-top:1px solid var(--border-color); margin:1rem 0;"></div>
+                        <div style="border-top:1px solid var(--border-color);margin:0.8rem 0;"></div>
                         <div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-                                <span style="font-weight:bold; font-size:1.1rem; letter-spacing:1px;">GIOCATORE</span>
-                                <span id="bac-player-score" style="background:rgba(255,255,255,0.1); padding:4px 14px; border-radius:20px; font-weight:bold; font-size:1.1rem;">0</span>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                                <span style="font-weight:bold;">GIOCATORE</span>
+                                <span id="bac-player-score" style="background:rgba(255,255,255,0.1);padding:3px 12px;border-radius:20px;font-weight:bold;">0</span>
                             </div>
-                            <div id="bac-player-cards" style="display:flex; gap:10px; min-height:90px; align-items:center; flex-wrap:wrap;"></div>
+                            <div id="bac-player-cards" style="display:flex;flex-wrap:wrap;gap:6px;min-height:70px;align-items:center;"></div>
                         </div>
-                        <div id="bac-result" style="display:none; text-align:center; margin-top:1.5rem; padding:1.2rem; border-radius:12px; font-size:1.2rem; font-weight:bold; white-space:pre-line; line-height:1.6;"></div>
+                        <div id="bac-result" style="display:none;text-align:center;margin-top:1rem;padding:0.8rem;border-radius:12px;font-size:1.1rem;font-weight:bold;white-space:pre-line;"></div>
                     </div>
-
-                    <!-- 3 puntate separate -->
-                    <div style="background:var(--card-bg); border-radius:16px; border:1px solid var(--border-color); padding:1.5rem; margin-bottom:1rem;">
-                        <div style="font-weight:bold; margin-bottom:1.2rem; font-size:1rem;">Puntate</div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem;">
-                            <!-- Giocatore -->
-                            <div style="background:rgba(0,184,148,0.08); border:1px solid rgba(0,184,148,0.25); border-radius:12px; padding:1rem;">
-                                <div style="color:#00b894; font-weight:bold; text-align:center; margin-bottom:0.3rem;">GIOCATORE</div>
-                                <div style="color:var(--text-secondary); font-size:0.8rem; text-align:center; margin-bottom:0.8rem;">1:1</div>
-                                <div style="display:flex; align-items:center; gap:4px;">
-                                    <span style="color:var(--text-secondary); font-size:0.9rem;">€</span>
-                                    <input id="bac-bet-player" type="number" value="0" min="0" step="0.20" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-primary); text-align:center; font-size:1rem;">
+                    <!-- Puntate -->
+                    <div style="background:var(--card-bg);border-radius:16px;border:1px solid var(--border-color);padding:1.5rem;margin-bottom:1rem;">
+                        <div style="font-weight:bold;margin-bottom:1rem;">Puntate</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.6rem;">
+                            <div style="background:rgba(0,184,148,0.1);border-radius:10px;padding:0.8rem;border:1px solid rgba(0,184,148,0.3);">
+                                <div style="color:#00b894;font-weight:bold;text-align:center;font-size:0.9rem;">GIOCATORE</div>
+                                <div style="color:var(--text-secondary);text-align:center;font-size:0.75rem;margin-bottom:0.5rem;">1:1</div>
+                                <div style="display:flex;align-items:center;gap:3px;">
+                                    <span style="color:var(--text-secondary);font-size:0.85rem;">€</span>
+                                    <input id="bac-bet-player" type="number" value="0" min="0" step="0.20" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-primary);font-size:0.9rem;text-align:center;">
                                 </div>
                             </div>
-                            <!-- Pareggio -->
-                            <div style="background:rgba(253,203,110,0.08); border:1px solid rgba(253,203,110,0.25); border-radius:12px; padding:1rem;">
-                                <div style="color:#fdcb6e; font-weight:bold; text-align:center; margin-bottom:0.3rem;">PAREGGIO</div>
-                                <div style="color:var(--text-secondary); font-size:0.8rem; text-align:center; margin-bottom:0.8rem;">8:1</div>
-                                <div style="display:flex; align-items:center; gap:4px;">
-                                    <span style="color:var(--text-secondary); font-size:0.9rem;">€</span>
-                                    <input id="bac-bet-tie" type="number" value="0" min="0" step="0.20" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-primary); text-align:center; font-size:1rem;">
+                            <div style="background:rgba(253,203,110,0.1);border-radius:10px;padding:0.8rem;border:1px solid rgba(253,203,110,0.3);">
+                                <div style="color:#fdcb6e;font-weight:bold;text-align:center;font-size:0.9rem;">PAREGGIO</div>
+                                <div style="color:var(--text-secondary);text-align:center;font-size:0.75rem;margin-bottom:0.5rem;">8:1</div>
+                                <div style="display:flex;align-items:center;gap:3px;">
+                                    <span style="color:var(--text-secondary);font-size:0.85rem;">€</span>
+                                    <input id="bac-bet-tie" type="number" value="0" min="0" step="0.20" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-primary);font-size:0.9rem;text-align:center;">
                                 </div>
                             </div>
-                            <!-- Banco -->
-                            <div style="background:rgba(225,112,85,0.08); border:1px solid rgba(225,112,85,0.25); border-radius:12px; padding:1rem;">
-                                <div style="color:#e17055; font-weight:bold; text-align:center; margin-bottom:0.3rem;">BANCO</div>
-                                <div style="color:var(--text-secondary); font-size:0.8rem; text-align:center; margin-bottom:0.8rem;">0.95:1</div>
-                                <div style="display:flex; align-items:center; gap:4px;">
-                                    <span style="color:var(--text-secondary); font-size:0.9rem;">€</span>
-                                    <input id="bac-bet-banker" type="number" value="0" min="0" step="0.20" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-primary); text-align:center; font-size:1rem;">
+                            <div style="background:rgba(225,112,85,0.1);border-radius:10px;padding:0.8rem;border:1px solid rgba(225,112,85,0.3);">
+                                <div style="color:#e17055;font-weight:bold;text-align:center;font-size:0.9rem;">BANCO</div>
+                                <div style="color:var(--text-secondary);text-align:center;font-size:0.75rem;margin-bottom:0.5rem;">0.95:1</div>
+                                <div style="display:flex;align-items:center;gap:3px;">
+                                    <span style="color:var(--text-secondary);font-size:0.85rem;">€</span>
+                                    <input id="bac-bet-banker" type="number" value="0" min="0" step="0.20" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-primary);font-size:0.9rem;text-align:center;">
                                 </div>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Puntate laterali coppie -->
-                    <div style="background:var(--card-bg); border-radius:16px; border:1px solid var(--border-color); padding:1.5rem; margin-bottom:1.2rem;">
-                        <div style="font-weight:bold; margin-bottom:1rem;">Puntate Laterali <small style="opacity:0.5; font-weight:normal;">(opzionali)</small></div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                    <!-- Side bets -->
+                    <div style="background:var(--card-bg);border-radius:16px;border:1px solid var(--border-color);padding:1.5rem;margin-bottom:1rem;">
+                        <div style="font-weight:bold;margin-bottom:0.8rem;">Puntate Coppia <small style="opacity:0.6;font-weight:normal;">(11:1)</small></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
                             <div>
-                                <label style="font-size:0.85rem; color:var(--text-secondary); display:block; margin-bottom:5px;">Coppia Giocatore <span style="color:#a29bfe;">11:1</span></label>
-                                <div style="display:flex; align-items:center; gap:4px;">
-                                    <span style="color:var(--text-secondary);">€</span>
-                                    <input id="bac-player-pair" type="number" value="0" min="0" step="0.20" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-primary);">
-                                </div>
+                                <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:4px;">Coppia Giocatore</label>
+                                <div style="display:flex;align-items:center;gap:3px;"><span style="color:var(--text-secondary);">€</span><input id="bac-player-pair" type="number" value="0" min="0" step="0.20" style="flex:1;padding:7px;border-radius:6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-primary);"></div>
                             </div>
                             <div>
-                                <label style="font-size:0.85rem; color:var(--text-secondary); display:block; margin-bottom:5px;">Coppia Banco <span style="color:#a29bfe;">11:1</span></label>
-                                <div style="display:flex; align-items:center; gap:4px;">
-                                    <span style="color:var(--text-secondary);">€</span>
-                                    <input id="bac-banker-pair" type="number" value="0" min="0" step="0.20" style="flex:1; padding:8px; border-radius:8px; border:1px solid var(--border-color); background:var(--input-bg); color:var(--text-primary);">
-                                </div>
+                                <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:4px;">Coppia Banco</label>
+                                <div style="display:flex;align-items:center;gap:3px;"><span style="color:var(--text-secondary);">€</span><input id="bac-banker-pair" type="number" value="0" min="0" step="0.20" style="flex:1;padding:7px;border-radius:6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-primary);"></div>
                             </div>
                         </div>
                     </div>
-
-                    <button id="bac-deal-btn" onclick="baccarat.deal()" style="width:100%; padding:1.1rem; font-size:1.1rem; font-weight:bold; border-radius:12px; background:linear-gradient(135deg,#6c5ce7,#a29bfe); border:none; color:white; cursor:pointer; letter-spacing:1px;">GIOCA</button>
+                    <button id="bac-deal-btn" onclick="baccarat.deal()" style="width:100%;padding:1rem;font-size:1.1rem;font-weight:bold;border-radius:12px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);border:none;color:white;cursor:pointer;margin-bottom:80px;">GIOCA</button>
                 </div>
             </div>
 
-                        <div id="section-blackjack" class="hidden">
+            <div id="section-blackjack" class="hidden">
                 <button onclick="router.navigate('casino')"
                     style="margin-bottom: 1rem; background: transparent; border: 1px solid var(--border-color); width: auto; padding: 5px 15px;">&larr;
                     Torna ai Giochi</button>
