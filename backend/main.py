@@ -11,7 +11,7 @@ import os
 import asyncio
 from datetime import datetime, timezone, timedelta
 from backend.crash import crash_engine
-import backend.baccarat as bac
+import backend.baccarat as bac  # v2026-03-11 12:18
 from backend.blackjack import bj_engine
 import backend.sette_mezzo as sm
 from backend.virtual_football import router as virtual_router, run_virtual_football_loop
