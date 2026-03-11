@@ -11,6 +11,7 @@ import os
 import asyncio
 from datetime import datetime, timezone, timedelta
 from backend.crash import crash_engine
+import backend.baccarat as bac
 from backend.blackjack import bj_engine
 import backend.sette_mezzo as sm
 from backend.virtual_football import router as virtual_router, run_virtual_football_loop
@@ -1039,6 +1040,77 @@ app.include_router(virtual_router, prefix="/api/virtual", tags=["Virtual Footbal
 frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 if os.path.exists(frontend_path):
     app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+
+
+
+# ─── BACCARAT ───────────────────────────────────────────────────────────────
+
+@app.post("/api/baccarat/deal")
+async def baccarat_deal(data: dict, current_user = Depends(get_current_user)):
+    bet_on = data.get("bet_on", "player")  # player | banker | tie
+    bet_amount = float(data.get("bet_amount", 0))
+    side_bets = data.get("side_bets", {})
+    player_pair_bet = float(side_bets.get("player_pair", 0))
+    banker_pair_bet = float(side_bets.get("banker_pair", 0))
+
+    if bet_on not in ["player", "banker", "tie"]:
+        return JSONResponse({"error": "Puntata non valida"}, status_code=400)
+    if bet_amount < 0.20:
+        return JSONResponse({"error": "Scommessa minima €0.20"}, status_code=400)
+
+    total_bet = bet_amount + player_pair_bet + banker_pair_bet
+    if total_bet <= 0:
+        return JSONResponse({"error": "Nessuna puntata"}, status_code=400)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+
+    u_id = current_user.get("id")
+    if not u_id:
+        cursor.execute(
+            "SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?",
+            (current_user["username"],)
+        )
+        u_id = cursor.fetchone()["id"]
+
+    cursor.execute(
+        "SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?",
+        (u_id,)
+    )
+    row = cursor.fetchone()
+    balance = float(row["balance"])
+
+    if balance < total_bet:
+        conn.close()
+        return JSONResponse({"error": "Saldo insufficiente"}, status_code=400)
+
+    # Scala saldo
+    cursor.execute(
+        "UPDATE users SET balance = balance - %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance - ? WHERE id = ?",
+        (total_bet, u_id)
+    )
+    conn.commit()
+
+    # Gioca
+    result = bac.deal(
+        bet_on=bet_on,
+        bet_amount=bet_amount,
+        side_bets={"player_pair": player_pair_bet, "banker_pair": banker_pair_bet},
+        user_id=u_id
+    )
+
+    # Accredita vincita
+    if result["payout"] > 0:
+        cursor.execute(
+            "UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?",
+            (result["payout"], u_id)
+        )
+        conn.commit()
+
+    conn.close()
+    result["new_balance"] = balance - total_bet + result["payout"]
+    return result
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
