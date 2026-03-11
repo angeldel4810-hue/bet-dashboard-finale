@@ -276,10 +276,14 @@ window.ui = {
         document.getElementById('all-odds-modal').classList.add('hidden');
     },
     async fetchBalance() {
+        const now = Date.now();
+        if (now - (state._lastBalanceFetch || 0) < 2000) return; // throttle: max 1 call ogni 2s
+        state._lastBalanceFetch = now;
         const res = await api.request('/user/balance');
         if (res) {
             state.balance = res.balance;
-            document.getElementById('user-balance-nav').innerText = `Saldo: €${state.balance.toFixed(2)}`;
+            const el = document.getElementById('user-balance-nav');
+            if (el) el.innerText = `Saldo: €${state.balance.toFixed(2)}`;
         }
     }
 };
@@ -797,7 +801,7 @@ window.dashboard = {
             const under25Price = totals?.outcomes.find(o => o.name.includes('Under') && o.point === 2.5)?.price;
 
             return `
-            <div class="odd-card fade-in">
+            <div class="odd-card">
                 <div class="sport-tag">${event.sport_title}</div>
                 <div class="event-name" title="${event.home_team} vs ${event.away_team}">
                     ${event.home_team} vs ${event.away_team}
@@ -1479,6 +1483,7 @@ window.crash = {
     stopGraph() {
         if (state.crash.rafId) {
             cancelAnimationFrame(state.crash.rafId);
+            clearTimeout(state.crash.rafId);
             state.crash.rafId = null;
         }
     },
@@ -1492,29 +1497,45 @@ window.crash = {
         canvas.width = canvas.offsetWidth || 300;
         canvas.height = canvas.offsetHeight || 200;
 
+        let lastMultiplier = -1;
+        let lastStatus = '';
         const animate = () => {
             const section = document.getElementById('section-crash');
-            // Ferma il loop se la sezione non è più visibile
             if (!section || section.classList.contains('hidden')) {
                 state.crash.rafId = null;
                 return;
             }
+            const currentStatus = state.crash.status;
+            const currentMult = state.crash.multiplier;
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Ridisegna solo se qualcosa è cambiato
+            if (currentStatus !== lastStatus || (currentStatus === 'running' && currentMult !== lastMultiplier)) {
+                lastStatus = currentStatus;
+                lastMultiplier = currentMult;
 
-            if (state.crash.status === 'running') {
-                ctx.beginPath();
-                ctx.strokeStyle = '#ffbb00';
-                ctx.lineWidth = 4;
-                ctx.moveTo(0, canvas.height);
-                const progress = Math.min((state.crash.multiplier - 1) / 10, 1);
-                const targetX = canvas.width * 0.8 * progress;
-                const targetY = canvas.height - (canvas.height * 0.8 * progress);
-                ctx.quadraticCurveTo(canvas.width * 0.4, canvas.height, targetX, targetY);
-                ctx.stroke();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (currentStatus === 'running') {
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#ffbb00';
+                    ctx.lineWidth = 4;
+                    ctx.moveTo(0, canvas.height);
+                    const progress = Math.min((currentMult - 1) / 10, 1);
+                    const targetX = canvas.width * 0.8 * progress;
+                    const targetY = canvas.height - (canvas.height * 0.8 * progress);
+                    ctx.quadraticCurveTo(canvas.width * 0.4, canvas.height, targetX, targetY);
+                    ctx.stroke();
+                }
             }
 
-            state.crash.rafId = requestAnimationFrame(animate);
+            // Se non in running, abbassa il frame rate a ~10fps per risparmiare CPU
+            if (currentStatus !== 'running') {
+                state.crash.rafId = setTimeout(() => {
+                    state.crash.rafId = requestAnimationFrame(animate);
+                }, 100);
+            } else {
+                state.crash.rafId = requestAnimationFrame(animate);
+            }
         };
         state.crash.rafId = requestAnimationFrame(animate);
     }
@@ -1574,14 +1595,17 @@ window.virtual = {
             }
         }, 5000);
     },
-    async tick() {
-        if (state.virtual.status === 'BETTING' && state.virtual.timeLeft > 0) {
+    tick() {
+        // Timer locale: decrementa senza aspettare la rete
+        if ((state.virtual.status === 'BETTING' || state.virtual.status === 'FINISHED') && state.virtual.timeLeft > 0) {
             state.virtual.timeLeft--;
             this.updateTimerUI();
         }
-
-        if (Date.now() - state.virtual.lastFetch > 3000) {
-            await this.fetchStatus();
+        // Fetch status ogni 3 secondi senza bloccare il tick
+        const now = Date.now();
+        if (now - state.virtual.lastFetch > 3000) {
+            state.virtual.lastFetch = now; // aggiorna subito per evitare fetch parallele
+            this.fetchStatus().catch(() => {});
         }
     },
     async fetchStatus() {
@@ -1600,29 +1624,32 @@ window.virtual = {
 
             this.updateStatusUI();
 
-            if (statusChanged || matchdayChanged || state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
-                this.fetchMatches().catch(e => console.error("Error fetching matches:", e));
-                if (statusChanged || matchdayChanged) {
-                    this.fetchStandings().catch(e => console.error("Error fetching standings:", e));
-                    ui.fetchBalance();
-                }
+            if (statusChanged || matchdayChanged) {
+                // Stato o giornata cambiata: aggiorna tutto
+                this.fetchMatches().catch(() => {});
+                this.fetchStandings().catch(() => {});
+                ui.fetchBalance();
+            } else if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING') {
+                // Solo durante LIVE aggiorna i punteggi live (non le quote)
+                this._fetchLiveOnly().catch(() => {});
             }
         }
     },
     async fetchMatches() {
-        // Carica le partite per il betting (sempre current_matchday)
         const matches = await api.request('/virtual/matches');
         if (matches) {
             state.virtual.matches = matches;
             this.renderMatches();
         }
-        // Carica le partite per il tabellone (usa finished_matchday durante FINISHED)
         if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
-            const liveMatches = await api.request('/virtual/live');
-            if (liveMatches) {
-                state.virtual.liveMatches = liveMatches;
-                this.renderLiveBoard();
-            }
+            await this._fetchLiveOnly();
+        }
+    },
+    async _fetchLiveOnly() {
+        const liveMatches = await api.request('/virtual/live');
+        if (liveMatches) {
+            state.virtual.liveMatches = liveMatches;
+            this.renderLiveBoard();
         }
     },
     async fetchStandings() {
@@ -1858,17 +1885,29 @@ window.virtual = {
 
         const isFinished = state.virtual.status === 'FINISHED';
 
-        // Aggiorna testo azione o titolo
         if (clockEl) {
-            if (isFinished) {
-                clockEl.innerText = '🏆 Risultati Finali';
-                clockEl.style.color = 'var(--accent)';
-            } else {
-                clockEl.innerText = state.virtual.actionText || '🏟️ In corso...';
-                clockEl.style.color = 'var(--danger)';
+            const newClock = isFinished ? '🏆 Risultati Finali' : (state.virtual.actionText || '🏟️ In corso...');
+            if (clockEl.innerText !== newClock) {
+                clockEl.innerText = newClock;
+                clockEl.style.color = isFinished ? 'var(--accent)' : 'var(--danger)';
             }
         }
 
+        // Aggiornamento DOM chirurgico: aggiorna solo i punteggi cambiati
+        const existing = container.querySelectorAll('[data-match-id]');
+        if (existing.length === state.virtual.liveMatches.length) {
+            // Aggiorna solo i punteggi
+            state.virtual.liveMatches.forEach((m, i) => {
+                const scoreEl = existing[i] ? existing[i].querySelector('[data-score]') : null;
+                if (scoreEl) {
+                    const newScore = `${m.home_score || 0} - ${m.away_score || 0}`;
+                    if (scoreEl.innerText !== newScore) scoreEl.innerText = newScore;
+                }
+            });
+            return;
+        }
+
+        // Prima volta o numero partite cambiato: ricostruisce
         try {
             container.innerHTML = state.virtual.liveMatches.map(m => {
                 const hName = (m.home_team && m.home_team.name) ? m.home_team.name : '---';
@@ -1877,9 +1916,9 @@ window.virtual = {
                 const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
 
                 return `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
+                    <div data-match-id="${m.id}" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
                     <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${hName}</span>
-                    <span style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
+                    <span data-score style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
                         ${m.home_score || 0} - ${m.away_score || 0}
                     </span>
                     <span style="font-size: 0.85rem; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${aName}</span>
