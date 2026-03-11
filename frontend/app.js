@@ -1277,6 +1277,38 @@ window.crash = {
             this.connect();
         }
         this.drawGraph();
+        if (window.innerWidth <= 768) this.fixMobileLayout();
+    },
+    fixMobileLayout() {
+        setTimeout(() => {
+            // Trova il wrapper principale della sezione crash
+            const section = document.getElementById('section-crash');
+            if (!section) return;
+            // Cerca tutti i div con grid o display:flex a due colonne e li forza a colonna
+            section.querySelectorAll('[style]').forEach(el => {
+                const s = el.getAttribute('style') || '';
+                if (s.includes('grid') || (s.includes('display') && s.includes('flex') && !s.includes('column'))) {
+                    el.style.display = 'flex';
+                    el.style.flexDirection = 'column';
+                    el.style.width = '100%';
+                    el.style.gap = '12px';
+                }
+                // Rimuove larghezze fisse
+                if (s.includes('width') && (s.includes('px') || s.includes('%'))) {
+                    el.style.width = '100%';
+                    el.style.minWidth = '0';
+                    el.style.maxWidth = '100%';
+                }
+            });
+            // Canvas a tutta larghezza
+            const canvas = document.getElementById('crash-canvas');
+            if (canvas) {
+                canvas.style.width = '100%';
+                canvas.style.height = '220px';
+                canvas.width = canvas.parentElement ? canvas.parentElement.offsetWidth : window.innerWidth - 32;
+                canvas.height = 220;
+            }
+        }, 100);
     },
     connect() {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';

@@ -778,3 +778,75 @@ table tr:hover td {
         font-size: 1rem !important;
     }
 }
+
+/* =============================================
+   CRASH: fix layout mobile completo
+   ============================================= */
+@media (max-width: 768px) {
+
+    /* Il wrapper principale crash (grid a 2 colonne) diventa colonna */
+    #section-crash > div > div,
+    #section-crash .container > div {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 0 !important;
+    }
+
+    /* Tutti i figli diretti del layout crash a piena larghezza */
+    #section-crash > div > div > *,
+    #section-crash .container > div > * {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+
+    /* Il box grafico: occupa tutta la larghezza, altezza fissa */
+    #crash-canvas {
+        width: 100% !important;
+        height: 220px !important;
+        min-height: 220px !important;
+        display: block !important;
+    }
+
+    /* Il box con moltiplicatore e status dentro il grafico */
+    #crash-multiplier {
+        font-size: 4rem !important;
+        text-align: center !important;
+        display: block !important;
+        width: 100% !important;
+    }
+
+    /* Il pannello controlli (input + bottone + storia) */
+    #section-crash [style*="background"],
+    #section-crash [class*="card"],
+    #section-crash > div > div > div:last-child {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        padding: 1rem !important;
+    }
+
+    /* Input importo a piena larghezza */
+    #crash-bet-amount {
+        width: 100% !important;
+        font-size: 1.1rem !important;
+        padding: 0.8rem !important;
+    }
+
+    /* Bottone SCOMMETTI a piena larghezza */
+    #crash-bet-btn {
+        width: 100% !important;
+        padding: 1rem !important;
+        font-size: 1.1rem !important;
+        margin-top: 0.5rem !important;
+    }
+
+    /* Storia recente: chips in griglia */
+    #crash-history {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+        justify-content: flex-start !important;
+        margin-top: 1rem !important;
+    }
+}
