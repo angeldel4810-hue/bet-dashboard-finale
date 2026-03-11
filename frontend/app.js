@@ -1783,36 +1783,26 @@ window.onload = () => {
     }
 };
 
-
-// ─── BACCARAT ────────────────────────────────────────────────────────────────
+// --- BACCARAT ---
 const baccarat = {
-    selectedBet: 'player',
-
-    selectBet(side) {
-        this.selectedBet = side;
-        ['player','tie','banker'].forEach(s => {
-            const btn = document.getElementById(`bac-btn-${s}`);
-            if (!btn) return;
-            btn.style.border = s === side ? '2px solid white' : '2px solid transparent';
-            btn.style.opacity = s === side ? '1' : '0.6';
-        });
-    },
-
     renderCard(c) {
         const isRed = c.suit === '♥' || c.suit === '♦';
-        return `<div style="background:white; color:${isRed?'#e17055':'#2d3436'}; border-radius:8px; padding:8px 12px; min-width:50px; text-align:center; font-size:1.3rem; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-            <div>${c.rank}</div><div>${c.suit}</div>
-        </div>`;
+        return `<div style="background:white;color:${isRed?'#e17055':'#2d3436'};border-radius:8px;padding:8px 12px;min-width:48px;text-align:center;font-size:1.2rem;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.4);">
+            <div>${c.rank}</div><div>${c.suit}</div></div>`;
     },
 
     async deal() {
-        const amountRaw = parseFloat(document.getElementById('bac-bet-amount').value || '0');
-        const playerPair = parseFloat(document.getElementById('bac-player-pair').value || '0');
-        const bankerPair = parseFloat(document.getElementById('bac-banker-pair').value || '0');
+        const player  = parseFloat(document.getElementById('bac-bet-player').value  || 0);
+        const tie     = parseFloat(document.getElementById('bac-bet-tie').value     || 0);
+        const banker  = parseFloat(document.getElementById('bac-bet-banker').value  || 0);
+        const pp      = parseFloat(document.getElementById('bac-player-pair').value || 0);
+        const bp      = parseFloat(document.getElementById('bac-banker-pair').value || 0);
 
-        if (isNaN(amountRaw) || amountRaw < 0.20) return alert('Scommessa minima €0.20');
+        const total = player + tie + banker + pp + bp;
+        if (total < 0.20) return alert('Inserisci almeno €0.20 su una puntata');
 
-        document.getElementById('bac-deal-btn').disabled = true;
+        const btn = document.getElementById('bac-deal-btn');
+        btn.disabled = true;
         document.getElementById('bac-result').style.display = 'none';
         document.getElementById('bac-player-cards').innerHTML = '';
         document.getElementById('bac-banker-cards').innerHTML = '';
@@ -1821,43 +1811,32 @@ const baccarat = {
 
         const res = await api.request('/baccarat/deal', {
             method: 'POST',
-            body: JSON.stringify({
-                bet_on: this.selectedBet,
-                bet_amount: amountRaw,
-                side_bets: { player_pair: playerPair, banker_pair: bankerPair }
-            })
+            body: JSON.stringify({ player, tie, banker, player_pair: pp, banker_pair: bp })
         });
 
-        document.getElementById('bac-deal-btn').disabled = false;
+        btn.disabled = false;
         if (!res) return;
 
-        // Mostra carte
         document.getElementById('bac-player-cards').innerHTML = res.player.map(c => this.renderCard(c)).join('');
         document.getElementById('bac-banker-cards').innerHTML = res.banker.map(c => this.renderCard(c)).join('');
         document.getElementById('bac-player-score').innerText = res.player_score;
         document.getElementById('bac-banker-score').innerText = res.banker_score;
 
-        // Risultato
-        const winnerLabel = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' }[res.winner];
-        const won = res.payout > 0;
-        const betOnWinner = res.bet_on === res.winner || (res.winner === 'tie' && res.bet_on !== 'tie' && res.payout > 0);
-        const totalBet = amountRaw + playerPair + bankerPair;
-        const profit = res.payout - totalBet;
+        const labels = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' };
+        let msg = '🎴 ' + labels[res.winner] + ' VINCE';
+        if (res.player_pair) msg += '\nCoppia Giocatore! 👑';
+        if (res.banker_pair) msg += '\nCoppia Banco! 👑';
+        msg += res.profit >= 0
+            ? '\n+€' + res.payout.toFixed(2)
+            : '\n-€' + Math.abs(res.profit).toFixed(2);
 
-        let msg = `${winnerLabel} VINCE`;
-        if (res.player_pair) msg += ' · Coppia Giocatore!';
-        if (res.banker_pair) msg += ' · Coppia Banco!';
-        if (res.payout > 0) msg += `\n+€${res.payout.toFixed(2)}`;
-        else msg += `\n-€${totalBet.toFixed(2)}`;
+        const el = document.getElementById('bac-result');
+        el.style.display = 'block';
+        el.style.background = res.profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
+        el.style.color      = res.profit >= 0 ? '#00b894' : '#d63031';
+        el.style.border     = `1px solid ${res.profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)'}`;
+        el.innerText = msg;
 
-        const resultEl = document.getElementById('bac-result');
-        resultEl.style.display = 'block';
-        resultEl.style.background = res.payout > 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
-        resultEl.style.color = res.payout > 0 ? '#00b894' : '#d63031';
-        resultEl.style.border = `1px solid ${res.payout > 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)'}`;
-        resultEl.innerText = msg;
-
-        // Aggiorna saldo
         if (res.new_balance !== undefined) {
             state.balance = res.new_balance;
             document.getElementById('balance-display').innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
