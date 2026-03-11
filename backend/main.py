@@ -1036,10 +1036,6 @@ async def bj_skip_insurance(data: dict, current_user = Depends(get_current_user)
 # VIRTUAL FOOTBALL ROUTER
 app.include_router(virtual_router, prefix="/api/virtual", tags=["Virtual Football"])
 
-# Serve frontend
-frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
-if os.path.exists(frontend_path):
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
 
 
@@ -1103,6 +1099,12 @@ async def baccarat_deal(data: dict, current_user = Depends(get_current_user)):
     result["new_balance"] = float(cursor.fetchone()["balance"])
     conn.close()
     return result
+
+
+# Serve frontend
+frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
