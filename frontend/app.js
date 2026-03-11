@@ -333,6 +333,20 @@ const router = {
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
         if (section === 'virtual') virtual.init();
+        if (section === 'sette-mezzo') {
+            setTimeout(() => {
+                if (!document.getElementById('sm-banco-rule')) {
+                    const dc = document.getElementById('sm-dealer-cards');
+                    if (dc) {
+                        const r = document.createElement('div');
+                        r.id = 'sm-banco-rule';
+                        r.innerText = '🃏 Il banco sta con 5 e oltre';
+                        r.style.cssText = 'margin-top:14px;font-size:0.85rem;color:rgba(255,255,255,0.55);font-style:italic;letter-spacing:0.5px;text-align:center;';
+                        dc.parentElement.appendChild(r);
+                    }
+                }
+            }, 50);
+        }
     }
 };
 
