@@ -1087,7 +1087,7 @@ async def baccarat_deal(data: dict, current_user = Depends(get_current_user)):
 
     bets = {"player": bet_player, "banker": bet_banker, "tie": bet_tie,
             "player_pair": bet_pp, "banker_pair": bet_bp}
-    result = bac.deal(bets=bets, user_id=u_id)
+    result = bac.deal(bets=bets, user_id=int(u_id))
 
     if result["payout"] > 0:
         cursor.execute(
