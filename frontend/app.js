@@ -1788,53 +1788,44 @@ window.onload = () => {
 
 // --- BACCARAT ---
 const baccarat = {
-    renderCard(c) {
-        const isRed = c.suit === '♥' || c.suit === '♦';
-        return `<div style="background:white;color:${isRed?'#e17055':'#2d3436'};border-radius:8px;padding:8px 10px;min-width:44px;text-align:center;font-size:1.1rem;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.4);">
-            <div>${c.rank}</div><div>${c.suit}</div></div>`;
-    },
-
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
-    animateCard(container, card, delay) {
+    animateCard(container, card) {
         return new Promise(resolve => {
-            setTimeout(() => {
-                const isRed = card.suit === '♥' || card.suit === '♦';
-                const el = document.createElement('div');
-                el.style.cssText = `background:white;color:${isRed?'#e17055':'#2d3436'};border-radius:8px;padding:8px 10px;min-width:44px;text-align:center;font-size:1.1rem;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.5);opacity:0;transform:translateY(-30px) scale(0.8);transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);`;
-                el.innerHTML = `<div>${card.rank}</div><div>${card.suit}</div>`;
-                container.appendChild(el);
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        el.style.opacity = '1';
-                        el.style.transform = 'translateY(0) scale(1)';
-                    });
-                });
-                setTimeout(resolve, 380);
-            }, delay);
+            const isRed = card.suit === '♥' || card.suit === '♦';
+            const el = document.createElement('div');
+            el.style.cssText = 'background:white;color:' + (isRed ? '#e17055' : '#2d3436') + ';border-radius:8px;padding:8px 10px;min-width:44px;text-align:center;font-size:1.1rem;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.5);opacity:0;transform:translateY(-25px) scale(0.85);transition:opacity 0.3s ease,transform 0.3s cubic-bezier(0.34,1.4,0.64,1);display:inline-block;margin:2px;';
+            el.innerHTML = '<div>' + card.rank + '</div><div>' + card.suit + '</div>';
+            container.appendChild(el);
+            requestAnimationFrame(() => { requestAnimationFrame(() => {
+                el.style.opacity = '1';
+                el.style.transform = 'translateY(0) scale(1)';
+            }); });
+            setTimeout(resolve, 350);
         });
     },
 
     async deal() {
-        const player  = parseFloat(document.getElementById('bac-bet-player').value  || 0);
-        const tie     = parseFloat(document.getElementById('bac-bet-tie').value     || 0);
-        const banker  = parseFloat(document.getElementById('bac-bet-banker').value  || 0);
-        const pp      = parseFloat(document.getElementById('bac-player-pair').value || 0);
-        const bp      = parseFloat(document.getElementById('bac-banker-pair').value || 0);
+        const player = parseFloat(document.getElementById('bac-bet-player').value || 0);
+        const tie    = parseFloat(document.getElementById('bac-bet-tie').value    || 0);
+        const banker = parseFloat(document.getElementById('bac-bet-banker').value || 0);
+        const pp     = parseFloat(document.getElementById('bac-player-pair').value || 0);
+        const bp     = parseFloat(document.getElementById('bac-banker-pair').value || 0);
 
         const total = player + tie + banker + pp + bp;
         if (total < 0.20) return alert('Inserisci almeno €0.20 su una puntata');
 
-        const btn = document.getElementById('bac-deal-btn');
-        btn.disabled = true;
-        document.getElementById('bac-result').style.display = 'none';
-
+        const btn         = document.getElementById('bac-deal-btn');
         const playerCards = document.getElementById('bac-player-cards');
         const bankerCards = document.getElementById('bac-banker-cards');
+        const resultEl    = document.getElementById('bac-result');
+
+        btn.disabled = true;
         playerCards.innerHTML = '';
         bankerCards.innerHTML = '';
-        document.getElementById('bac-player-score').innerText = '—';
-        document.getElementById('bac-banker-score').innerText = '—';
+        resultEl.style.display = 'none';
+        document.getElementById('bac-player-score').innerText = '-';
+        document.getElementById('bac-banker-score').innerText = '-';
 
         const res = await api.request('/baccarat/deal', {
             method: 'POST',
@@ -1843,51 +1834,50 @@ const baccarat = {
 
         if (!res) { btn.disabled = false; return; }
 
-        // Aggiorna saldo subito dopo la risposta
-        if (res.new_balance !== undefined) {
-            state.balance = res.new_balance;
-            document.getElementById('balance-display').innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
-        }
-
-        // Animazione distribuzione: P1, B1, P2, B2 (+ terza carta se presente)
-        const allCards = [
-            { container: playerCards, card: res.player[0] },
-            { container: bankerCards, card: res.banker[0] },
-            { container: playerCards, card: res.player[1] },
-            { container: bankerCards, card: res.banker[1] },
+        // Animazione: P1, B1, P2, B2, [P3], [B3]
+        const seq = [
+            { c: playerCards, card: res.player[0] },
+            { c: bankerCards, card: res.banker[0] },
+            { c: playerCards, card: res.player[1] },
+            { c: bankerCards, card: res.banker[1] },
         ];
-        if (res.player[2]) allCards.push({ container: playerCards, card: res.player[2] });
-        if (res.banker[2]) allCards.push({ container: bankerCards, card: res.banker[2] });
+        if (res.player[2]) seq.push({ c: playerCards, card: res.player[2] });
+        if (res.banker[2]) seq.push({ c: bankerCards, card: res.banker[2] });
 
-        // Distribuisci carte una per una con delay
-        for (let i = 0; i < allCards.length; i++) {
-            await this.animateCard(allCards[i].container, allCards[i].card, 0);
-            await this.sleep(120);
+        for (const item of seq) {
+            await this.animateCard(item.c, item.card);
+            await this.sleep(100);
         }
 
-        // Mostra punteggi dopo le carte
+        // Punteggi
         await this.sleep(200);
         document.getElementById('bac-player-score').innerText = res.player_score;
         document.getElementById('bac-banker-score').innerText = res.banker_score;
 
-        // Mostra risultato dopo i punteggi
+        // Risultato
         await this.sleep(400);
         const labels = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' };
-        let msg = '🎴 ' + labels[res.winner] + ' VINCE';
-        if (res.player_pair) msg += '\n👑 ' + (res.player_pair_label || 'Coppia Giocatore');
-        if (res.banker_pair) msg += '\n👑 ' + (res.banker_pair_label || 'Coppia Banco');
+        let msg = labels[res.winner] + ' VINCE';
+        if (res.player_pair) msg += '\nCoppia Giocatore: ' + (res.player_pair_label || '');
+        if (res.banker_pair) msg += '\nCoppia Banco: ' + (res.banker_pair_label || '');
         const profit = res.profit;
         msg += profit >= 0 ? '\n+€' + res.payout.toFixed(2) : '\n-€' + Math.abs(profit).toFixed(2);
 
-        const el = document.getElementById('bac-result');
-        el.style.cssText += ';opacity:0;transition:opacity 0.4s;';
-        el.style.display = 'block';
-        el.style.background = profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
-        el.style.color      = profit >= 0 ? '#00b894' : '#d63031';
-        el.style.border     = `1px solid ${profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)'}`;
-        el.innerText = msg;
-        requestAnimationFrame(() => { requestAnimationFrame(() => { el.style.opacity = '1'; }); });
+        resultEl.innerText = msg;
+        resultEl.style.background = profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
+        resultEl.style.color      = profit >= 0 ? '#00b894' : '#d63031';
+        resultEl.style.border     = '1px solid ' + (profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)');
+        resultEl.style.opacity    = '0';
+        resultEl.style.transition = 'opacity 0.4s';
+        resultEl.style.display    = 'block';
+        requestAnimationFrame(() => { requestAnimationFrame(() => { resultEl.style.opacity = '1'; }); });
 
+        // Saldo dopo risultato
+        await this.sleep(300);
+        if (res.new_balance !== undefined) {
+            state.balance = res.new_balance;
+            document.getElementById('balance-display').innerText = 'Saldo: €' + res.new_balance.toFixed(2);
+        }
         btn.disabled = false;
     }
 };
