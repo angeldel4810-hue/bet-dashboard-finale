@@ -1827,8 +1827,8 @@ const baccarat = {
 
         const labels = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' };
         let msg = '🎴 ' + labels[res.winner] + ' VINCE';
-        if (res.player_pair) msg += '\n👑 Coppia Giocatore!';
-        if (res.banker_pair) msg += '\n👑 Coppia Banco!';
+        if (res.player_pair) msg += '\n👑 ' + (res.player_pair_label || 'Coppia Giocatore');
+        if (res.banker_pair) msg += '\n👑 ' + (res.banker_pair_label || 'Coppia Banco');
         const profit = res.profit;
         msg += profit >= 0 ? '\n+€' + res.payout.toFixed(2) : '\n-€' + Math.abs(profit).toFixed(2);
 
