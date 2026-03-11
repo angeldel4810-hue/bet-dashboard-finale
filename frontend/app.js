@@ -1889,7 +1889,9 @@ window.baccarat = {
             await this.sleep(300);
             if (res.new_balance !== undefined) {
                 state.balance = res.new_balance;
-                document.getElementById('balance-display').innerText = 'Saldo: €' + res.new_balance.toFixed(2);
+                document.getElementById('user-balance-nav').innerText = 'Saldo: €' + res.new_balance.toFixed(2);
+            } else {
+                ui.fetchBalance();
             }
         } catch (err) {
             console.error('Baccarat error:', err);
