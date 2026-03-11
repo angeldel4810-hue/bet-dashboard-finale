@@ -725,3 +725,56 @@ table tr:hover td {
         gap: 8px;
     }
 }
+
+/* Nasconde la mobile nav su schermi grandi, indipendentemente dalle classi JS */
+@media (min-width: 601px) {
+    #mobile-nav {
+        display: none !important;
+    }
+}
+
+/* =============================================
+   CRASH: layout mobile ottimizzato
+   ============================================= */
+@media (max-width: 600px) {
+    #section-crash .container,
+    [id="section-crash"] > div {
+        padding: 0.5rem !important;
+    }
+
+    /* Il layout principale crash diventa colonna: grafico sopra, controlli sotto */
+    #section-crash [style*="display: grid"],
+    #section-crash [style*="display:grid"] {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+
+    /* Canvas grafico a tutta larghezza */
+    #crash-canvas {
+        width: 100% !important;
+        min-height: 200px !important;
+        height: 200px !important;
+    }
+
+    /* Moltiplicatore più grande e centrato */
+    #crash-multiplier {
+        font-size: 3.5rem !important;
+        text-align: center;
+    }
+
+    /* Storia recente in griglia compatta */
+    #crash-history {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+        justify-content: center;
+    }
+
+    /* Bottone scommetti a tutta larghezza */
+    #crash-bet-btn {
+        width: 100% !important;
+        padding: 1rem !important;
+        font-size: 1rem !important;
+    }
+}

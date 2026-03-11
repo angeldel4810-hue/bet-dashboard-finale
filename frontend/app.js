@@ -1290,7 +1290,10 @@ window.crash = {
 
         state.crash.ws.onclose = () => {
             console.log("WebSocket Crash chiuso. Riconnessione tra 3 secondi...");
-            setTimeout(() => this.connect(), 3000);
+            setTimeout(() => { this.connect(); this.drawGraph(); }, 3000);
+        };
+        state.crash.ws.onerror = () => {
+            console.log("WebSocket Crash errore. Riconnessione...");
         };
     },
     handleMessage(data) {
@@ -1298,6 +1301,24 @@ window.crash = {
             state.crash.status = data.status;
             state.crash.multiplier = data.multiplier;
             state.crash.history = data.history || [];
+            // Aggiorna il testo status in base allo stato iniziale ricevuto
+            const statusEl = document.getElementById('crash-status-text');
+            const multEl = document.getElementById('crash-multiplier');
+            if (statusEl && multEl) {
+                if (data.status === 'waiting') {
+                    statusEl.innerText = 'Prossimo round in arrivo...';
+                    multEl.innerText = '1.00x';
+                    multEl.style.color = 'white';
+                } else if (data.status === 'running') {
+                    statusEl.innerText = 'In volo...';
+                    multEl.innerText = `${data.multiplier.toFixed(2)}x`;
+                    multEl.style.color = '#ffbb00';
+                } else if (data.status === 'crashed') {
+                    statusEl.innerText = 'CRASH!';
+                    multEl.innerText = `${data.multiplier.toFixed(2)}x`;
+                    multEl.style.color = 'var(--danger)';
+                }
+            }
             this.updateUI();
             this.updateHistory();
         } else if (data.type === 'waiting') {
