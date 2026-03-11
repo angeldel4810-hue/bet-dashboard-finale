@@ -1787,7 +1787,7 @@ window.onload = () => {
 };
 
 // --- BACCARAT ---
-const baccarat = {
+window.baccarat = {
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
     animateCard(container, card) {
