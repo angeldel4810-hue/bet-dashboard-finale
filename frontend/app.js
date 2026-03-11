@@ -7,6 +7,7 @@ const state = {
     searchQuery: '',
     settings: null,
     crash: {
+        rafId: null,
         ws: null,
         status: 'waiting',
         multiplier: 1.0,
@@ -329,9 +330,25 @@ const router = {
         const targetMobNav = document.getElementById(targetMobNavId);
         if (targetMobNav) targetMobNav.classList.add('active');
 
+        // Chiudi WS crash se non siamo nella sezione crash
+        if (section !== 'crash' && state.crash && state.crash.ws && state.crash.ws.readyState === WebSocket.OPEN) {
+            state.crash.ws.onclose = null; // evita auto-reconnect
+            state.crash.ws.close();
+            state.crash.ws = null;
+        }
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
+        else if (typeof crash !== 'undefined' && crash.stopGraph) crash.stopGraph();
+        // Ferma il polling virtual se si naviga altrove
+        if (section !== 'virtual' && state.virtual && state.virtual.polling) {
+            clearInterval(state.virtual.polling);
+            state.virtual.polling = null;
+        }
+        if (section !== 'virtual' && state.betsPolling) {
+            clearInterval(state.betsPolling);
+            state.betsPolling = null;
+        }
         if (section === 'virtual') { virtual.init(); if (window.innerWidth <= 600) virtual.applyMobileLayout(); }
     }
 };
@@ -695,11 +712,13 @@ window.blackjack = {
 window.dashboard = {
     init() {
         this.fetchOdds();
-        // Carichiamo subito le impostazioni per evitare attese nel render
         api.request('/settings').then(s => {
             if (s) state.settings = s;
         });
-        setInterval(() => this.updateTimer(), 1000);
+        // Evita intervalli duplicati
+        if (!state.dashboardInterval) {
+            state.dashboardInterval = setInterval(() => this.updateTimer(), 1000);
+        }
     },
     async fetchOdds() {
         const odds = await api.request('/odds');
@@ -1457,15 +1476,29 @@ window.crash = {
             </div>
         `).join('');
     },
+    stopGraph() {
+        if (state.crash.rafId) {
+            cancelAnimationFrame(state.crash.rafId);
+            state.crash.rafId = null;
+        }
+    },
     drawGraph() {
+        // Ferma eventuali loop precedenti prima di avviarne uno nuovo
+        this.stopGraph();
+
         const canvas = document.getElementById('crash-canvas');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
+        canvas.width = canvas.offsetWidth || 300;
+        canvas.height = canvas.offsetHeight || 200;
 
         const animate = () => {
-            if (document.getElementById('section-crash').classList.contains('hidden')) return;
+            const section = document.getElementById('section-crash');
+            // Ferma il loop se la sezione non è più visibile
+            if (!section || section.classList.contains('hidden')) {
+                state.crash.rafId = null;
+                return;
+            }
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1474,19 +1507,16 @@ window.crash = {
                 ctx.strokeStyle = '#ffbb00';
                 ctx.lineWidth = 4;
                 ctx.moveTo(0, canvas.height);
-
-                // Disegna una curva basata sul moltiplicatore attuale
                 const progress = Math.min((state.crash.multiplier - 1) / 10, 1);
                 const targetX = canvas.width * 0.8 * progress;
                 const targetY = canvas.height - (canvas.height * 0.8 * progress);
-
                 ctx.quadraticCurveTo(canvas.width * 0.4, canvas.height, targetX, targetY);
                 ctx.stroke();
             }
 
-            requestAnimationFrame(animate);
+            state.crash.rafId = requestAnimationFrame(animate);
         };
-        animate();
+        state.crash.rafId = requestAnimationFrame(animate);
     }
 };
 
