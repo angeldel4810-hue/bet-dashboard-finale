@@ -1047,24 +1047,19 @@ if os.path.exists(frontend_path):
 
 @app.post("/api/baccarat/deal")
 async def baccarat_deal(data: dict, current_user = Depends(get_current_user)):
-    bet_on = data.get("bet_on", "player")  # player | banker | tie
-    bet_amount = float(data.get("bet_amount", 0))
-    side_bets = data.get("side_bets", {})
-    player_pair_bet = float(side_bets.get("player_pair", 0))
-    banker_pair_bet = float(side_bets.get("banker_pair", 0))
+    bet_player  = float(data.get("player",  0) or 0)
+    bet_banker  = float(data.get("banker",  0) or 0)
+    bet_tie     = float(data.get("tie",     0) or 0)
+    bet_pp      = float(data.get("player_pair", 0) or 0)
+    bet_bp      = float(data.get("banker_pair", 0) or 0)
 
-    if bet_on not in ["player", "banker", "tie"]:
-        return JSONResponse({"error": "Puntata non valida"}, status_code=400)
-    if bet_amount < 0.20:
-        return JSONResponse({"error": "Scommessa minima €0.20"}, status_code=400)
-
-    total_bet = bet_amount + player_pair_bet + banker_pair_bet
-    if total_bet <= 0:
-        return JSONResponse({"error": "Nessuna puntata"}, status_code=400)
+    total = bet_player + bet_banker + bet_tie + bet_pp + bet_bp
+    if total < 0.20:
+        return JSONResponse({"error": "Puntata minima €0.20"}, status_code=400)
 
     conn = get_db()
     cursor = conn.cursor()
-    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    is_postgres = hasattr(conn, "get_dsn_parameters")
 
     u_id = current_user.get("id")
     if not u_id:
@@ -1078,29 +1073,22 @@ async def baccarat_deal(data: dict, current_user = Depends(get_current_user)):
         "SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?",
         (u_id,)
     )
-    row = cursor.fetchone()
-    balance = float(row["balance"])
+    balance = float(cursor.fetchone()["balance"])
 
-    if balance < total_bet:
+    if balance < total:
         conn.close()
         return JSONResponse({"error": "Saldo insufficiente"}, status_code=400)
 
-    # Scala saldo
     cursor.execute(
         "UPDATE users SET balance = balance - %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance - ? WHERE id = ?",
-        (total_bet, u_id)
+        (total, u_id)
     )
     conn.commit()
 
-    # Gioca
-    result = bac.deal(
-        bet_on=bet_on,
-        bet_amount=bet_amount,
-        side_bets={"player_pair": player_pair_bet, "banker_pair": banker_pair_bet},
-        user_id=u_id
-    )
+    bets = {"player": bet_player, "banker": bet_banker, "tie": bet_tie,
+            "player_pair": bet_pp, "banker_pair": bet_bp}
+    result = bac.deal(bets=bets, user_id=u_id)
 
-    # Accredita vincita
     if result["payout"] > 0:
         cursor.execute(
             "UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?",
@@ -1108,8 +1096,12 @@ async def baccarat_deal(data: dict, current_user = Depends(get_current_user)):
         )
         conn.commit()
 
+    cursor.execute(
+        "SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?",
+        (u_id,)
+    )
+    result["new_balance"] = float(cursor.fetchone()["balance"])
     conn.close()
-    result["new_balance"] = balance - total_bet + result["payout"]
     return result
 
 if __name__ == "__main__":
