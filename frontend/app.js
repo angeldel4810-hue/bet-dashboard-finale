@@ -98,6 +98,9 @@ window.ui = {
     showDashboard() {
         document.getElementById('login-page').classList.add('hidden');
         document.getElementById('main-dashboard').classList.remove('hidden');
+        // Mostra navbar mobile
+        const mobileNav = document.getElementById('mobile-nav');
+        if (mobileNav) mobileNav.style.display = 'flex';
         if (state.role === 'admin') {
             document.getElementById('nav-admin').classList.remove('hidden');
             const mobAdmin = document.getElementById('mob-nav-admin');
