@@ -819,17 +819,21 @@ table tr:hover td {
     }
 }
 
-/* Navbar mobile sempre visibile - spazio sotto il contenuto */
+/* ═══ NAVBAR MOBILE SEMPRE FISSA IN BASSO ═══ */
 @media (max-width: 768px) {
-    body, .container, #app, main {
-        padding-bottom: 80px !important;
-    }
     .mobile-nav {
+        display: flex !important;
         position: fixed !important;
         bottom: 0 !important;
         left: 0 !important;
         width: 100% !important;
-        z-index: 9999 !important;
-        display: flex !important;
+        z-index: 99999 !important;
+        background: #161b22 !important;
+        border-top: 1px solid var(--border-color) !important;
+        padding: 10px 0 !important;
+        justify-content: space-around !important;
+    }
+    body {
+        padding-bottom: 75px !important;
     }
 }
