@@ -457,6 +457,18 @@ window.setteMezzo = {
         cardDrawer(sm.dealer_hand, 'sm-dealer-cards');
         cardDrawer(sm.player_hand, 'sm-player-cards');
 
+        // Mostra regola banco se non già presente
+        if (!document.getElementById('sm-banco-rule')) {
+            const dealerContainer = document.getElementById('sm-dealer-cards');
+            if (dealerContainer) {
+                const ruleEl = document.createElement('div');
+                ruleEl.id = 'sm-banco-rule';
+                ruleEl.innerText = '🃏 Il banco sta con 5 e oltre';
+                ruleEl.style.cssText = 'margin-top:12px; font-size:0.8rem; color:rgba(255,255,255,0.45); font-style:italic; letter-spacing:0.5px;';
+                dealerContainer.parentElement.appendChild(ruleEl);
+            }
+        }
+
         document.getElementById('sm-player-score').innerText = sm.player_score || 0;
         document.getElementById('sm-dealer-score').innerText = sm.dealer_score || '?';
 
