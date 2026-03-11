@@ -100,7 +100,7 @@ window.ui = {
         document.getElementById('main-dashboard').classList.remove('hidden');
         // Mostra navbar mobile
         const mobileNav = document.getElementById('mobile-nav');
-        if (mobileNav) mobileNav.style.display = 'flex';
+        if (mobileNav) mobileNav.classList.add("active");
         if (state.role === 'admin') {
             document.getElementById('nav-admin').classList.remove('hidden');
             const mobAdmin = document.getElementById('mob-nav-admin');
@@ -332,21 +332,7 @@ const router = {
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
-        if (section === 'virtual') virtual.init();
-        if (section === 'sette-mezzo') {
-            setTimeout(() => {
-                if (!document.getElementById('sm-banco-rule')) {
-                    const dc = document.getElementById('sm-dealer-cards');
-                    if (dc) {
-                        const r = document.createElement('div');
-                        r.id = 'sm-banco-rule';
-                        r.innerText = '🃏 Il banco sta con 5 e oltre';
-                        r.style.cssText = 'margin-top:14px;font-size:0.85rem;color:rgba(255,255,255,0.55);font-style:italic;letter-spacing:0.5px;text-align:center;';
-                        dc.parentElement.appendChild(r);
-                    }
-                }
-            }, 50);
-        }
+        if (section === 'virtual') { virtual.init(); if (window.innerWidth <= 600) virtual.applyMobileLayout(); }
     }
 };
 
@@ -470,18 +456,6 @@ window.setteMezzo = {
 
         cardDrawer(sm.dealer_hand, 'sm-dealer-cards');
         cardDrawer(sm.player_hand, 'sm-player-cards');
-
-        // Mostra regola banco se non già presente
-        if (!document.getElementById('sm-banco-rule')) {
-            const dealerContainer = document.getElementById('sm-dealer-cards');
-            if (dealerContainer) {
-                const ruleEl = document.createElement('div');
-                ruleEl.id = 'sm-banco-rule';
-                ruleEl.innerText = '🃏 Il banco sta con 5 e oltre';
-                ruleEl.style.cssText = 'margin-top:12px; font-size:0.8rem; color:rgba(255,255,255,0.45); font-style:italic; letter-spacing:0.5px;';
-                dealerContainer.parentElement.appendChild(ruleEl);
-            }
-        }
 
         document.getElementById('sm-player-score').innerText = sm.player_score || 0;
         document.getElementById('sm-dealer-score').innerText = sm.dealer_score || '?';
@@ -1464,6 +1438,19 @@ window.crash = {
 };
 
 window.virtual = {
+    applyMobileLayout() {
+        if (window.innerWidth > 600) return;
+        setTimeout(() => {
+            const live = document.getElementById("virtual-live-board");
+            const matches = document.getElementById("virtual-matches-container");
+            const standings = document.getElementById("virtual-standings-body");
+            if (live) { live.style.order = "1"; if (live.parentElement) live.parentElement.style.display = "flex", live.parentElement.style.flexDirection = "column"; }
+            if (matches) matches.style.order = "2";
+            const sTable = standings ? standings.closest("table") : null;
+            const sSection = sTable ? sTable.closest(".admin-section, div") : null;
+            if (sSection) sSection.style.order = "3";
+        }, 100);
+    },
     init() {
         if (state.virtual.polling) clearInterval(state.virtual.polling);
         state.virtual.polling = setInterval(() => this.tick(), 1000);
@@ -1813,7 +1800,7 @@ window.onload = () => {
 };
 
 // --- BACCARAT ---
-window.baccarat = {
+const baccarat = {
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
     animateCard(container, card) {
@@ -1831,21 +1818,6 @@ window.baccarat = {
         });
     },
 
-    resetUI() {
-        const playerCards = document.getElementById('bac-player-cards');
-        const bankerCards = document.getElementById('bac-banker-cards');
-        const resultEl    = document.getElementById('bac-result');
-        const btn         = document.getElementById('bac-deal-btn');
-        if (playerCards) playerCards.innerHTML = '';
-        if (bankerCards) bankerCards.innerHTML = '';
-        if (resultEl)    resultEl.style.display = 'none';
-        const ps = document.getElementById('bac-player-score');
-        const bs = document.getElementById('bac-banker-score');
-        if (ps) ps.innerText = '-';
-        if (bs) bs.innerText = '-';
-        if (btn) btn.disabled = false;
-    },
-
     async deal() {
         const player = parseFloat(document.getElementById('bac-bet-player').value || 0);
         const tie    = parseFloat(document.getElementById('bac-bet-tie').value    || 0);
@@ -1861,68 +1833,64 @@ window.baccarat = {
         const bankerCards = document.getElementById('bac-banker-cards');
         const resultEl    = document.getElementById('bac-result');
 
-        // Reset completo della mano precedente prima di iniziare
-        this.resetUI();
         btn.disabled = true;
+        playerCards.innerHTML = '';
+        bankerCards.innerHTML = '';
+        resultEl.style.display = 'none';
+        document.getElementById('bac-player-score').innerText = '-';
+        document.getElementById('bac-banker-score').innerText = '-';
 
-        try {
-            const res = await api.request('/baccarat/deal', {
-                method: 'POST',
-                body: JSON.stringify({ player, tie, banker, player_pair: pp, banker_pair: bp })
-            });
+        const res = await api.request('/baccarat/deal', {
+            method: 'POST',
+            body: JSON.stringify({ player, tie, banker, player_pair: pp, banker_pair: bp })
+        });
 
-            if (!res) { this.resetUI(); return; }
+        if (!res) { btn.disabled = false; return; }
 
-            // Animazione: P1, B1, P2, B2, [P3], [B3]
-            const seq = [
-                { c: playerCards, card: res.player[0] },
-                { c: bankerCards, card: res.banker[0] },
-                { c: playerCards, card: res.player[1] },
-                { c: bankerCards, card: res.banker[1] },
-            ];
-            if (res.player[2]) seq.push({ c: playerCards, card: res.player[2] });
-            if (res.banker[2]) seq.push({ c: bankerCards, card: res.banker[2] });
+        // Animazione: P1, B1, P2, B2, [P3], [B3]
+        const seq = [
+            { c: playerCards, card: res.player[0] },
+            { c: bankerCards, card: res.banker[0] },
+            { c: playerCards, card: res.player[1] },
+            { c: bankerCards, card: res.banker[1] },
+        ];
+        if (res.player[2]) seq.push({ c: playerCards, card: res.player[2] });
+        if (res.banker[2]) seq.push({ c: bankerCards, card: res.banker[2] });
 
-            for (const item of seq) {
-                await this.animateCard(item.c, item.card);
-                await this.sleep(100);
-            }
-
-            // Punteggi
-            await this.sleep(200);
-            document.getElementById('bac-player-score').innerText = res.player_score;
-            document.getElementById('bac-banker-score').innerText = res.banker_score;
-
-            // Risultato
-            await this.sleep(400);
-            const labels = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' };
-            let msg = labels[res.winner] + ' VINCE';
-            if (res.player_pair) msg += '\nCoppia Giocatore: ' + (res.player_pair_label || '');
-            if (res.banker_pair) msg += '\nCoppia Banco: ' + (res.banker_pair_label || '');
-            const profit = res.profit;
-            msg += profit >= 0 ? '\n+€' + res.payout.toFixed(2) : '\n-€' + Math.abs(profit).toFixed(2);
-
-            resultEl.innerText = msg;
-            resultEl.style.background = profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
-            resultEl.style.color      = profit >= 0 ? '#00b894' : '#d63031';
-            resultEl.style.border     = '1px solid ' + (profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)');
-            resultEl.style.opacity    = '0';
-            resultEl.style.transition = 'opacity 0.4s';
-            resultEl.style.display    = 'block';
-            requestAnimationFrame(() => { requestAnimationFrame(() => { resultEl.style.opacity = '1'; }); });
-
-            // Saldo dopo risultato
-            await this.sleep(300);
-            if (res.new_balance !== undefined) {
-                state.balance = res.new_balance;
-                document.getElementById('user-balance-nav').innerText = 'Saldo: €' + res.new_balance.toFixed(2);
-            } else {
-                ui.fetchBalance();
-            }
-        } catch (err) {
-            console.error('Baccarat error:', err);
-        } finally {
-            btn.disabled = false;
+        for (const item of seq) {
+            await this.animateCard(item.c, item.card);
+            await this.sleep(100);
         }
+
+        // Punteggi
+        await this.sleep(200);
+        document.getElementById('bac-player-score').innerText = res.player_score;
+        document.getElementById('bac-banker-score').innerText = res.banker_score;
+
+        // Risultato
+        await this.sleep(400);
+        const labels = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' };
+        let msg = labels[res.winner] + ' VINCE';
+        if (res.player_pair) msg += '\nCoppia Giocatore: ' + (res.player_pair_label || '');
+        if (res.banker_pair) msg += '\nCoppia Banco: ' + (res.banker_pair_label || '');
+        const profit = res.profit;
+        msg += profit >= 0 ? '\n+€' + res.payout.toFixed(2) : '\n-€' + Math.abs(profit).toFixed(2);
+
+        resultEl.innerText = msg;
+        resultEl.style.background = profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
+        resultEl.style.color      = profit >= 0 ? '#00b894' : '#d63031';
+        resultEl.style.border     = '1px solid ' + (profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)');
+        resultEl.style.opacity    = '0';
+        resultEl.style.transition = 'opacity 0.4s';
+        resultEl.style.display    = 'block';
+        requestAnimationFrame(() => { requestAnimationFrame(() => { resultEl.style.opacity = '1'; }); });
+
+        // Saldo dopo risultato
+        await this.sleep(300);
+        if (res.new_balance !== undefined) {
+            state.balance = res.new_balance;
+            document.getElementById('balance-display').innerText = 'Saldo: €' + res.new_balance.toFixed(2);
+        }
+        btn.disabled = false;
     }
 };

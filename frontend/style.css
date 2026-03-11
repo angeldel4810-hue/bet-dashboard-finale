@@ -662,3 +662,66 @@ table tr:hover td {
         gap: 12px;
     }
 }
+
+/* =============================================
+   FIX NAVBAR MOBILE: visibile solo su mobile
+   ============================================= */
+.mobile-nav {
+    display: none !important;
+}
+
+@media (max-width: 600px) {
+    .mobile-nav.active {
+        display: flex !important;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: #161b22;
+        border-top: 1px solid var(--border-color);
+        padding: 10px 0;
+        justify-content: space-around;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+    }
+}
+
+/* =============================================
+   VIRTUAL: layout mobile a una colonna
+   Ordine: risultati/live in cima, quote in mezzo, classifica in fondo
+   ============================================= */
+@media (max-width: 600px) {
+    #section-virtual .container,
+    #section-virtual > div {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Risultati/live sopra */
+    #virtual-live-board {
+        order: 1 !important;
+    }
+
+    /* Quote/partite in mezzo */
+    #virtual-matches-container {
+        order: 2 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px;
+    }
+
+    /* Classifica in basso */
+    #virtual-standings-body,
+    #virtual-standings-body table,
+    table#virtual-standings-body,
+    [id*="standings"] {
+        order: 3 !important;
+    }
+
+    /* Live matches a una colonna */
+    #virtual-live-matches {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px;
+    }
+}
