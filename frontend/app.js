@@ -1441,15 +1441,39 @@ window.virtual = {
     applyMobileLayout() {
         if (window.innerWidth > 600) return;
         setTimeout(() => {
+            // Trova i 3 blocchi principali
             const live = document.getElementById("virtual-live-board");
-            const matches = document.getElementById("virtual-matches-container");
-            const standings = document.getElementById("virtual-standings-body");
-            if (live) { live.style.order = "1"; if (live.parentElement) live.parentElement.style.display = "flex", live.parentElement.style.flexDirection = "column"; }
-            if (matches) matches.style.order = "2";
-            const sTable = standings ? standings.closest("table") : null;
-            const sSection = sTable ? sTable.closest(".admin-section, div") : null;
-            if (sSection) sSection.style.order = "3";
-        }, 100);
+            const matchesEl = document.getElementById("virtual-matches-container");
+            const standingsEl = document.getElementById("virtual-standings-body");
+
+            if (!live || !matchesEl) return;
+
+            // Risale al blocco section contenitore del live board
+            const liveBlock = live;
+            // Blocco partite: il suo parent diretto (la card/section che lo contiene)
+            const matchesBlock = matchesEl.closest(".admin-section") || matchesEl.parentElement;
+            // Blocco classifica: il parent della table degli standings
+            const standingsBlock = standingsEl
+                ? (standingsEl.closest(".admin-section") || standingsEl.closest("table") || standingsEl.parentElement)
+                : null;
+
+            // Parent comune
+            const parent = liveBlock.parentElement;
+            if (!parent) return;
+
+            // Imposta flex column sul parent
+            parent.style.display = "flex";
+            parent.style.flexDirection = "column";
+
+            // Sposta i nodi nell'ordine: live, matches, standings
+            parent.insertBefore(liveBlock, parent.firstChild);
+            if (matchesBlock && matchesBlock !== liveBlock) {
+                parent.insertBefore(matchesBlock, liveBlock.nextSibling);
+            }
+            if (standingsBlock && standingsBlock !== liveBlock && standingsBlock !== matchesBlock) {
+                parent.appendChild(standingsBlock);
+            }
+        }, 300);
     },
     init() {
         if (state.virtual.polling) clearInterval(state.virtual.polling);
@@ -1457,6 +1481,8 @@ window.virtual = {
         this.fetchStatus();
         this.fetchStandings();
         this.fetchMatches();
+        // Riordina layout su mobile dopo che il DOM è pronto
+        if (window.innerWidth <= 600) setTimeout(() => this.applyMobileLayout(), 800);
 
         // Optional: polling for my-bets if on bets section
         if (state.betsPolling) clearInterval(state.betsPolling);
