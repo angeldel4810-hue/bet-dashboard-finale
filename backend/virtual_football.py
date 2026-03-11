@@ -270,8 +270,9 @@ def generate_fixtures(season_id, conn):
         for h, a in matches:
             def get_o(hid, aid):
                 ht, at = teams[hid], teams[aid]
-                exph = max(0.5, (ht["o"] - at["d"] + 50) / 100 * 1.5) + 0.3
-                expa = max(0.4, (at["o"] - ht["d"] + 50) / 100 * 1.5)
+                # Gol attesi realistici (media Serie A ~2.6 gol/partita)
+                exph = max(0.8, (ht["o"] - at["d"] + 75) / 100 * 2.2 + 0.25)
+                expa = max(0.6, (at["o"] - ht["d"] + 65) / 100 * 2.0)
                 p1, px, p2, po, pgg = 0, 0, 0, 0, 0
                 combo, exact = {}, {}
                 for hg in range(7):
