@@ -1794,6 +1794,27 @@ const baccarat = {
             <div>${c.rank}</div><div>${c.suit}</div></div>`;
     },
 
+    sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
+
+    animateCard(container, card, delay) {
+        return new Promise(resolve => {
+            setTimeout(() => {
+                const isRed = card.suit === '♥' || card.suit === '♦';
+                const el = document.createElement('div');
+                el.style.cssText = `background:white;color:${isRed?'#e17055':'#2d3436'};border-radius:8px;padding:8px 10px;min-width:44px;text-align:center;font-size:1.1rem;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.5);opacity:0;transform:translateY(-30px) scale(0.8);transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);`;
+                el.innerHTML = `<div>${card.rank}</div><div>${card.suit}</div>`;
+                container.appendChild(el);
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        el.style.opacity = '1';
+                        el.style.transform = 'translateY(0) scale(1)';
+                    });
+                });
+                setTimeout(resolve, 380);
+            }, delay);
+        });
+    },
+
     async deal() {
         const player  = parseFloat(document.getElementById('bac-bet-player').value  || 0);
         const tie     = parseFloat(document.getElementById('bac-bet-tie').value     || 0);
@@ -1807,8 +1828,11 @@ const baccarat = {
         const btn = document.getElementById('bac-deal-btn');
         btn.disabled = true;
         document.getElementById('bac-result').style.display = 'none';
-        document.getElementById('bac-player-cards').innerHTML = '<span style="color:var(--text-secondary);font-size:0.85rem;">Distribuzione...</span>';
-        document.getElementById('bac-banker-cards').innerHTML = '';
+
+        const playerCards = document.getElementById('bac-player-cards');
+        const bankerCards = document.getElementById('bac-banker-cards');
+        playerCards.innerHTML = '';
+        bankerCards.innerHTML = '';
         document.getElementById('bac-player-score').innerText = '—';
         document.getElementById('bac-banker-score').innerText = '—';
 
@@ -1817,14 +1841,37 @@ const baccarat = {
             body: JSON.stringify({ player, tie, banker, player_pair: pp, banker_pair: bp })
         });
 
-        btn.disabled = false;
-        if (!res) return;
+        if (!res) { btn.disabled = false; return; }
 
-        document.getElementById('bac-player-cards').innerHTML = res.player.map(c => this.renderCard(c)).join('');
-        document.getElementById('bac-banker-cards').innerHTML = res.banker.map(c => this.renderCard(c)).join('');
+        // Aggiorna saldo subito dopo la risposta
+        if (res.new_balance !== undefined) {
+            state.balance = res.new_balance;
+            document.getElementById('balance-display').innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
+        }
+
+        // Animazione distribuzione: P1, B1, P2, B2 (+ terza carta se presente)
+        const allCards = [
+            { container: playerCards, card: res.player[0] },
+            { container: bankerCards, card: res.banker[0] },
+            { container: playerCards, card: res.player[1] },
+            { container: bankerCards, card: res.banker[1] },
+        ];
+        if (res.player[2]) allCards.push({ container: playerCards, card: res.player[2] });
+        if (res.banker[2]) allCards.push({ container: bankerCards, card: res.banker[2] });
+
+        // Distribuisci carte una per una con delay
+        for (let i = 0; i < allCards.length; i++) {
+            await this.animateCard(allCards[i].container, allCards[i].card, 0);
+            await this.sleep(120);
+        }
+
+        // Mostra punteggi dopo le carte
+        await this.sleep(200);
         document.getElementById('bac-player-score').innerText = res.player_score;
         document.getElementById('bac-banker-score').innerText = res.banker_score;
 
+        // Mostra risultato dopo i punteggi
+        await this.sleep(400);
         const labels = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' };
         let msg = '🎴 ' + labels[res.winner] + ' VINCE';
         if (res.player_pair) msg += '\n👑 ' + (res.player_pair_label || 'Coppia Giocatore');
@@ -1833,15 +1880,14 @@ const baccarat = {
         msg += profit >= 0 ? '\n+€' + res.payout.toFixed(2) : '\n-€' + Math.abs(profit).toFixed(2);
 
         const el = document.getElementById('bac-result');
+        el.style.cssText += ';opacity:0;transition:opacity 0.4s;';
         el.style.display = 'block';
         el.style.background = profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
         el.style.color      = profit >= 0 ? '#00b894' : '#d63031';
         el.style.border     = `1px solid ${profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)'}`;
         el.innerText = msg;
+        requestAnimationFrame(() => { requestAnimationFrame(() => { el.style.opacity = '1'; }); });
 
-        if (res.new_balance !== undefined) {
-            state.balance = res.new_balance;
-            document.getElementById('balance-display').innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
-        }
+        btn.disabled = false;
     }
 };
