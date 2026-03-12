@@ -1816,14 +1816,14 @@ window.virtual = {
 window.baccarat = {
     // Fiches disponibili: valore e colore
     CHIPS: [
-        { value: 0.20, color: '#bbb',    label: '0.20' },
-        { value: 0.50, color: '#a0522d', label: '0.50' },
-        { value: 1,    color: '#1a73e8', label: '1' },
-        { value: 2,    color: '#28a745', label: '2' },
-        { value: 5,    color: '#e63946', label: '5' },
-        { value: 10,   color: '#6f42c1', label: '10' },
-        { value: 25,   color: '#fd7e14', label: '25' },
-        { value: 50,   color: '#ffd700', label: '50' },
+        { value: 0.20, color: '#bbb',    label: '0.20', id: '020' },
+        { value: 0.50, color: '#a0522d', label: '0.50', id: '050' },
+        { value: 1,    color: '#1a73e8', label: '1',    id: '1' },
+        { value: 2,    color: '#28a745', label: '2',    id: '2' },
+        { value: 5,    color: '#e63946', label: '5',    id: '5' },
+        { value: 10,   color: '#6f42c1', label: '10',   id: '10' },
+        { value: 25,   color: '#fd7e14', label: '25',   id: '25' },
+        { value: 50,   color: '#ffd700', label: '50',   id: '50' },
     ],
     selectedChip: 1,
 
@@ -1831,8 +1831,8 @@ window.baccarat = {
         const container = document.getElementById('bac-chips');
         if (!container) return;
         container.innerHTML = this.CHIPS.map(c => `
-            <div id="bac-chip-${c.value}"
-                 onclick="baccarat.selectChip(${c.value})"
+            <div id="bac-chip-${c.id}"
+                 onclick="baccarat.selectChip('${c.id}', ${c.value})"
                  style="
                     width:52px; height:52px; border-radius:50%;
                     background: ${c.color};
@@ -1846,11 +1846,11 @@ window.baccarat = {
         `).join('');
     },
 
-    selectChip(val) {
+    selectChip(chipId, val) {
         this.selectedChip = val;
         // Aggiorna bordi
         this.CHIPS.forEach(c => {
-            const el = document.getElementById(`bac-chip-${c.value}`);
+            const el = document.getElementById(`bac-chip-${c.id}`);
             if (!el) return;
             el.style.border = `3px solid ${c.value === val ? 'white' : 'rgba(255,255,255,0.3)'}`;
             el.style.boxShadow = c.value === val ? '0 0 12px white' : '0 2px 6px rgba(0,0,0,0.5)';
@@ -1860,7 +1860,10 @@ window.baccarat = {
     setBet(type) {
         if (state.baccarat.status !== 'betting') return;
         const amount = this.selectedChip;
-        state.baccarat.bets[type] = Math.round(((state.baccarat.bets[type] || 0) + amount) * 100) / 100;
+        // Usa interi (centesimi) per evitare floating point
+        const currentCents = Math.round((state.baccarat.bets[type] || 0) * 100);
+        const addCents = Math.round(amount * 100);
+        state.baccarat.bets[type] = (currentCents + addCents) / 100;
         this.updateUI();
     },
 
@@ -1871,8 +1874,9 @@ window.baccarat = {
     },
 
     async deal() {
-        const total = Object.values(state.baccarat.bets).reduce((a, b) => a + b, 0);
-        if (total < 0.20) return alert("Puntata minima €0.20!");
+        const totalCents = Object.values(state.baccarat.bets).reduce((a, b) => a + Math.round(b * 100), 0);
+        const total = totalCents / 100;
+        if (totalCents < 20) return alert("Puntata minima €0.20!");
         if (total > state.balance) return alert("Saldo insufficiente");
 
         state.baccarat.status = 'dealing';
@@ -1918,7 +1922,7 @@ window.baccarat = {
 
     updateUI() {
         // Chips init if needed
-        if (!document.getElementById('bac-chip-0.2')) this.initChips();
+        if (!document.getElementById('bac-chip-020')) this.initChips();
 
         const pCards = document.getElementById('bac-player-cards');
         const bCards = document.getElementById('bac-banker-cards');
