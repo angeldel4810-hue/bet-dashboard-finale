@@ -118,6 +118,27 @@ odds_cache = {
 }
 odds_lock = asyncio.Lock()
 
+@app.get("/api/odds/status")
+async def odds_status(user = Depends(get_current_user)):
+    """Mostra quando e' stata l'ultima fetch e quando sara' la prossima."""
+    ts = odds_cache.get('timestamp', 0)
+    if ts == 0:
+        return {"last_fetch": None, "next_fetch_in_minutes": 0, "cached_events": 0}
+    elapsed = time.time() - ts
+    remaining = max(0, 21600 - elapsed)
+    return {
+        "last_fetch": datetime.fromtimestamp(ts).strftime('%d/%m/%Y %H:%M'),
+        "next_fetch_in_minutes": round(remaining / 60),
+        "cached_events": len(odds_cache.get('data', [])),
+        "source": odds_cache.get('source', ''),
+    }
+
+@app.post("/api/odds/force-refresh", dependencies=[Depends(check_admin)])
+async def force_odds_refresh():
+    """Admin: forza il refresh immediato delle quote (azzera il timestamp della cache)."""
+    odds_cache['timestamp'] = 0
+    return {"message": "Cache azzerata. Il prossimo /api/odds fara' una nuova chiamata all\'API."}
+
 @app.get("/api/odds")
 async def fetch_odds(user = Depends(get_current_user)):
     global odds_cache, odds_lock
@@ -134,8 +155,8 @@ async def fetch_odds(user = Depends(get_current_user)):
     async with odds_lock:
         current_time = time.time()
         
-        # Use cached odds if under 3600 seconds (1 hour) old and settings haven't changed
-        if (current_time - odds_cache['timestamp'] < 3600) and \
+        # Cache 6 ore — risparmia crediti API
+        if (current_time - odds_cache['timestamp'] < 21600) and \
            (odds_cache['source'] == source) and \
            (odds_cache['provider'] == api_provider) and \
            (odds_cache['sports'] == sports_str) and \
