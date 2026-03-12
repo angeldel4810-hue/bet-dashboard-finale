@@ -785,11 +785,39 @@
                     <div id="admin-tab-bets" class="admin-tab-content hidden">
                         <div class="admin-section">
                             <h2>Validazione Giocate Globali</h2>
-                            <p style="color:var(--text-secondary); margin-bottom:1rem; font-size:0.9rem;">Controlla
-                                e
-                                conferma
-                                qui se le giocate sono vincenti o perdenti oppure annullale rimborsando l'utente.
-                            </p>
+                            <p style="color:var(--text-secondary); margin-bottom:0.5rem; font-size:0.9rem;">Controlla e conferma le giocate degli utenti.</p>
+
+                            <!-- Filtri admin bets -->
+                            <div style="display:flex; flex-wrap:wrap; gap:0.6rem; align-items:center; margin-bottom:1.2rem;">
+                                <!-- Filtri categoria -->
+                                <div id="abf-sport" onclick="admin.toggleBetFilter('sport')"
+                                    style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:5px 12px; border-radius:20px; border:2px solid #3498db; background:rgba(52,152,219,0.18); user-select:none; transition:all 0.15s;">
+                                    <span id="abf-sport-check">✅</span>
+                                    <span style="font-size:0.78rem; font-weight:700; color:#3498db;">⚽ Sport</span>
+                                </div>
+                                <div id="abf-virtual" onclick="admin.toggleBetFilter('virtual')"
+                                    style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:5px 12px; border-radius:20px; border:2px solid #9b59b6; background:rgba(155,89,182,0.18); user-select:none; transition:all 0.15s;">
+                                    <span id="abf-virtual-check">✅</span>
+                                    <span style="font-size:0.78rem; font-weight:700; color:#9b59b6;">🕹️ Virtuali</span>
+                                </div>
+                                <div id="abf-casino" onclick="admin.toggleBetFilter('casino')"
+                                    style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:5px 12px; border-radius:20px; border:2px solid #e67e22; background:rgba(230,126,34,0.18); user-select:none; transition:all 0.15s;">
+                                    <span id="abf-casino-check">✅</span>
+                                    <span style="font-size:0.78rem; font-weight:700; color:#e67e22;">🎰 Casinò</span>
+                                </div>
+                                <!-- Filtro stato -->
+                                <select id="abf-status" onchange="admin.renderAdminBets()"
+                                    style="padding:5px 10px; border-radius:20px; border:2px solid var(--border-color); background:var(--card-bg); color:var(--text-primary); font-size:0.78rem; cursor:pointer;">
+                                    <option value="">Tutti gli stati</option>
+                                    <option value="pending">⏳ In corso</option>
+                                    <option value="won">✅ Vinte</option>
+                                    <option value="lost">❌ Perse</option>
+                                </select>
+                                <!-- Ricerca utente -->
+                                <input id="abf-user" oninput="admin.renderAdminBets()" placeholder="🔍 Cerca utente..."
+                                    style="padding:5px 12px; border-radius:20px; border:2px solid var(--border-color); background:var(--card-bg); color:var(--text-primary); font-size:0.78rem; flex:1; min-width:140px;" />
+                            </div>
+
                             <div id="admin-bets-container">
                                 <!-- Caricato dinamicamente -->
                             </div>
