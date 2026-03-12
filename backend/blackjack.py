@@ -7,18 +7,19 @@ class BlackjackEngine:
         self.ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
         self.games: Dict[str, Dict[str, Any]] = {}
 
-    def _create_deck(self) -> List[Dict[str, Any]]:
+    def _create_deck(self, num_decks: int = 6) -> List[Dict[str, Any]]:
+        """6 mazzi standard — aumenta house edge, riduce card counting."""
         deck = []
-        for suit in self.suits:
-            for rank in self.ranks:
-                value = 0
-                if rank in ['J', 'Q', 'K']:
-                    value = 10
-                elif rank == 'A':
-                    value = 11
-                else:
-                    value = int(rank)
-                deck.append({'suit': suit, 'rank': rank, 'value': value})
+        for _ in range(num_decks):
+            for suit in self.suits:
+                for rank in self.ranks:
+                    if rank in ['J', 'Q', 'K']:
+                        value = 10
+                    elif rank == 'A':
+                        value = 11
+                    else:
+                        value = int(rank)
+                    deck.append({'suit': suit, 'rank': rank, 'value': value})
         random.shuffle(deck)
         return deck
 
@@ -32,6 +33,23 @@ class BlackjackEngine:
 
     def _is_blackjack(self, hand: List[Dict[str, Any]]) -> bool:
         return len(hand) == 2 and self._calculate_score(hand) == 21
+
+    def _dealer_should_hit(self, hand: List[Dict[str, Any]]) -> bool:
+        """Banco pesca su 16 o meno, e su soft 17 (es. A+6=17 con Asso che vale 11).
+        Un Asso vale 11 quando il totale NON supera 21 grazie ad esso."""
+        score = self._calculate_score(hand)
+        if score < 17:
+            return True
+        if score == 17:
+            # Soft 17: c'è almeno un Asso E rimuovendo 10 punti il punteggio
+            # scenderebbe (significa che l'Asso sta valendo 11, non 1)
+            aces = sum(1 for c in hand if c['rank'] == 'A')
+            if aces > 0:
+                raw = sum(c['value'] for c in hand)  # tutti gli Assi a 11
+                # Se raw > score significa che _calculate_score ha già ridotto
+                # qualche Asso da 11 a 1; se raw == score l'Asso vale ancora 11
+                return raw == score  # Asso ancora a 11 → mano soft
+        return False
 
     def start_game(self, user_id: int, bet: float) -> Dict[str, Any]:
         deck = self._create_deck()
@@ -82,18 +100,20 @@ class BlackjackEngine:
         player_bj = self._is_blackjack(game['player_hand'])
         
         if dealer_bj:
+            # Assicurazione vince: paga 2:1 (giocatore riceve bet/2 * 3 = bet*1.5)
+            game['insurance_payout'] = game['bet'] * 0.5 * 3  # scommessa ins + vincita 2:1
             if player_bj:
                 game['status'] = 'push'
             else:
                 game['status'] = 'loss'
             return self._sanitize_game(game, show_dealer=True)
         else:
-            # Dealer does not have BJ
+            # Dealer non ha BJ — assicurazione persa (già scalata dal main)
             if player_bj:
                 game['status'] = 'win_bj'
                 return self._sanitize_game(game, show_dealer=True)
             else:
-                # Game continues
+                # Partita continua
                 return self._sanitize_game(game)
 
     def skip_insurance(self, game_id: str) -> Dict[str, Any]:
@@ -186,7 +206,7 @@ class BlackjackEngine:
 
     def _evaluate_split_game(self, game: Dict[str, Any]) -> Dict[str, Any]:
         if any(s not in ['bust', 'win_bj'] for s in game['split_statuses']):
-            while self._calculate_score(game['dealer_hand']) < 17:
+            while self._dealer_should_hit(game['dealer_hand']):
                 game['dealer_hand'].append(game['deck'].pop())
         
         dealer_score = self._calculate_score(game['dealer_hand'])
@@ -257,7 +277,7 @@ class BlackjackEngine:
             return self._next_split_hand(game)
 
         # Dealer logic
-        while self._calculate_score(game['dealer_hand']) < 17:
+        while self._dealer_should_hit(game['dealer_hand']):
             game['dealer_hand'].append(game['deck'].pop())
             
         player_score = self._calculate_score(game['player_hand'])
