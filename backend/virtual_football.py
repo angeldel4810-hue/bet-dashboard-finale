@@ -270,9 +270,8 @@ def generate_fixtures(season_id, conn):
         for h, a in matches:
             def get_o(hid, aid):
                 ht, at = teams[hid], teams[aid]
-                # Gol attesi realistici (media Serie A ~2.6 gol/partita)
-                exph = max(0.8, (ht["o"] - at["d"] + 75) / 100 * 2.2 + 0.25)
-                expa = max(0.6, (at["o"] - ht["d"] + 65) / 100 * 2.0)
+                exph = max(0.5, (ht["o"] - at["d"] + 50) / 100 * 1.5) + 0.3
+                expa = max(0.4, (at["o"] - ht["d"] + 50) / 100 * 1.5)
                 p1, px, p2, po, pgg = 0, 0, 0, 0, 0
                 combo, exact = {}, {}
                 for hg in range(7):
@@ -306,6 +305,27 @@ def generate_fixtures(season_id, conn):
             cursor.execute(q_in, (season_id, rday, a, h, o_r[0], o_r[1], o_r[2], o_r[3], o_r[4], o_r[5], o_r[6], o_r[7], o_r[8]))
     conn.commit()
 
+async def _sleep_until(target: float):
+    """
+    Sleep non-bloccante fino a un timestamp assoluto (time.monotonic()).
+    Aggiorna engine.timer ogni secondo senza fare sleep(1) — così anche se
+    l'event loop è occupato, il timer si corregge da solo appena libero.
+    """
+    last_sec = -1
+    while True:
+        now = time.monotonic()
+        remaining = target - now
+        if remaining <= 0:
+            engine.timer = 0
+            return
+        secs_left = int(remaining)
+        if secs_left != last_sec:
+            engine.timer = secs_left
+            last_sec = secs_left
+        # Dorme al massimo 0.2s per tick — libera l'event loop spesso
+        await asyncio.sleep(min(0.2, remaining))
+
+
 async def run_virtual_football_loop():
     print("[Virtual] Loop Avviato.")
     try:
@@ -316,53 +336,108 @@ async def run_virtual_football_loop():
         return
 
     while True:
-        # --- BETTING ---
-        engine.phase, engine.timer, engine.clock, engine.action_text = "BETTING", 120, "", "⏳ Piazza le scommesse!"
-        while engine.timer > 0: 
-            await asyncio.sleep(1)
-            engine.timer -= 1
-        
-        # --- LIVE ---
-        engine.phase, engine.timer, engine.clock, engine.action_text = "LIVE", 30, "0'", "🏟️ Fischio d'inizio!"
-        conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
-        cursor.execute("UPDATE virtual_matches SET status = 'live', current_minute = 0, home_score = 0, away_score = 0 WHERE season_id = %s AND matchday = %s" if psql else "UPDATE virtual_matches SET status = 'live', current_minute = 0, home_score = 0, away_score = 0 WHERE season_id = ? AND matchday = ?", (engine.current_season_id, engine.current_matchday))
+        try:
+            await _run_virtual_cycle()
+        except Exception as e:
+            print(f"[Virtual] Errore ciclo: {e}")
+            import traceback; traceback.print_exc()
+            await asyncio.sleep(5)
+
+
+async def _run_virtual_cycle():
+    # ── BETTING (120s) ────────────────────────────────────────────
+    engine.phase = "BETTING"
+    engine.clock = ""
+    engine.action_text = "⏳ Piazza le scommesse!"
+    await _sleep_until(time.monotonic() + 120)
+
+    # ── LIVE (30 tick = ~30s) ─────────────────────────────────────
+    engine.phase = "LIVE"
+    engine.clock = "0'"
+    engine.action_text = "🏟️ Fischio d'inizio!"
+    engine.timer = 30
+
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = check_is_psql(conn)
+    try:
+        cursor.execute(
+            "UPDATE virtual_matches SET status='live', current_minute=0, home_score=0, away_score=0 WHERE season_id=%s AND matchday=%s" if psql
+            else "UPDATE virtual_matches SET status='live', current_minute=0, home_score=0, away_score=0 WHERE season_id=? AND matchday=?",
+            (engine.current_season_id, engine.current_matchday))
         conn.commit()
-        
-        cursor.execute("SELECT id, home_team_id, away_team_id FROM virtual_matches WHERE season_id = %s AND matchday = %s" if psql else "SELECT id, home_team_id, away_team_id FROM virtual_matches WHERE season_id = ? AND matchday = ?", (engine.current_season_id, engine.current_matchday))
-        matches = cursor.fetchall()
-        
-        # Simulazione minuti 15, 30, 45, 60, 75, 90
-        intervals = {25: "15'", 20: "30'", 15: "45'", 10: "60'", 5: "75'", 2: "90'"}
-        for sim in range(30, 0, -1):
-            await asyncio.sleep(1); engine.timer = sim
-            if sim in intervals:
-                engine.clock = intervals[sim]
-                engine.action_text = f"⚽ Azione pericolosa ({engine.clock})"
-                for m in matches:
-                    mid = m[0] if psql else m["id"]
-                    hg = 1 if random.random() < 0.18 else 0
-                    ag = 1 if random.random() < 0.15 else 0
-                    cursor.execute("UPDATE virtual_matches SET home_score=home_score+%s, away_score=away_score+%s, current_minute=%s WHERE id=%s" if psql else "UPDATE virtual_matches SET home_score=home_score+?, away_score=away_score+?, current_minute=? WHERE id=?", (hg, ag, int(engine.clock.replace("'","")), mid))
-                conn.commit()
+        cursor.execute(
+            "SELECT id FROM virtual_matches WHERE season_id=%s AND matchday=%s" if psql
+            else "SELECT id FROM virtual_matches WHERE season_id=? AND matchday=?",
+            (engine.current_season_id, engine.current_matchday))
+        match_ids = [r[0] if psql else r["id"] for r in cursor.fetchall()]
+    finally:
         conn.close()
-        
-        # --- FINALIZING ---
-        engine.phase = "FINALIZING"
-        finalize_matchday(engine.current_season_id, engine.current_matchday)
-        engine.finished_matchday = engine.current_matchday
-        
-        if engine.current_matchday >= 38:
-            mark_season_finished(engine.current_season_id)
-            get_or_create_season() # Nuova stagione, mday=1
-        else:
-            engine.current_matchday += 1
-            update_season_matchday(engine.current_season_id, engine.current_matchday)
-        
-        # --- FINISHED ---
-        engine.phase, engine.timer, engine.clock, engine.action_text = "FINISHED", 120, "FIN", f"🏆 Risultati giornata {engine.finished_matchday}"
-        while engine.timer > 0: 
-            await asyncio.sleep(1)
-            engine.timer -= 1
+
+    # Timestamp assoluti per ogni evento goal (pre-calcolati)
+    live_start = time.monotonic()
+    goal_events = {
+        live_start + 5:  ("15'", 15),
+        live_start + 10: ("30'", 30),
+        live_start + 15: ("45'", 45),
+        live_start + 20: ("60'", 60),
+        live_start + 25: ("75'", 75),
+        live_start + 28: ("90'", 90),
+    }
+    live_end = live_start + 30
+
+    fired = set()
+    while True:
+        now = time.monotonic()
+        remaining = live_end - now
+        engine.timer = max(0, int(remaining))
+
+        # Controlla eventi goal
+        for ts, (clock_str, minute) in goal_events.items():
+            if ts not in fired and now >= ts:
+                fired.add(ts)
+                engine.clock = clock_str
+                engine.action_text = f"⚽ Azione pericolosa ({clock_str})"
+                # Aggiorna punteggi in un'unica query per match
+                conn2 = get_db()
+                cur2 = conn2.cursor()
+                psql2 = check_is_psql(conn2)
+                try:
+                    for mid in match_ids:
+                        hg = 1 if random.random() < 0.18 else 0
+                        ag = 1 if random.random() < 0.15 else 0
+                        cur2.execute(
+                            "UPDATE virtual_matches SET home_score=home_score+%s, away_score=away_score+%s, current_minute=%s WHERE id=%s" if psql2
+                            else "UPDATE virtual_matches SET home_score=home_score+?, away_score=away_score+?, current_minute=? WHERE id=?",
+                            (hg, ag, minute, mid))
+                    conn2.commit()
+                finally:
+                    conn2.close()
+
+        if remaining <= 0:
+            break
+        await asyncio.sleep(min(0.2, remaining))
+
+    # ── FINALIZING ────────────────────────────────────────────────
+    engine.phase = "FINALIZING"
+    engine.timer = 0
+    # Esegui finalizzazione in un thread separato per non bloccare l'event loop
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, finalize_matchday, engine.current_season_id, engine.current_matchday)
+    engine.finished_matchday = engine.current_matchday
+
+    if engine.current_matchday >= 38:
+        await loop.run_in_executor(None, mark_season_finished, engine.current_season_id)
+        await loop.run_in_executor(None, get_or_create_season)
+    else:
+        engine.current_matchday += 1
+        await loop.run_in_executor(None, update_season_matchday, engine.current_season_id, engine.current_matchday)
+
+    # ── FINISHED (120s) ───────────────────────────────────────────
+    engine.phase = "FINISHED"
+    engine.clock = "FIN"
+    engine.action_text = f"🏆 Risultati giornata {engine.finished_matchday}"
+    await _sleep_until(time.monotonic() + 120)
 
 @router.get("/status")
 async def get_virtual_status():
