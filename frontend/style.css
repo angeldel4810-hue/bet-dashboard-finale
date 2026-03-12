@@ -532,6 +532,10 @@ table tr:hover td {
     background: rgba(255, 255, 255, 0.4);
 }
 
+.mobile-nav {
+    display: none;
+}
+
 @media (max-width: 600px) {
     .container {
         padding: 1rem;
@@ -544,8 +548,7 @@ table tr:hover td {
     }
 
     .nav-links {
-        display: none;
-        /* Nascondiamo i link testuali classici */
+        display: none !important;
     }
 
     /* Barra di navigazione mobile in basso */
@@ -609,10 +612,15 @@ table tr:hover td {
         width: auto !important;
         max-width: none !important;
         z-index: 10000 !important;
+        display: none;
+        /* Inizialmente nascosto */
     }
 
-    /* Nascondiamo roba inutile in alto */
-    .nav-links,
+    #slip-dropdown:not(.hidden) {
+        display: block !important;
+    }
+
+    /* Nascondiamo il logout testuale in alto su mobile */
     #logout-btn {
         display: none !important;
     }
@@ -632,10 +640,6 @@ table tr:hover td {
     z-index: 1000;
 }
 
-.mobile-nav {
-    display: none;
-}
-
 /* Selected Odds Highlighting */
 .price-btn.selected {
     background: var(--accent) !important;
@@ -653,200 +657,161 @@ table tr:hover td {
     border-left: 3px solid var(--accent);
     padding-left: 10px;
 }
-/* Virtual: una colonna su mobile */
-@media (max-width: 600px) {
-    #virtual-matches-container,
-    #virtual-live-matches {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 12px;
-    }
+
+/* Crash Game Styles */
+.crash-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
 }
 
-/* =============================================
-   FIX NAVBAR MOBILE: visibile solo su mobile
-   ============================================= */
-.mobile-nav {
-    display: none !important;
+.crash-main {
+    box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.5);
+    background: radial-gradient(circle at center, #1a1b23 0%, #0d0e12 100%) !important;
 }
 
-@media (max-width: 600px) {
-    .mobile-nav.active {
-        display: flex !important;
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background: #161b22;
-        border-top: 1px solid var(--border-color);
-        padding: 10px 0;
-        justify-content: space-around;
-        z-index: 1000;
-        backdrop-filter: blur(10px);
-    }
+#crash-multiplier {
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+    font-family: 'Inter', sans-serif;
+    transition: transform 0.1s ease-out;
 }
 
-/* =============================================
-   VIRTUAL: layout mobile a una colonna
-   Ordine: risultati/live in cima, quote in mezzo, classifica in fondo
-   ============================================= */
-@media (max-width: 600px) {
-    #section-virtual .container,
-    #section-virtual > div {
-        display: flex !important;
-        flex-direction: column !important;
-    }
-
-    /* Risultati/live sopra */
-    #virtual-live-board {
-        order: 1 !important;
-    }
-
-    /* Quote/partite in mezzo */
-    #virtual-matches-container {
-        order: 2 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 12px;
-    }
-
-    /* Classifica in basso */
-    #virtual-standings-body,
-    #virtual-standings-body table,
-    table#virtual-standings-body,
-    [id*="standings"] {
-        order: 3 !important;
-    }
-
-    /* Live matches a una colonna */
-    #virtual-live-matches {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 8px;
-    }
+.crash-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
-/* Nasconde la mobile nav su schermi grandi, indipendentemente dalle classi JS */
-@media (min-width: 601px) {
-    #mobile-nav {
-        display: none !important;
-    }
+#crash-bet-btn:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
 }
 
-/* =============================================
-   CRASH: layout mobile ottimizzato
-   ============================================= */
-@media (max-width: 600px) {
-    #section-crash .container,
-    [id="section-crash"] > div {
-        padding: 0.5rem !important;
+#crash-bet-btn:active {
+    transform: translateY(0);
+}
+
+#crash-bet-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.history-badge {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: background 0.3s;
+}
+
+@media (max-width: 768px) {
+    .crash-container {
+        grid-template-columns: 1fr !important;
     }
 
-    /* Il layout principale crash diventa colonna: grafico sopra, controlli sotto */
-    #section-crash [style*="display: grid"],
-    #section-crash [style*="display:grid"] {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 12px !important;
+    .crash-main {
+        height: 250px !important;
     }
 
-    /* Canvas grafico a tutta larghezza */
-    #crash-canvas {
-        width: 100% !important;
-        min-height: 200px !important;
-        height: 200px !important;
-    }
-
-    /* Moltiplicatore più grande e centrato */
     #crash-multiplier {
         font-size: 3.5rem !important;
-        text-align: center;
-    }
-
-    /* Storia recente in griglia compatta */
-    #crash-history {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 6px !important;
-        justify-content: center;
-    }
-
-    /* Bottone scommetti a tutta larghezza */
-    #crash-bet-btn {
-        width: 100% !important;
-        padding: 1rem !important;
-        font-size: 1rem !important;
     }
 }
 
-/* =============================================
-   CRASH: fix layout mobile completo
-   ============================================= */
+/* Casino Hub Styles */
+.game-card:hover {
+    transform: translateY(-8px);
+    border-color: var(--accent) !important;
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Blackjack Card Styling */
+.card-item {
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.card-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+.blackjack-container {
+    background-image: radial-gradient(circle at center, #136a31 0%, #0c3d1d 100%) !important;
+}
+
+#bj-status {
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 1px;
+}
+
 @media (max-width: 768px) {
-
-    /* Il wrapper principale crash (grid a 2 colonne) diventa colonna */
-    #section-crash > div > div,
-    #section-crash .container > div {
-        display: flex !important;
-        flex-direction: column !important;
-        width: 100% !important;
-        gap: 0 !important;
-    }
-
-    /* Tutti i figli diretti del layout crash a piena larghezza */
-    #section-crash > div > div > *,
-    #section-crash .container > div > * {
-        width: 100% !important;
-        min-width: 0 !important;
-        max-width: 100% !important;
-    }
-
-    /* Il box grafico: occupa tutta la larghezza, altezza fissa */
-    #crash-canvas {
-        width: 100% !important;
-        height: 220px !important;
-        min-height: 220px !important;
-        display: block !important;
-    }
-
-    /* Il box con moltiplicatore e status dentro il grafico */
-    #crash-multiplier {
-        font-size: 4rem !important;
-        text-align: center !important;
-        display: block !important;
-        width: 100% !important;
-    }
-
-    /* Il pannello controlli (input + bottone + storia) */
-    #section-crash [style*="background"],
-    #section-crash [class*="card"],
-    #section-crash > div > div > div:last-child {
-        width: 100% !important;
-        box-sizing: border-box !important;
+    .blackjack-container {
         padding: 1rem !important;
     }
 
-    /* Input importo a piena larghezza */
-    #crash-bet-amount {
-        width: 100% !important;
-        font-size: 1.1rem !important;
-        padding: 0.8rem !important;
+    .card-item {
+        width: 60px !important;
+        height: 85px !important;
+    }
+}
+
+@keyframes slideInCard {
+    from {
+        opacity: 0;
+        transform: translateY(-60px) scale(0.9) rotate(-5deg);
     }
 
-    /* Bottone SCOMMETTI a piena larghezza */
-    #crash-bet-btn {
-        width: 100% !important;
-        padding: 1rem !important;
-        font-size: 1.1rem !important;
-        margin-top: 0.5rem !important;
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(0);
+    }
+}
+
+.dealt-card {
+    animation: slideInCard 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.2) forwards;
+    opacity: 0;
+}
+
+/* Virtual Football Styles */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
     }
 
-    /* Storia recente: chips in griglia */
-    #crash-history {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 6px !important;
-        justify-content: flex-start !important;
-        margin-top: 1rem !important;
+    50% {
+        opacity: 0.5;
+        transform: scale(1.1);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.virtual-layout {
+    animation: fadeIn 0.8s ease-out;
+}
+
+#virtual-standings-body tr {
+    transition: background 0.2s;
+}
+
+#virtual-standings-body tr:hover td {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.virtual-main,
+.virtual-sidebar {
+    height: fit-content;
+}
+
+@media (max-width: 900px) {
+    .virtual-layout {
+        grid-template-columns: 1fr !important;
     }
 }
