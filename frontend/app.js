@@ -1146,36 +1146,91 @@ window.admin = {
             ui.fetchBalance(); // Refresh balance for admin if needed
         }
     },
+    _adminBets: [],
+    _adminBetFilters: { sport: true, virtual: true, casino: true },
+
+    toggleBetFilter(cat) {
+        this._adminBetFilters[cat] = !this._adminBetFilters[cat];
+        const check = document.getElementById(`abf-${cat}-check`);
+        const label = document.getElementById(`abf-${cat}`);
+        if (check) check.innerText = this._adminBetFilters[cat] ? '✅' : '⬜';
+        if (label) label.style.opacity = this._adminBetFilters[cat] ? '1' : '0.4';
+        this.renderAdminBets();
+    },
+
+    renderAdminBets() {
+        const container = document.getElementById('admin-bets-container');
+        if (!container) return;
+
+        const statusFilter = document.getElementById('abf-status')?.value || '';
+        const userFilter = (document.getElementById('abf-user')?.value || '').toLowerCase().trim();
+
+        const filtered = this._adminBets.filter(b => {
+            if (!this._adminBetFilters[b.category]) return false;
+            if (statusFilter && b.status !== statusFilter) return false;
+            if (userFilter && !(b.username || '').toLowerCase().includes(userFilter)) return false;
+            return true;
+        });
+
+        if (filtered.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color:var(--text-secondary); padding:2rem; font-size:0.9rem;">Nessuna scommessa trovata.</div>`;
+            return;
+        }
+
+        const catColors = { sport: '#3498db', virtual: '#9b59b6', casino: '#e67e22' };
+
+        container.innerHTML = filtered.map(b => {
+            const catColor = catColors[b.category] || '#aaa';
+            const statusColor = b.status === 'won' ? 'var(--success)' : b.status === 'lost' ? 'var(--danger)' : 'var(--accent)';
+            const statusLabel = { won: 'VINTA ✅', lost: 'PERSA ❌', pending: 'IN CORSO ⏳', void: 'ANNULLATA ↩️' }[b.status] || b.status.toUpperCase();
+
+            let bodyHtml = '';
+            if (b.category === 'casino') {
+                const profit = (b.potential_win || 0) - (b.amount || 0);
+                bodyHtml = `<div style="font-size:0.85rem; color:var(--text-secondary); padding:4px 0;">
+                    Gioco: <b style="color:white;">${b.game}</b>
+                    &nbsp;·&nbsp; Quota: <b style="color:white;">${(b.total_odds||0).toFixed(2)}x</b>
+                    &nbsp;·&nbsp; Esito: <b style="color:${profit>=0?'var(--success)':'var(--danger)'};">${profit>=0?'+':''}€${profit.toFixed(2)}</b>
+                </div>`;
+            } else {
+                bodyHtml = (b.selections || []).map(s => {
+                    let scoreBadge = '';
+                    if (s.v_score !== undefined) {
+                        const textOpts = { scheduled: 'In Arrivo', live: 'Live', finished: 'Terminata' };
+                        const bg = s.v_status === 'finished' ? '#ffd700' : (s.v_status === 'live' ? '#ff4d4d' : '#4caf50');
+                        scoreBadge = `<span style="background:${bg};color:#000;padding:1px 6px;border-radius:4px;font-weight:bold;font-size:0.7rem;margin-left:8px;">${s.v_score} (${textOpts[s.v_status]||s.v_status})</span>`;
+                    }
+                    return `<div style="font-size:0.83rem; margin:2px 0; opacity:0.85;">
+                        • ${s.home_team||'---'} vs ${s.away_team||'---'}: <b>${s.selection}</b> <span style="color:var(--text-secondary);">@${(s.odds||0).toFixed(2)}</span>${scoreBadge}
+                    </div>`;
+                }).join('');
+            }
+
+            const resolveButtons = b.status === 'pending' && b.category !== 'casino'
+                ? `<button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success);width:auto;padding:4px 14px;font-size:0.82rem;">Vincente</button>
+                   <button onclick="admin.resolveBet(${b.id}, 'lost')" style="background:var(--danger);width:auto;padding:4px 14px;font-size:0.82rem;">Perdente</button>`
+                : `<span style="font-weight:700;font-size:0.82rem;color:${statusColor};">${statusLabel}</span>`;
+
+            return `<div style="background:rgba(255,255,255,0.04); padding:0.9rem 1rem; border-radius:10px; margin-bottom:0.8rem; border-left:4px solid ${catColor};">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.5rem;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:0.7rem; font-weight:700; color:${catColor}; background:${catColor}22; padding:2px 10px; border-radius:20px; border:1px solid ${catColor}44;">${b.game||b.category}</span>
+                        <span style="font-weight:700; color:var(--accent);">${b.username}</span>
+                        <span style="font-size:0.75rem; color:var(--text-secondary);">#${b.id}</span>
+                    </div>
+                    <span style="font-size:0.85rem;">€${(b.amount||0).toFixed(2)} → €${(b.potential_win||0).toFixed(2)}</span>
+                </div>
+                ${bodyHtml}
+                <div style="margin-top:0.6rem; display:flex; gap:8px; align-items:center;">${resolveButtons}</div>
+            </div>`;
+        }).join('');
+    },
+
     async loadAllBets() {
         const bets = await api.request('/admin/bets');
         if (bets) {
-            const container = document.getElementById('admin-bets-container');
-            container.innerHTML = bets.map(b => `
-                <div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:8px; margin-bottom:1rem; border-left: 4px solid ${b.status === 'won' ? 'var(--success)' : b.status === 'lost' ? 'var(--danger)' : 'var(--accent)'}">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
-                        <span style="font-weight:bold; color:var(--accent)">Giocata di: ${b.username}</span>
-                        <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
-                    </div>
-                    ${b.selections.map(s => {
-                        let scoreBadge = '';
-                        if (s.v_score !== undefined) {
-                            let textOpts = {'scheduled': 'In Arrivo', 'live': 'Live', 'finished': 'Terminata'};
-                            let bg = s.v_status === 'finished' ? '#ffd700' : (s.v_status === 'live' ? '#ff4d4d' : '#4caf50');
-                            scoreBadge = `<span style="background:${bg}; color:#000; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem; margin-left:10px;">Risultato: ${s.v_score} (${textOpts[s.v_status] || s.v_status})</span>`;
-                        }
-                        return `
-                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8; display:flex; align-items:center;">
-                            • ${s.home_team} vs ${s.away_team}: <b style="margin-left:5px;">${s.selection}</b> <span style="margin-left:5px;">@${s.odds.toFixed(2)}</span> ${scoreBadge}
-                        </div>
-                    `}).join('')}
-                    <div style="margin-top:0.8rem; display:flex; gap:10px;">
-                        ${b.status === 'pending' ? `
-                            <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
-                            <button onclick="admin.resolveBet(${b.id}, 'lost')" style="background:var(--danger); width:auto; padding:5px 15px;">Perdente</button>
-                        ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status === 'won' ? 'VINTA ✅' : 'PERSA ❌'}</span>`}
-                    </div>
-                </div>
-            `).join('');
+            this._adminBets = bets;
+            this.renderAdminBets();
         }
     },
     async resolveBet(betId, status) {
