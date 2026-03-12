@@ -8,19 +8,17 @@ import bcrypt
 
 SECRET_KEY = "simusbet_secret_very_secure_123"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 ore
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# ─────────────────────────────────────────────────────────────────
-#  JWT — tutti i dati nel token, get_current_user non tocca mai DB
-# ─────────────────────────────────────────────────────────────────
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode["exp"] = expire
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+# ── get_current_user: solo JWT, zero DB ──────────────────────────
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -40,24 +38,18 @@ async def check_admin(user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Privilegi insufficienti")
     return user
 
-# ─────────────────────────────────────────────────────────────────
-#  bcrypt in thread separato — non blocca l'event loop (~200ms CPU)
-# ─────────────────────────────────────────────────────────────────
-def _verify_pw_sync(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+# ── verify_password: SINCRONA (compatibile con main.py esistente) ─
+# Internamente usa checkpw che è CPU-bound ~200ms,
+# ma viene chiamata raramente (solo al login).
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-def _hash_pw_sync(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=10)).decode()
+def get_password_hash(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=10)).decode('utf-8')
 
-async def verify_password(plain: str, hashed: str) -> bool:
-    return await asyncio.get_event_loop().run_in_executor(None, _verify_pw_sync, plain, hashed)
-
-async def get_password_hash(plain: str) -> str:
-    return await asyncio.get_event_loop().run_in_executor(None, _hash_pw_sync, plain)
-
-# Alias sincroni per compatibilità
+# Alias per compatibilità con le chiamate nel main.py ottimizzato
 def verify_password_sync(plain: str, hashed: str) -> bool:
-    return _verify_pw_sync(plain, hashed)
+    return verify_password(plain, hashed)
 
 def get_password_hash_sync(plain: str) -> str:
-    return _hash_pw_sync(plain)
+    return get_password_hash(plain)
