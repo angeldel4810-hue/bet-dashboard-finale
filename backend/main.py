@@ -77,6 +77,38 @@ async def login(username: str = Body(...), password: str = Body(...)):
     access_token = create_access_token(data={"sub": user['username'], "role": user['role'], "id": user['id']})
     return {"access_token": access_token, "token_type": "bearer", "role": user['role']}
 
+# Helper: salva una scommessa casino nella tabella bets (per storico)
+def save_casino_bet(conn, u_id: int, game_name: str, amount: float, payout: float):
+    """Inserisce una riga in bets (senza bet_selections) per i giochi casino."""
+    try:
+        cursor = conn.cursor()
+        is_pg = hasattr(conn, 'get_dsn_parameters')
+        status = 'won' if payout > amount else ('void' if payout == amount else 'lost')
+        odds = round(payout / amount, 4) if amount > 0 else 0
+        note = game_name  # usiamo home_team del primo selection come label
+        if is_pg:
+            cursor.execute(
+                "INSERT INTO bets (user_id, amount, total_odds, potential_win, status) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (u_id, round(amount, 2), odds, round(payout, 2), status)
+            )
+            bet_id = cursor.fetchone()[0]
+            cursor.execute(
+                "INSERT INTO bet_selections (bet_id, event_id, market, selection, odds, home_team, away_team) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (bet_id, f'casino_{game_name.lower().replace(" ", "_")}', 'casino', game_name, odds, game_name, '')
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO bets (user_id, amount, total_odds, potential_win, status) VALUES (?, ?, ?, ?, ?)",
+                (u_id, round(amount, 2), odds, round(payout, 2), status)
+            )
+            bet_id = cursor.lastrowid
+            cursor.execute(
+                "INSERT INTO bet_selections (bet_id, event_id, market, selection, odds, home_team, away_team) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (bet_id, f'casino_{game_name.lower().replace(" ", "_")}', 'casino', game_name, odds, game_name, '')
+            )
+    except Exception as e:
+        print(f"[SAVE_CASINO_BET] errore: {e}")
+
 # Helper to fetch settings (used frequently)
 def fetch_all_settings(conn):
     cursor = conn.cursor()
@@ -617,6 +649,11 @@ async def get_my_bets_history(user = Depends(get_current_user)):
         if not sels:
             bet['category'] = 'casino'
             bet['game'] = 'Casinò'
+        elif any(s['event_id'].startswith('casino_') for s in sels):
+            bet['category'] = 'casino'
+            # Usa il nome del gioco dalla selection
+            game_sel = next((s for s in sels if s['event_id'].startswith('casino_')), sels[0])
+            bet['game'] = game_sel.get('home_team') or game_sel.get('selection') or 'Casinò'
         elif any(s['event_id'].startswith('v_') for s in sels):
             bet['category'] = 'virtual'
             bet['game'] = 'Calcio Virtuale'
@@ -905,6 +942,7 @@ async def sm_deal(data: dict, current_user = Depends(get_current_user)):
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (result["payout"], u_id))
+        save_casino_bet(conn, u_id, "Sette e Mezzo", bet, result["payout"])
         conn.commit()
         conn.close()
         
@@ -921,19 +959,26 @@ async def sm_stand(data: dict, current_user = Depends(get_current_user)):
     game_id = data.get("game_id")
     result = sm.stand(game_id)
     
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    u_id = current_user.get("id")
+    if not u_id:
+        cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
+        u_id = cursor.fetchone()[0]
+
+    bet_amt = result.get("bet", 0)
+    payout = result.get("payout", 0) if result["status"] in ["win", "push"] else 0
+
     if result["status"] in ["win", "push"]:
-        conn = get_db()
-        cursor = conn.cursor()
-        is_postgres = hasattr(conn, 'get_dsn_parameters')
-        
-        u_id = current_user.get("id")
-        if not u_id:
-            cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
-            u_id = cursor.fetchone()[0]
-            
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (result["payout"], u_id))
-        conn.commit()
-        conn.close()
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
+
+    # Salva sempre in storico (qualsiasi esito finale)
+    if result["status"] in ["win", "push", "bust", "lose", "lost"]:
+        save_casino_bet(conn, u_id, "Sette e Mezzo", bet_amt, payout)
+
+    conn.commit()
+    conn.close()
         
     return result
 
@@ -977,6 +1022,14 @@ async def bj_deal(data: dict, current_user = Depends(get_current_user)):
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
+        save_casino_bet(conn, u_id, "Blackjack", bet, payout)
+        conn.commit()
+        conn.close()
+
+    elif result["status"] == "bust":
+        conn = get_db()
+        cursor = conn.cursor()
+        save_casino_bet(conn, u_id, "Blackjack", bet, 0)
         conn.commit()
         conn.close()
         
@@ -1006,36 +1059,33 @@ async def bj_hit(data: dict, current_user = Depends(get_current_user)):
 async def bj_stand(data: dict, current_user = Depends(get_current_user)):
     game_id = data.get("game_id")
     result = bj_engine.stand(game_id)
-    
+
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    u_id = current_user.get("id")
+    if not u_id:
+        cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
+        u_id = cursor.fetchone()[0]
+
+    bet_amt = result.get("bet", 0)
+
     if result["status"] in ["win", "push"]:
-        payout = result["bet"] * 2 if result["status"] == "win" else result["bet"]
-        conn = get_db()
-        cursor = conn.cursor()
-        is_postgres = hasattr(conn, 'get_dsn_parameters')
-        
-        u_id = current_user.get("id")
-        if not u_id:
-            cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
-            u_id = cursor.fetchone()[0]
-
+        payout = bet_amt * 2 if result["status"] == "win" else bet_amt
         cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
-        conn.commit()
-        conn.close()
-        
-    elif result["status"] == "split_end" and result.get("payout", 0) > 0:
-        payout = result["payout"]
-        conn = get_db()
-        cursor = conn.cursor()
-        is_postgres = hasattr(conn, 'get_dsn_parameters')
-        
-        u_id = current_user.get("id")
-        if not u_id:
-            cursor.execute("SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?", (current_user["username"],))
-            u_id = cursor.fetchone()[0]
+        save_casino_bet(conn, u_id, "Blackjack", bet_amt, payout)
 
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
-        conn.commit()
-        conn.close()
+    elif result["status"] == "split_end":
+        payout = result.get("payout", 0)
+        if payout > 0:
+            cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
+        save_casino_bet(conn, u_id, "Blackjack", bet_amt, payout)
+
+    elif result["status"] in ["bust", "lost", "lose"]:
+        save_casino_bet(conn, u_id, "Blackjack", bet_amt, 0)
+
+    conn.commit()
+    conn.close()
 
     return result
 
