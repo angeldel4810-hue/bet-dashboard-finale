@@ -58,9 +58,7 @@ async def login(username: str = Body(...), password: str = Body(...)):
     role     = user_row[3] if is_postgres else user_row["role"]
     ustatus  = user_row[5] if is_postgres else user_row["status"]
 
-    # bcrypt in thread — non blocca l'event loop
-    ok = await verify_password(password, phash)
-    if not ok:
+    if not verify_password(password, phash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if ustatus == 'blocked':
