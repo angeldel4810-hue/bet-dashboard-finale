@@ -516,27 +516,8 @@
             <!-- My Bets Section -->
             <div id="section-mybets" class="hidden">
                 <div class="admin-section">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
-                        <h2 style="margin:0;">Le Mie Scommesse</h2>
-                        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                            <div id="filter-sport-label" onclick="bets.toggleFilter('sport')"
-                                style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:6px 14px; border-radius:20px; border:2px solid #3498db; background:rgba(52,152,219,0.18); user-select:none; transition:all 0.15s;">
-                                <span id="filter-sport-check">✅</span>
-                                <span style="font-size:0.8rem; font-weight:700; color:#3498db;">⚽ Sport</span>
-                            </div>
-                            <div id="filter-virtual-label" onclick="bets.toggleFilter('virtual')"
-                                style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:6px 14px; border-radius:20px; border:2px solid #9b59b6; background:rgba(155,89,182,0.18); user-select:none; transition:all 0.15s;">
-                                <span id="filter-virtual-check">✅</span>
-                                <span style="font-size:0.8rem; font-weight:700; color:#9b59b6;">🕹️ Virtuali</span>
-                            </div>
-                            <div id="filter-casino-label" onclick="bets.toggleFilter('casino')"
-                                style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:6px 14px; border-radius:20px; border:2px solid #e67e22; background:rgba(230,126,34,0.18); user-select:none; transition:all 0.15s;">
-                                <span id="filter-casino-check">✅</span>
-                                <span style="font-size:0.8rem; font-weight:700; color:#e67e22;">🎰 Casinò</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="my-bets-container" style="margin-top:0.5rem;"></div>
+                    <h2>Le Mie Scommesse</h2>
+                    <div id="my-bets-container" style="margin-top:1rem;"></div>
                 </div>
             </div>
 
@@ -800,11 +781,7 @@
                                     <span id="abf-virtual-check">✅</span>
                                     <span style="font-size:0.78rem; font-weight:700; color:#9b59b6;">🕹️ Virtuali</span>
                                 </div>
-                                <div id="abf-casino" onclick="admin.toggleBetFilter('casino')"
-                                    style="display:flex; align-items:center; gap:5px; cursor:pointer; padding:5px 12px; border-radius:20px; border:2px solid #e67e22; background:rgba(230,126,34,0.18); user-select:none; transition:all 0.15s;">
-                                    <span id="abf-casino-check">✅</span>
-                                    <span style="font-size:0.78rem; font-weight:700; color:#e67e22;">🎰 Casinò</span>
-                                </div>
+
                                 <!-- Filtro stato -->
                                 <select id="abf-status" onchange="admin.renderAdminBets()"
                                     style="padding:5px 10px; border-radius:20px; border:2px solid var(--border-color); background:var(--card-bg); color:var(--text-primary); font-size:0.78rem; cursor:pointer;">
