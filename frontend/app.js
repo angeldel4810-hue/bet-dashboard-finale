@@ -1929,14 +1929,22 @@ window.baccarat = {
         this.updateUI();
     },
 
+    isDealing: false,
+
     async deal() {
+        if (this.isDealing) return;
         const totalCents = Object.values(state.baccarat.bets).reduce((a, b) => a + Math.round(b * 100), 0);
         const total = totalCents / 100;
         if (totalCents < 20) return alert("Puntata minima €0.20!");
         if (total > state.balance) return alert("Saldo insufficiente");
 
+        this.isDealing = true;
         state.baccarat.status = 'dealing';
         state.baccarat.lastResult = null;
+
+        const btn = document.querySelector('button[onclick="baccarat.deal()"]');
+        if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.innerText = '⏳ DISTRIBUZIONE...'; }
+
         this.updateUI();
 
         let res = null;
@@ -1951,14 +1959,13 @@ window.baccarat = {
 
         if (!res || !res.game) {
             state.baccarat.status = 'betting';
+            this.isDealing = false;
+            if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerText = 'DISTRIBUISCI'; }
             this.updateUI();
             return;
         }
 
         const g = res.game;
-
-        // Sequenza di distribuzione con delay, come nel blackjack:
-        // P1 → B1 → P2 → B2 → (eventuale P3 → B3)
         const delay = ms => new Promise(r => setTimeout(r, ms));
         const pContainer = document.getElementById('bac-player-cards');
         const bContainer = document.getElementById('bac-banker-cards');
@@ -1974,26 +1981,21 @@ window.baccarat = {
 
         const msgEl = document.getElementById('bac-msg');
 
-        // Mano standard: P1, B1, P2, B2
         if (msgEl) { msgEl.innerHTML = 'Distribuzione...'; msgEl.style.color = 'white'; }
         dealCard(g.player[0], pContainer); await delay(380);
         dealCard(g.banker[0], bContainer); await delay(380);
         dealCard(g.player[1], pContainer); await delay(380);
         dealCard(g.banker[1], bContainer); await delay(380);
 
-        // Aggiorna punteggi parziali
         document.getElementById('bac-player-score').innerText = g.player_score;
         document.getElementById('bac-banker-score').innerText = g.banker_score;
 
-        // Terza carta giocatore (se presente)
         if (g.player.length > 2) {
             if (msgEl) msgEl.innerHTML = 'Terza carta al Giocatore...';
             await delay(300);
             dealCard(g.player[2], pContainer);
             await delay(380);
         }
-
-        // Terza carta banco (se presente)
         if (g.banker.length > 2) {
             if (msgEl) msgEl.innerHTML = 'Terza carta al Banco...';
             await delay(300);
@@ -2001,14 +2003,10 @@ window.baccarat = {
             await delay(380);
         }
 
-        // Aggiorna punteggi finali
         document.getElementById('bac-player-score').innerText = g.player_score;
         document.getElementById('bac-banker-score').innerText = g.banker_score;
-
-        // Piccola pausa drammatica prima del risultato
         await delay(400);
 
-        // Aggiorna stato e saldo
         state.baccarat.player_hand = g.player;
         state.baccarat.banker_hand = g.banker;
         state.baccarat.player_score = g.player_score;
@@ -2021,10 +2019,10 @@ window.baccarat = {
         const balEl = document.getElementById('user-balance-nav');
         if (balEl) balEl.innerText = `Saldo: €${res.balance.toFixed(2)}`;
 
-        // Mostra risultato nel messaggio centrale
         this.showResult(g);
+        this.isDealing = false;
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.innerText = 'DISTRIBUISCI'; }
 
-        // Reset automatico dopo 5 secondi
         setTimeout(() => {
             if (state.baccarat.status === 'result') this.reset();
         }, 5000);
@@ -2033,17 +2031,14 @@ window.baccarat = {
     showResult(g) {
         const msgEl = document.getElementById('bac-msg');
         if (!msgEl) return;
-
-        let title = g.winner === 'tie' ? '🤝 PAREGGIO' : (g.winner === 'player' ? '🔵 PUNTO VINCE' : '🔴 BANCO VINCE');
-        let pairInfo = '';
-        if (g.player_pair) pairInfo += ` &nbsp;+&nbsp; PLAYER PAIR ×${g.player_pair_mult}`;
-        if (g.banker_pair) pairInfo += ` &nbsp;+&nbsp; BANKER PAIR ×${g.banker_pair_mult}`;
-
+        const winner = g.winner === 'tie' ? '🤝 PAREGGIO' : (g.winner === 'player' ? '🔵 PUNTO VINCE' : '🔴 BANCO VINCE');
+        let pairs = '';
+        if (g.player_pair) pairs += `<span style="font-size:0.8rem;color:#00ff88"> +PLAYER PAIR ×${g.player_pair_mult}</span>`;
+        if (g.banker_pair) pairs += `<span style="font-size:0.8rem;color:#ffd700"> +BANKER PAIR ×${g.banker_pair_mult}</span>`;
         const profit = g.payout - g.total_bet;
+        const col = profit >= 0 ? '#00ff88' : '#ff4444';
         const profitStr = (profit >= 0 ? '+' : '') + '€' + profit.toFixed(2);
-        const color = profit >= 0 ? '#00ff88' : '#ff4444';
-
-        msgEl.innerHTML = `<div style="font-size:1.3rem">${title}${pairInfo}</div><div style="font-size:1.6rem; color:${color}; margin-top:4px;">${profitStr}</div>`;
+        msgEl.innerHTML = `<div style="font-size:1.2rem;font-weight:900">${winner}${pairs}</div><div style="font-size:1.7rem;color:${col};margin-top:4px;font-weight:900">${profitStr}</div>`;
         msgEl.style.color = 'gold';
     },
 
@@ -2056,33 +2051,27 @@ window.baccarat = {
     },
 
     updateUI() {
-        // Chips init if needed
         if (!document.getElementById('bac-chip-020')) this.initChips();
 
-        // Aggiorna punteggi
         document.getElementById('bac-player-score').innerText = state.baccarat.player_hand.length ? state.baccarat.player_score : '0';
         document.getElementById('bac-banker-score').innerText = state.baccarat.banker_hand.length ? state.baccarat.banker_score : '0';
 
-        // Mostra le puntate sulle zone
         for (const [type, amt] of Object.entries(state.baccarat.bets)) {
             const el = document.getElementById(`bac-bet-${type}`);
             if (el) el.innerText = amt > 0 ? `€${amt.toFixed(2)}` : '';
         }
 
-        // Evidenzia zone con puntata
         ['player','banker','tie','player_pair','banker_pair'].forEach(type => {
             const zone = document.getElementById(`bac-zone-${type}`);
             if (!zone) return;
             zone.style.opacity = state.baccarat.bets[type] > 0 ? '1' : (state.baccarat.status === 'betting' ? '0.85' : '0.6');
         });
 
-        // Messaggio solo se in betting (durante dealing e result lo gestisce deal/showResult)
         const msg = document.getElementById('bac-msg');
         if (!msg) return;
         if (state.baccarat.status === 'betting') {
             msg.innerHTML = 'Piazza le tue fiches';
             msg.style.color = 'gold';
-            // Pulisci le carte al reset
             const pCards = document.getElementById('bac-player-cards');
             const bCards = document.getElementById('bac-banker-cards');
             if (pCards) pCards.innerHTML = '';
@@ -2095,14 +2084,41 @@ window.baccarat = {
 
     renderCardEl(card) {
         const isRed = card.suit === '♥' || card.suit === '♦';
-        const color = isRed ? '#cc0000' : '#111';
+        const suitColor = isRed ? '#d10000' : '#1a1a1a';
+
         const div = document.createElement('div');
-        div.style.cssText = `color:${color}; width:60px; height:88px; background:white; border-radius:7px; font-weight:bold; display:flex; flex-direction:column; justify-content:space-between; padding:6px; border:2px solid #ccc; box-shadow:0 3px 8px rgba(0,0,0,0.4); flex-shrink:0;`;
-        div.innerHTML = `
-            <div style="font-size:1rem; line-height:1;">${card.rank}<br><span style="font-size:0.85rem">${card.suit}</span></div>
-            <div style="font-size:1.5rem; align-self:center;">${card.suit}</div>
-            <div style="font-size:1rem; transform:rotate(180deg); line-height:1;">${card.rank}<br><span style="font-size:0.85rem">${card.suit}</span></div>
+        div.style.cssText = `
+            width:56px; height:82px;
+            background:white;
+            border-radius:8px;
+            border:1.5px solid #ccc;
+            box-shadow:0 4px 14px rgba(0,0,0,0.5);
+            display:flex; flex-direction:column;
+            justify-content:space-between;
+            padding:4px 5px;
+            flex-shrink:0;
+            color:${suitColor};
+            font-family:'Arial',sans-serif;
         `;
+
+        // Top-left corner
+        const tl = document.createElement('div');
+        tl.style.cssText = `font-size:0.9rem;font-weight:900;line-height:1.1;`;
+        tl.innerHTML = `${card.rank}<br><span style="font-size:0.85rem">${card.suit}</span>`;
+
+        // Center suit
+        const center = document.createElement('div');
+        center.style.cssText = `font-size:1.7rem;text-align:center;line-height:1;`;
+        center.innerText = card.suit;
+
+        // Bottom-right corner (rotated)
+        const br = document.createElement('div');
+        br.style.cssText = `font-size:0.9rem;font-weight:900;line-height:1.1;text-align:right;transform:rotate(180deg);`;
+        br.innerHTML = `${card.rank}<br><span style="font-size:0.85rem">${card.suit}</span>`;
+
+        div.appendChild(tl);
+        div.appendChild(center);
+        div.appendChild(br);
         return div;
     }
 };
