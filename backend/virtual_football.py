@@ -250,8 +250,8 @@ def generate_fixtures(season_id, conn):
         for h, a in matches:
             def get_o(hid, aid):
                 ht, at = teams[hid], teams[aid]
-                exph = max(0.5, (ht["o"] - at["d"] + 50) / 100 * 1.5) + 0.3
-                expa = max(0.4, (at["o"] - ht["d"] + 50) / 100 * 1.5)
+                exph = max(0.8, min(2.5, (ht["o"] - at["d"] + 50) / 100 * 1.3)) + 0.2
+                expa = max(0.6, min(2.1, (at["o"] - ht["d"] + 50) / 100 * 1.3))
                 p1, px, p2, po, pgg = 0, 0, 0, 0, 0
                 combo, exact = {}, {}
                 for hg in range(7):
@@ -270,6 +270,11 @@ def generate_fixtures(season_id, conn):
                         combo[f"{res}+{gg}"] = combo.get(f"{res}+{gg}", 0) + prob
                         exact[f"{hg}-{ag}"] = exact.get(f"{hg}-{ag}", 0) + prob
                 total = p1 + px + p2; p1/=total; px/=total; p2/=total
+                
+                # Normalizzatori Extra per evitare derive su O/U e Goal/No Goal 
+                pgg = max(0.35, min(0.65, pgg)) # Forza GG tra 35% e 65% (quote da 1.50 a 2.80 max)
+                po = max(0.38, min(0.62, po)) # Forza Over 2.5 tra 38% e 62%
+                
                 sq = lambda p: round(max(1.05, min(99.0, (1.0/max(0.001,p))*margin)), 2)
                 co = {k: sq(v) for k, v in combo.items()}
                 ex_list = ["0-0","1-0","0-1","1-1","2-0","0-2","2-1","1-2","2-2","3-0","0-3","3-1","1-3","3-2","2-3"]
