@@ -371,6 +371,18 @@ async def get_user_detail(user_id: int):
                 bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
             else:
                 bet['selections'] = [dict(sr) for sr in s_rows]
+                
+            for sel in bet['selections']:
+                if str(sel['event_id']).startswith('v_'):
+                    v_id = str(sel['event_id']).replace('v_', '')
+                    cursor.execute("SELECT status, home_score, away_score FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT status, home_score, away_score FROM virtual_matches WHERE id = ?", (v_id,))
+                    v_match = cursor.fetchone()
+                    if v_match:
+                        sel['v_status'] = v_match[0] if is_postgres else v_match['status']
+                        h_score = v_match[1] if is_postgres else v_match['home_score']
+                        a_score = v_match[2] if is_postgres else v_match['away_score']
+                        sel['v_score'] = f"{h_score} - {a_score}"
+                        
             bets.append(bet)
         
         user_data['bets'] = bets
@@ -480,6 +492,18 @@ async def list_all_bets():
             bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
         else:
             bet['selections'] = [dict(sr) for sr in s_rows]
+            
+        for sel in bet['selections']:
+            if str(sel['event_id']).startswith('v_'):
+                v_id = str(sel['event_id']).replace('v_', '')
+                cursor.execute("SELECT status, home_score, away_score FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT status, home_score, away_score FROM virtual_matches WHERE id = ?", (v_id,))
+                v_match = cursor.fetchone()
+                if v_match:
+                    sel['v_status'] = v_match[0] if is_postgres else v_match['status']
+                    h_score = v_match[1] if is_postgres else v_match['home_score']
+                    a_score = v_match[2] if is_postgres else v_match['away_score']
+                    sel['v_score'] = f"{h_score} - {a_score}"
+                    
         bets_list.append(bet)
         
     conn.close()
