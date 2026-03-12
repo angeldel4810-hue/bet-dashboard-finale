@@ -116,9 +116,9 @@ window.ui = {
             document.getElementById('nav-admin').classList.remove('hidden');
             const mobAdmin = document.getElementById('mob-nav-admin');
             if (mobAdmin) mobAdmin.classList.remove('hidden');
-            // Mostra pulsante refresh manuale solo all'admin
-            const btnRefresh = document.getElementById('btn-force-refresh');
-            if (btnRefresh) btnRefresh.style.display = 'inline-block';
+            // Timer e pulsante refresh solo per admin
+            const timerArea = document.getElementById('admin-timer-area');
+            if (timerArea) timerArea.style.display = 'flex';
         }
         this.fetchBalance();
     },
@@ -1947,31 +1947,101 @@ window.baccarat = {
         }
 
         if (!res || !res.game) {
-            // Errore — torna a betting senza resettare le puntate
             state.baccarat.status = 'betting';
             this.updateUI();
             return;
         }
 
-        // Aggiorna saldo subito
+        const g = res.game;
+
+        // Sequenza di distribuzione con delay, come nel blackjack:
+        // P1 → B1 → P2 → B2 → (eventuale P3 → B3)
+        const delay = ms => new Promise(r => setTimeout(r, ms));
+        const pContainer = document.getElementById('bac-player-cards');
+        const bContainer = document.getElementById('bac-banker-cards');
+        if (pContainer) pContainer.innerHTML = '';
+        if (bContainer) bContainer.innerHTML = '';
+
+        const dealCard = (card, container) => {
+            if (!container) return;
+            const el = this.renderCardEl(card);
+            el.classList.add('dealt-card');
+            container.appendChild(el);
+        };
+
+        const msgEl = document.getElementById('bac-msg');
+
+        // Mano standard: P1, B1, P2, B2
+        if (msgEl) { msgEl.innerHTML = 'Distribuzione...'; msgEl.style.color = 'white'; }
+        dealCard(g.player[0], pContainer); await delay(380);
+        dealCard(g.banker[0], bContainer); await delay(380);
+        dealCard(g.player[1], pContainer); await delay(380);
+        dealCard(g.banker[1], bContainer); await delay(380);
+
+        // Aggiorna punteggi parziali
+        document.getElementById('bac-player-score').innerText = g.player_score;
+        document.getElementById('bac-banker-score').innerText = g.banker_score;
+
+        // Terza carta giocatore (se presente)
+        if (g.player.length > 2) {
+            if (msgEl) msgEl.innerHTML = 'Terza carta al Giocatore...';
+            await delay(300);
+            dealCard(g.player[2], pContainer);
+            await delay(380);
+        }
+
+        // Terza carta banco (se presente)
+        if (g.banker.length > 2) {
+            if (msgEl) msgEl.innerHTML = 'Terza carta al Banco...';
+            await delay(300);
+            dealCard(g.banker[2], bContainer);
+            await delay(380);
+        }
+
+        // Aggiorna punteggi finali
+        document.getElementById('bac-player-score').innerText = g.player_score;
+        document.getElementById('bac-banker-score').innerText = g.banker_score;
+
+        // Piccola pausa drammatica prima del risultato
+        await delay(400);
+
+        // Aggiorna stato e saldo
+        state.baccarat.player_hand = g.player;
+        state.baccarat.banker_hand = g.banker;
+        state.baccarat.player_score = g.player_score;
+        state.baccarat.banker_score = g.banker_score;
+        state.baccarat.winner = g.winner;
+        state.baccarat.lastResult = g;
+        state.baccarat.status = 'result';
+
         state.balance = res.balance;
         const balEl = document.getElementById('user-balance-nav');
         if (balEl) balEl.innerText = `Saldo: €${res.balance.toFixed(2)}`;
 
-        // Mostra carte e risultato
-        state.baccarat.player_hand = res.game.player;
-        state.baccarat.banker_hand = res.game.banker;
-        state.baccarat.player_score = res.game.player_score;
-        state.baccarat.banker_score = res.game.banker_score;
-        state.baccarat.winner = res.game.winner;
-        state.baccarat.lastResult = res.game;
-        state.baccarat.status = 'result';
-        this.updateUI();
+        // Mostra risultato nel messaggio centrale
+        this.showResult(g);
 
         // Reset automatico dopo 5 secondi
         setTimeout(() => {
             if (state.baccarat.status === 'result') this.reset();
         }, 5000);
+    },
+
+    showResult(g) {
+        const msgEl = document.getElementById('bac-msg');
+        if (!msgEl) return;
+
+        let title = g.winner === 'tie' ? '🤝 PAREGGIO' : (g.winner === 'player' ? '🔵 PUNTO VINCE' : '🔴 BANCO VINCE');
+        let pairInfo = '';
+        if (g.player_pair) pairInfo += ` &nbsp;+&nbsp; PLAYER PAIR ×${g.player_pair_mult}`;
+        if (g.banker_pair) pairInfo += ` &nbsp;+&nbsp; BANKER PAIR ×${g.banker_pair_mult}`;
+
+        const profit = g.payout - g.total_bet;
+        const profitStr = (profit >= 0 ? '+' : '') + '€' + profit.toFixed(2);
+        const color = profit >= 0 ? '#00ff88' : '#ff4444';
+
+        msgEl.innerHTML = `<div style="font-size:1.3rem">${title}${pairInfo}</div><div style="font-size:1.6rem; color:${color}; margin-top:4px;">${profitStr}</div>`;
+        msgEl.style.color = 'gold';
     },
 
     reset() {
@@ -1986,11 +2056,7 @@ window.baccarat = {
         // Chips init if needed
         if (!document.getElementById('bac-chip-020')) this.initChips();
 
-        const pCards = document.getElementById('bac-player-cards');
-        const bCards = document.getElementById('bac-banker-cards');
-        if (pCards) pCards.innerHTML = state.baccarat.player_hand.map(c => this.renderCard(c)).join('');
-        if (bCards) bCards.innerHTML = state.baccarat.banker_hand.map(c => this.renderCard(c)).join('');
-
+        // Aggiorna punteggi
         document.getElementById('bac-player-score').innerText = state.baccarat.player_hand.length ? state.baccarat.player_score : '0';
         document.getElementById('bac-banker-score').innerText = state.baccarat.banker_hand.length ? state.baccarat.banker_score : '0';
 
@@ -2007,37 +2073,34 @@ window.baccarat = {
             zone.style.opacity = state.baccarat.bets[type] > 0 ? '1' : (state.baccarat.status === 'betting' ? '0.85' : '0.6');
         });
 
-        // Result message
+        // Messaggio solo se in betting (durante dealing e result lo gestisce deal/showResult)
         const msg = document.getElementById('bac-msg');
         if (!msg) return;
-        if (state.baccarat.status === 'result') {
-            const r = state.baccarat.lastResult;
-            let resText = r.winner === 'tie' ? 'PAREGGIO' : (r.winner === 'player' ? 'PUNTO VINCE' : 'BANCO VINCE');
-            // Aggiungi info coppie
-            let pairInfo = '';
-            if (r.player_pair) pairInfo += ` | PLAYER PAIR ×${r.player_pair_mult}`;
-            if (r.banker_pair) pairInfo += ` | BANKER PAIR ×${r.banker_pair_mult}`;
-            const profit = r.payout - r.total_bet;
-            msg.innerHTML = `${resText}${pairInfo}<br><span style="font-size:1.4rem">${profit >= 0 ? '+' : ''}€${profit.toFixed(2)}</span>`;
-            msg.style.color = profit >= 0 ? '#00ff88' : '#ff4444';
+        if (state.baccarat.status === 'betting') {
+            msg.innerHTML = 'Piazza le tue fiches';
+            msg.style.color = 'gold';
+            // Pulisci le carte al reset
+            const pCards = document.getElementById('bac-player-cards');
+            const bCards = document.getElementById('bac-banker-cards');
+            if (pCards) pCards.innerHTML = '';
+            if (bCards) bCards.innerHTML = '';
         } else if (state.baccarat.status === 'dealing') {
             msg.innerHTML = 'Distribuzione...';
             msg.style.color = 'white';
-        } else {
-            msg.innerHTML = 'Piazza le tue fiches';
-            msg.style.color = 'gold';
         }
     },
 
-    renderCard(card) {
-        const color = (card.suit === '♥' || card.suit === '♦') ? '#cc0000' : '#111';
-        return `
-            <div class="playing-card" style="color: ${color}; width: 80px; height: 110px; background: white; border-radius: 8px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; border: 2px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-                <div style="font-size: 1.2rem; line-height: 1;">${card.rank}<br><span style="font-size: 1rem;">${card.suit}</span></div>
-                <div style="font-size: 2rem; align-self: center;">${card.suit}</div>
-                <div style="font-size: 1.2rem; transform: rotate(180deg); line-height: 1;">${card.rank}<br><span style="font-size: 1rem;">${card.suit}</span></div>
-            </div>
+    renderCardEl(card) {
+        const isRed = card.suit === '♥' || card.suit === '♦';
+        const color = isRed ? '#cc0000' : '#111';
+        const div = document.createElement('div');
+        div.style.cssText = `color:${color}; width:60px; height:88px; background:white; border-radius:7px; font-weight:bold; display:flex; flex-direction:column; justify-content:space-between; padding:6px; border:2px solid #ccc; box-shadow:0 3px 8px rgba(0,0,0,0.4); flex-shrink:0;`;
+        div.innerHTML = `
+            <div style="font-size:1rem; line-height:1;">${card.rank}<br><span style="font-size:0.85rem">${card.suit}</span></div>
+            <div style="font-size:1.5rem; align-self:center;">${card.suit}</div>
+            <div style="font-size:1rem; transform:rotate(180deg); line-height:1;">${card.rank}<br><span style="font-size:0.85rem">${card.suit}</span></div>
         `;
+        return div;
     }
 };
 
