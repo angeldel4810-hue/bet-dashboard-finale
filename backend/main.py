@@ -586,31 +586,90 @@ async def get_my_bets_history(user = Depends(get_current_user)):
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
-    
+
     u_query = "SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?"
     cursor.execute(u_query, (user['username'],))
     u_id = cursor.fetchone()[0]
-    
+
+    bets_list = []
+
+    # --- 1. Scommesse sportive + virtuali (tabella bets) ---
     b_query = "SELECT * FROM bets WHERE user_id = %s ORDER BY created_at DESC" if is_postgres else "SELECT * FROM bets WHERE user_id = ? ORDER BY created_at DESC"
     cursor.execute(b_query, (u_id,))
     rows = cursor.fetchall()
-    
-    bets_list = []
+
     for r in rows:
-        if is_postgres:
-            bet = {"id": r[0], "user_id": r[1], "amount": r[2], "total_odds": r[3], "potential_win": r[4], "status": r[5], "created_at": r[6]}
-        else:
+        bet = {"id": r[0], "user_id": r[1], "amount": r[2], "total_odds": r[3], "potential_win": r[4], "status": r[5], "created_at": str(r[6])} if is_postgres else dict(r)
+        if not is_postgres:
             bet = dict(r)
-            
+
         s_query = "SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?"
         cursor.execute(s_query, (bet['id'],))
         s_rows = cursor.fetchall()
         if is_postgres:
-            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
+            sels = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
         else:
-            bet['selections'] = [dict(sr) for sr in s_rows]
+            sels = [dict(sr) for sr in s_rows]
+
+        bet['selections'] = sels
+
+        # Determina categoria
+        if not sels:
+            bet['category'] = 'casino'
+            bet['game'] = 'Casinò'
+        elif any(s['event_id'].startswith('v_') for s in sels):
+            bet['category'] = 'virtual'
+            bet['game'] = 'Calcio Virtuale'
+        else:
+            bet['category'] = 'sport'
+            bet['game'] = 'Scommessa Sportiva'
+
         bets_list.append(bet)
-        
+
+    # --- 2. Crash bets (tabella separata) ---
+    try:
+        c_query = "SELECT id, amount, cashout_multiplier, payout, status, created_at FROM crash_bets WHERE user_id = %s ORDER BY created_at DESC" if is_postgres else "SELECT id, amount, cashout_multiplier, payout, status, created_at FROM crash_bets WHERE user_id = ? ORDER BY created_at DESC"
+        cursor.execute(c_query, (u_id,))
+        crash_rows = cursor.fetchall()
+        for cr in crash_rows:
+            if is_postgres:
+                mult = cr[2] or 0
+                payout = cr[3] or 0
+                bets_list.append({
+                    "id": f"crash_{cr[0]}",
+                    "category": "casino",
+                    "game": "Crash Game",
+                    "amount": cr[1],
+                    "total_odds": mult,
+                    "potential_win": payout,
+                    "status": cr[4],
+                    "created_at": str(cr[5]),
+                    "selections": [],
+                    "crash_multiplier": mult,
+                })
+            else:
+                cr = dict(cr)
+                bets_list.append({
+                    "id": f"crash_{cr['id']}",
+                    "category": "casino",
+                    "game": "Crash Game",
+                    "amount": cr['amount'],
+                    "total_odds": cr['cashout_multiplier'] or 0,
+                    "potential_win": cr['payout'] or 0,
+                    "status": cr['status'],
+                    "created_at": str(cr['created_at']),
+                    "selections": [],
+                    "crash_multiplier": cr['cashout_multiplier'] or 0,
+                })
+    except Exception as e:
+        print(f"[MY-BETS] crash_bets error: {e}")
+
+    # Ordina tutto per data decrescente
+    def sort_key(b):
+        try: return str(b.get('created_at') or '')
+        except: return ''
+    bets_list.sort(key=sort_key, reverse=True)
+
     conn.close()
     return bets_list
 
