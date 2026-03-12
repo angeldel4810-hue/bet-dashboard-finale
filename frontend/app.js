@@ -1329,36 +1329,96 @@ window.bets = {
             ui.toggleSlip();
         }
     },
+    _filters: { sport: true, virtual: true, casino: true },
+    _allBets: [],
+
+    toggleFilter(cat) {
+        this._filters[cat] = !this._filters[cat];
+        // Aggiorna icona spunta
+        const checkEl = document.getElementById(`filter-${cat}-check`);
+        const labelEl = document.getElementById(`filter-${cat}-label`);
+        if (checkEl) checkEl.innerText = this._filters[cat] ? '✅' : '⬜';
+        if (labelEl) labelEl.style.opacity = this._filters[cat] ? '1' : '0.4';
+        this.renderBets();
+    },
+
+    renderBets() {
+        const container = document.getElementById('my-bets-container');
+        if (!container) return;
+
+        const filtered = this._allBets.filter(b => this._filters[b.category] === true);
+
+        if (filtered.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color:var(--text-secondary); padding:3rem 0; font-size:0.95rem;">Nessuna scommessa trovata per i filtri selezionati.</div>`;
+            return;
+        }
+
+        const catColors = { sport: '#3498db', virtual: '#9b59b6', casino: '#e67e22' };
+        const catLabels = { sport: '⚽ Sport', virtual: '🕹️ Virtuale', casino: '🎰 Casinò' };
+
+        container.innerHTML = filtered.map(bet => {
+            let dateStr = '---';
+            try { if (bet.created_at) dateStr = new Date(bet.created_at).toLocaleString('it-IT'); } catch(e) {}
+
+            const statusColor = bet.status === 'won' ? 'var(--success)' : bet.status === 'lost' ? 'var(--danger)' : 'var(--accent)';
+            const statusLabel = { won: '✅ VINTO', lost: '❌ PERSO', pending: '⏳ IN CORSO', void: '↩️ ANNULLATO' }[bet.status] || bet.status.toUpperCase();
+            const catColor = catColors[bet.category] || '#aaa';
+            const catLabel = catLabels[bet.category] || bet.category;
+            const gameLabel = bet.game || catLabel;
+
+            // Corpo scommessa in base al tipo
+            let bodyHtml = '';
+
+            if (bet.category === 'casino' && bet.game === 'Crash Game') {
+                const mult = (bet.crash_multiplier || 0);
+                bodyHtml = `
+                    <div style="font-size:0.9rem; color:var(--text-secondary); padding:6px 0;">
+                        Cashout: <b style="color:white;">${mult > 0 ? mult.toFixed(2) + 'x' : '—'}</b>
+                        &nbsp;·&nbsp; Vincita: <b style="color:${bet.status === 'won' ? 'var(--success)' : 'var(--text-secondary)'};">€${(bet.potential_win || 0).toFixed(2)}</b>
+                    </div>`;
+            } else if (bet.category === 'casino') {
+                const profit = (bet.potential_win || 0) - (bet.amount || 0);
+                const profitColor = profit >= 0 ? 'var(--success)' : 'var(--danger)';
+                bodyHtml = `
+                    <div style="font-size:0.9rem; color:var(--text-secondary); padding:6px 0;">
+                        Esito: <b style="color:${profitColor};">${profit >= 0 ? '+' : ''}€${profit.toFixed(2)}</b>
+                        &nbsp;·&nbsp; Quota: <b style="color:white;">${(bet.total_odds || 0).toFixed(2)}x</b>
+                    </div>`;
+            } else {
+                bodyHtml = (bet.selections || []).map(s => `
+                    <div style="margin:4px 0; font-size:0.875rem; padding:6px 10px; background:rgba(255,255,255,0.04); border-radius:8px;">
+                        <span style="font-weight:700;">${s.selection || '---'}</span>
+                        <span style="color:var(--text-secondary); margin-left:6px;">@${(s.odds || 0).toFixed(2)}</span>
+                        <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:2px;">
+                            ${s.home_team || '---'} vs ${s.away_team || '---'}
+                            ${s.market ? `· <i>${s.market}</i>` : ''}
+                        </div>
+                    </div>`).join('');
+            }
+
+            return `
+            <div style="background:var(--card-bg); border:1px solid var(--border-color); border-left:4px solid ${catColor}; border-radius:12px; padding:1rem 1.2rem; margin-bottom:1rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem; flex-wrap:wrap; gap:0.4rem;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-size:0.7rem; font-weight:700; color:${catColor}; background:${catColor}22; padding:2px 10px; border-radius:20px; border:1px solid ${catColor}44;">${gameLabel}</span>
+                        <span style="font-size:0.75rem; color:var(--text-secondary);">#${bet.id} · ${dateStr}</span>
+                    </div>
+                    <span style="font-weight:900; font-size:0.85rem; color:${statusColor};">${statusLabel}</span>
+                </div>
+                ${bodyHtml}
+                <div style="display:flex; justify-content:space-between; margin-top:0.7rem; padding-top:0.6rem; border-top:1px solid rgba(255,255,255,0.06); font-size:0.85rem;">
+                    <span style="color:var(--text-secondary);">Puntata: <b style="color:white;">€${(bet.amount || 0).toFixed(2)}</b></span>
+                    <span style="color:var(--text-secondary);">Vincita pot.: <b style="color:white;">€${(bet.potential_win || 0).toFixed(2)}</b></span>
+                </div>
+            </div>`;
+        }).join('');
+    },
+
     async loadHistory() {
         const history = await api.request('/my-bets');
-        const container = document.getElementById('my-bets-container');
-        if (history && container) {
-            container.innerHTML = history.map(bet => {
-                let dateStr = '---';
-                try {
-                    if (bet.created_at) dateStr = new Date(bet.created_at).toLocaleString();
-                } catch (e) { }
-
-                return `
-                <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:12px; padding:1.5rem; margin-bottom:1.5rem;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.5rem;">
-                        <span style="color:var(--text-secondary)">ID: #${bet.id} | ${dateStr}</span>
-                        <span style="font-weight:bold; color:${bet.status === 'won' ? 'var(--success)' : bet.status === 'lost' ? 'var(--danger)' : 'var(--accent)'}">${bet.status.toUpperCase()}</span>
-                    </div>
-                    ${(bet.selections || []).map(s => `
-                        <div style="margin-bottom:8px; font-size:0.9rem;">
-                            <b>${s.selection || '---'}</b> <span style="color:var(--text-secondary)">@${(s.odds || 0).toFixed(2)}</span><br>
-                            ${s.home_team || '---'} vs ${s.away_team || '---'} (${s.market || '---'})
-                        </div>
-                    `).join('')}
-                    <div style="margin-top:1rem; display:flex; justify-content:space-between; font-weight:bold;">
-                        <span>Importo: €${(bet.amount || 0).toFixed(2)}</span>
-                        <span>Potential Win: €${(bet.potential_win || 0).toFixed(2)}</span>
-                    </div>
-                </div>
-            `;
-            }).join('');
-        }
+        if (!history) return;
+        this._allBets = history;
+        this.renderBets();
     }
 };
 
