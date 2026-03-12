@@ -116,6 +116,9 @@ window.ui = {
             document.getElementById('nav-admin').classList.remove('hidden');
             const mobAdmin = document.getElementById('mob-nav-admin');
             if (mobAdmin) mobAdmin.classList.remove('hidden');
+            // Mostra pulsante refresh manuale solo all'admin
+            const btnRefresh = document.getElementById('btn-force-refresh');
+            if (btnRefresh) btnRefresh.style.display = 'inline-block';
         }
         this.fetchBalance();
     },
@@ -709,13 +712,19 @@ window.blackjack = {
 window.dashboard = {
     init() {
         this.fetchOdds();
-        // Carichiamo subito le impostazioni per evitare attese nel render
         api.request('/settings').then(s => {
             if (s) state.settings = s;
         });
-        setInterval(() => this.updateTimer(), 1000);
+        // Aggiorna il countdown ogni minuto (non ogni secondo, inutile)
+        setInterval(() => this.updateTimer(), 60000);
     },
-    async fetchOdds() {
+    async fetchOdds(forceRefresh = false) {
+        if (forceRefresh) {
+            // Solo admin: azzera cache backend
+            if (state.role === 'admin') {
+                await api.request('/odds/force-refresh', { method: 'POST' });
+            }
+        }
         const odds = await api.request('/odds');
         if (odds) state.odds = odds;
 
@@ -724,13 +733,28 @@ window.dashboard = {
         }
 
         this.renderOdds();
-        state.timer = 60;
+        // Timer a 6 ore in minuti
+        state.timer = 360;
         ui.fetchBalance();
+        this.updateTimerDisplay();
     },
     updateTimer() {
-        state.timer--;
+        if (state.timer > 0) state.timer--;
         if (state.timer <= 0) this.fetchOdds();
-        document.getElementById('update-timer').innerText = `Prossimo aggiornamento: ${state.timer}s`;
+        this.updateTimerDisplay();
+    },
+    updateTimerDisplay() {
+        const el = document.getElementById('update-timer');
+        if (!el) return;
+        if (state.timer <= 0) {
+            el.innerText = 'Aggiornamento in corso...';
+        } else if (state.timer >= 60) {
+            const h = Math.floor(state.timer / 60);
+            const m = state.timer % 60;
+            el.innerText = `Prossimo aggiornamento: ${h}h ${m}m`;
+        } else {
+            el.innerText = `Prossimo aggiornamento: ${state.timer}m`;
+        }
     },
     renderOdds() {
         const container = document.getElementById('odds-container');
@@ -741,7 +765,7 @@ window.dashboard = {
 
         const settings = state.settings;
         ui.fetchBalance();
-        document.getElementById('update-timer').innerText = `Prossimo aggiornamento: ${state.timer}s`;
+        this.updateTimerDisplay();
 
         if (state.odds.length === 0) {
             let msg = 'Nessuna partita disponibile.';
@@ -866,6 +890,7 @@ window.admin = {
     async loadDashboardKPIs() {
         const users = await api.request('/admin/users');
         const bets = await api.request('/admin/bets');
+        const oddsStatus = await api.request('/odds/status');
 
         if (users && bets) {
             document.getElementById('kpi-users').innerText = users.length;
@@ -878,7 +903,6 @@ window.admin = {
             document.getElementById('kpi-exposure').innerText = `€${totalExposure.toFixed(2)}`;
 
             const wonBets = bets.filter(b => b.status === 'won');
-            const lostBets = bets.filter(b => b.status === 'lost');
             const totalBetAmount = bets.reduce((sum, b) => sum + b.amount, 0);
             const totalPaidOut = wonBets.reduce((sum, b) => sum + b.potential_win, 0);
 
@@ -887,6 +911,29 @@ window.admin = {
             profitEl.innerText = `€${profit.toFixed(2)}`;
             profitEl.className = `kpi-value ${profit >= 0 ? 'success' : 'danger'}`;
         }
+
+        // Mostra stato cache API quote
+        const apiStatusEl = document.getElementById('kpi-api-cache');
+        if (apiStatusEl && oddsStatus) {
+            if (oddsStatus.last_fetch) {
+                apiStatusEl.innerHTML = `
+                    <div style="font-size:0.8rem; color: var(--text-secondary); margin-top: 0.5rem; padding: 0.6rem; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                        📡 <strong>Cache Quote API</strong><br>
+                        Ultima fetch: <strong>${oddsStatus.last_fetch}</strong> &nbsp;|&nbsp;
+                        Prossimo aggiornamento: <strong>${oddsStatus.next_fetch_in_minutes} min</strong> &nbsp;|&nbsp;
+                        Partite in cache: <strong>${oddsStatus.cached_events}</strong>
+                        <button onclick="admin.forceRefreshOdds()" style="margin-left:1rem; font-size:0.75rem; padding:3px 10px; background:#e63946; border:none; color:white; border-radius:5px; cursor:pointer;">⚡ Forza aggiornamento</button>
+                    </div>`;
+            } else {
+                apiStatusEl.innerHTML = `<div style="font-size:0.8rem; color: var(--text-secondary); margin-top:0.5rem;">📡 Nessuna fetch API ancora effettuata (modalità manuale o cache vuota)</div>`;
+            }
+        }
+    },
+    async forceRefreshOdds() {
+        if (!confirm('Sei sicuro? Questa operazione consuma crediti API.')) return;
+        await dashboard.fetchOdds(true);
+        alert('Quote aggiornate!');
+        this.loadDashboardKPIs();
     },
     async loadSettings() {
         const settings = await api.request('/settings');

@@ -92,10 +92,19 @@
             <!-- Odds Section -->
             <div id="section-odds">
                 <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                         <h2>Quote Disponibili</h2>
-                        <span id="update-timer" style="font-size: 0.8rem; color: var(--text-secondary);">Prossimo
-                            aggiornamento: --s</span>
+                        <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+                            <span id="update-timer" style="font-size: 0.8rem; color: var(--text-secondary);">
+                                Prossimo aggiornamento: --
+                            </span>
+                            <button id="btn-force-refresh"
+                                onclick="dashboard.fetchOdds(true)"
+                                style="font-size: 0.75rem; padding: 4px 10px; background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; cursor: pointer; display: none;"
+                                title="Forza aggiornamento quote (consuma crediti API)">
+                                🔄 Aggiorna ora
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Barra di Ricerca -->
@@ -523,6 +532,7 @@
                             <div class="kpi-value success" id="kpi-profit">€0.00</div>
                         </div>
                     </div>
+                    <div id="kpi-api-cache"></div>
                 </div>
 
                 <!-- Tab: Impostazioni -->
