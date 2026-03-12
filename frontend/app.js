@@ -41,6 +41,16 @@ const state = {
         lastFetch: 0,
         polling: null,
         clock: 0
+    },
+    baccarat: {
+        lastResult: null,
+        status: 'betting', // betting, dealing, result
+        player_hand: [],
+        banker_hand: [],
+        player_score: 0,
+        banker_score: 0,
+        winner: null,
+        bets: { player: 0, banker: 0, tie: 0, player_pair: 0, banker_pair: 0 }
     }
 };
 
@@ -280,7 +290,7 @@ window.ui = {
 
 const router = {
     navigate(section) {
-        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack', 'sette-mezzo', 'virtual'];
+        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack', 'sette-mezzo', 'baccarat', 'virtual'];
         sections.forEach(s => {
             const el = document.getElementById(`section-${s}`);
             if (el) el.classList.add('hidden');
@@ -303,6 +313,7 @@ const router = {
             'crash': 'nav-casino',
             'blackjack': 'nav-casino',
             'sette-mezzo': 'nav-casino',
+            'baccarat': 'nav-casino',
             'virtual': 'nav-casino'
         };
         // Mappa mobile nav
@@ -313,6 +324,7 @@ const router = {
             'casino': 'mob-nav-casino',
             'crash': 'mob-nav-casino',
             'blackjack': 'mob-nav-casino',
+            'baccarat': 'mob-nav-casino',
             'virtual': 'mob-nav-casino'
         };
 
@@ -1797,6 +1809,107 @@ window.virtual = {
     addToSlip(matchId, event, market, selection, odds) {
         bets.addToSlip('v_' + matchId, event, market, selection, odds);
         this.renderMatches(); // Re-render per mostrare il bordo selezionato
+    }
+};
+
+window.baccarat = {
+    setBet(type, amount) {
+        if (state.baccarat.status !== 'betting') return;
+        state.baccarat.bets[type] = (state.baccarat.bets[type] || 0) + amount;
+        this.updateUI();
+    },
+    clearBets() {
+        if (state.baccarat.status !== 'betting') return;
+        state.baccarat.bets = { player: 0, banker: 0, tie: 0, player_pair: 0, banker_pair: 0 };
+        this.updateUI();
+    },
+    async deal() {
+        const total = Object.values(state.baccarat.bets).reduce((a, b) => a + b, 0);
+        if (total <= 0) return alert("Piazza almeno una scommessa!");
+        if (total > state.balance) return alert("Saldo insufficiente");
+
+        state.baccarat.status = 'dealing';
+        state.baccarat.lastResult = null;
+        this.updateUI();
+
+        const res = await api.request('/baccarat/deal', {
+            method: 'POST',
+            body: JSON.stringify(state.baccarat.bets)
+        });
+
+        if (res) {
+            state.baccarat.player_hand = res.game.player;
+            state.baccarat.banker_hand = res.game.banker;
+            state.baccarat.player_score = res.game.player_score;
+            state.baccarat.banker_score = res.game.banker_score;
+            state.baccarat.winner = res.game.winner;
+            state.baccarat.lastResult = res.game;
+            
+            // Animazione "finta" di distribuzione
+            setTimeout(() => {
+                state.baccarat.status = 'result';
+                this.updateUI();
+                ui.fetchBalance();
+                // Reset automatico dopo 5 secondi
+                setTimeout(() => {
+                    if (state.baccarat.status === 'result') {
+                        this.reset();
+                    }
+                }, 5000);
+            }, 1000);
+        } else {
+            state.baccarat.status = 'betting';
+            this.updateUI();
+        }
+    },
+    reset() {
+        state.baccarat.status = 'betting';
+        state.baccarat.player_hand = [];
+        state.baccarat.banker_hand = [];
+        state.baccarat.bets = { player: 0, banker: 0, tie: 0, player_pair: 0, banker_pair: 0 };
+        this.updateUI();
+    },
+    updateUI() {
+        // Update Board
+        const pCards = document.getElementById('bac-player-cards');
+        const bCards = document.getElementById('bac-banker-cards');
+        if (pCards) pCards.innerHTML = state.baccarat.player_hand.map(c => this.renderCard(c)).join('');
+        if (bCards) bCards.innerHTML = state.baccarat.banker_hand.map(c => this.renderCard(c)).join('');
+
+        document.getElementById('bac-player-score').innerText = state.baccarat.player_hand.length ? state.baccarat.player_score : '0';
+        document.getElementById('bac-banker-score').innerText = state.baccarat.banker_hand.length ? state.baccarat.banker_score : '0';
+
+        // Update Bets Display
+        for (const [type, amt] of Object.entries(state.baccarat.bets)) {
+            const el = document.getElementById(`bac-bet-${type}`);
+            if (el) el.innerText = amt > 0 ? `€${amt}` : '';
+        }
+
+        // Result message
+        const msg = document.getElementById('bac-msg');
+        if (state.baccarat.status === 'result') {
+            const r = state.baccarat.lastResult;
+            let resText = r.winner.toUpperCase();
+            if (r.winner === 'tie') resText = 'PAREGGIO';
+            msg.innerText = `${resText}! Vinti: €${r.payout}`;
+            msg.style.color = r.payout > 0 ? '#00ff88' : '#ff4444';
+        } else if (state.baccarat.status === 'dealing') {
+            msg.innerText = 'Distribuzione...';
+            msg.style.color = 'white';
+        } else {
+            msg.innerText = 'Piazza le tue fiches';
+            msg.style.color = 'var(--text-secondary)';
+        }
+    },
+    renderCard(card) {
+        const color = (card.suit === '♥' || card.suit === '♦') ? 'red' : 'white';
+        return `
+            <div class="playing-card" style="color: ${color}; width: 80px; height: 110px; background: white; border-radius: 8px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; border: 2px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+                <div style="font-size: 1.2rem; line-height: 1;">${card.rank}<br><span style="font-size: 1rem;">${card.suit}</span></div>
+                <div style="font-size: 2rem; align-self: center;">${card.suit}</div>
+                <div style="font-size: 1.2rem; transform: rotate(180deg); line-height: 1;">${card.rank}<br><span style="font-size: 1rem;">${card.suit}</span></div>
+            </div>
+        `;
     }
 };
 
