@@ -949,11 +949,18 @@ window.admin = {
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
                          <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${b.selections.map(s => `
-                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
-                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
+                    ${b.selections.map(s => {
+                        let scoreBadge = '';
+                        if (s.v_score !== undefined) {
+                            let textOpts = {'scheduled': 'In Arrivo', 'live': 'Live', 'finished': 'Terminata'};
+                            let bg = s.v_status === 'finished' ? '#ffd700' : (s.v_status === 'live' ? '#ff4d4d' : '#4caf50');
+                            scoreBadge = `<span style="background:${bg}; color:#000; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem; margin-left:10px;">Risultato: ${s.v_score} (${textOpts[s.v_status] || s.v_status})</span>`;
+                        }
+                        return `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8; display:flex; align-items:center;">
+                            • ${s.home_team} vs ${s.away_team}: <b style="margin-left:5px;">${s.selection}</b> <span style="margin-left:5px;">@${s.odds.toFixed(2)}</span> ${scoreBadge}
                         </div>
-                    `).join('')}
+                    `}).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
@@ -1082,8 +1089,10 @@ window.admin = {
                     </div>
                     ${b.selections.map(s => {
                         let scoreBadge = '';
-                        if (s.v_status === 'finished' && s.v_score) {
-                            scoreBadge = `<span style="background:#ffd700; color:#000; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem; margin-left:10px;">Risultato: ${s.v_score}</span>`;
+                        if (s.v_score !== undefined) {
+                            let textOpts = {'scheduled': 'In Arrivo', 'live': 'Live', 'finished': 'Terminata'};
+                            let bg = s.v_status === 'finished' ? '#ffd700' : (s.v_status === 'live' ? '#ff4d4d' : '#4caf50');
+                            scoreBadge = `<span style="background:${bg}; color:#000; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem; margin-left:10px;">Risultato: ${s.v_score} (${textOpts[s.v_status] || s.v_status})</span>`;
                         }
                         return `
                         <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8; display:flex; align-items:center;">
