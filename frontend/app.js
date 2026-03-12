@@ -340,6 +340,7 @@ const router = {
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
         if (section === 'virtual') virtual.init();
+        if (section === 'baccarat') { baccarat.initChips(); baccarat.updateUI(); }
     }
 };
 
@@ -348,7 +349,7 @@ window.setteMezzo = {
         const amountInput = document.getElementById('sm-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
+        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/sette-mezzo/deal', {
@@ -494,7 +495,7 @@ window.blackjack = {
         const amountInput = document.getElementById('bj-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
+        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/blackjack/deal', {
@@ -1237,7 +1238,7 @@ window.bets = {
     async placeBet() {
         const amount = parseFloat(document.getElementById('slip-amount').value);
         if (!amount || amount <= 0) return alert('Inserisci un importo valido');
-        if (amount < 1) { // Minimum bet amount
+        if (amount < 0.20) { // Minimum bet amount
             alert('L\'importo minimo della scommessa è €1.00');
             return;
         }
@@ -1401,7 +1402,7 @@ window.crash = {
         const amountInput = document.getElementById('crash-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const amount = parseFloat(rawVal);
-        if (isNaN(amount) || amount < 1.00) return alert("Scommessa minima €1.00");
+        if (isNaN(amount) || amount < 0.20) return alert("Scommessa minima €0.20");
         if (amount > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/crash/bet', {
@@ -1813,19 +1814,65 @@ window.virtual = {
 };
 
 window.baccarat = {
-    setBet(type, amount) {
+    // Fiches disponibili: valore e colore
+    CHIPS: [
+        { value: 0.20, color: '#bbb',    label: '0.20' },
+        { value: 0.50, color: '#a0522d', label: '0.50' },
+        { value: 1,    color: '#1a73e8', label: '1' },
+        { value: 2,    color: '#28a745', label: '2' },
+        { value: 5,    color: '#e63946', label: '5' },
+        { value: 10,   color: '#6f42c1', label: '10' },
+        { value: 25,   color: '#fd7e14', label: '25' },
+        { value: 50,   color: '#ffd700', label: '50' },
+    ],
+    selectedChip: 1,
+
+    initChips() {
+        const container = document.getElementById('bac-chips');
+        if (!container) return;
+        container.innerHTML = this.CHIPS.map(c => `
+            <div id="bac-chip-${c.value}"
+                 onclick="baccarat.selectChip(${c.value})"
+                 style="
+                    width:52px; height:52px; border-radius:50%;
+                    background: ${c.color};
+                    border: 3px solid ${c.value === this.selectedChip ? 'white' : 'rgba(255,255,255,0.3)'};
+                    box-shadow: ${c.value === this.selectedChip ? '0 0 12px white' : '0 2px 6px rgba(0,0,0,0.5)'};
+                    display:flex; align-items:center; justify-content:center;
+                    font-weight:900; font-size:0.75rem; color:white;
+                    cursor:pointer; transition: all 0.15s; user-select:none;
+                    text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+                 ">€${c.label}</div>
+        `).join('');
+    },
+
+    selectChip(val) {
+        this.selectedChip = val;
+        // Aggiorna bordi
+        this.CHIPS.forEach(c => {
+            const el = document.getElementById(`bac-chip-${c.value}`);
+            if (!el) return;
+            el.style.border = `3px solid ${c.value === val ? 'white' : 'rgba(255,255,255,0.3)'}`;
+            el.style.boxShadow = c.value === val ? '0 0 12px white' : '0 2px 6px rgba(0,0,0,0.5)';
+        });
+    },
+
+    setBet(type) {
         if (state.baccarat.status !== 'betting') return;
-        state.baccarat.bets[type] = (state.baccarat.bets[type] || 0) + amount;
+        const amount = this.selectedChip;
+        state.baccarat.bets[type] = Math.round(((state.baccarat.bets[type] || 0) + amount) * 100) / 100;
         this.updateUI();
     },
+
     clearBets() {
         if (state.baccarat.status !== 'betting') return;
         state.baccarat.bets = { player: 0, banker: 0, tie: 0, player_pair: 0, banker_pair: 0 };
         this.updateUI();
     },
+
     async deal() {
         const total = Object.values(state.baccarat.bets).reduce((a, b) => a + b, 0);
-        if (total <= 0) return alert("Piazza almeno una scommessa!");
+        if (total < 0.20) return alert("Puntata minima €0.20!");
         if (total > state.balance) return alert("Saldo insufficiente");
 
         state.baccarat.status = 'dealing';
@@ -1845,12 +1892,10 @@ window.baccarat = {
             state.baccarat.winner = res.game.winner;
             state.baccarat.lastResult = res.game;
             
-            // Animazione "finta" di distribuzione
             setTimeout(() => {
                 state.baccarat.status = 'result';
                 this.updateUI();
                 ui.fetchBalance();
-                // Reset automatico dopo 5 secondi
                 setTimeout(() => {
                     if (state.baccarat.status === 'result') {
                         this.reset();
@@ -1862,6 +1907,7 @@ window.baccarat = {
             this.updateUI();
         }
     },
+
     reset() {
         state.baccarat.status = 'betting';
         state.baccarat.player_hand = [];
@@ -1869,8 +1915,11 @@ window.baccarat = {
         state.baccarat.bets = { player: 0, banker: 0, tie: 0, player_pair: 0, banker_pair: 0 };
         this.updateUI();
     },
+
     updateUI() {
-        // Update Board
+        // Chips init if needed
+        if (!document.getElementById('bac-chip-0.2')) this.initChips();
+
         const pCards = document.getElementById('bac-player-cards');
         const bCards = document.getElementById('bac-banker-cards');
         if (pCards) pCards.innerHTML = state.baccarat.player_hand.map(c => this.renderCard(c)).join('');
@@ -1879,30 +1928,43 @@ window.baccarat = {
         document.getElementById('bac-player-score').innerText = state.baccarat.player_hand.length ? state.baccarat.player_score : '0';
         document.getElementById('bac-banker-score').innerText = state.baccarat.banker_hand.length ? state.baccarat.banker_score : '0';
 
-        // Update Bets Display
+        // Mostra le puntate sulle zone
         for (const [type, amt] of Object.entries(state.baccarat.bets)) {
             const el = document.getElementById(`bac-bet-${type}`);
-            if (el) el.innerText = amt > 0 ? `€${amt}` : '';
+            if (el) el.innerText = amt > 0 ? `€${amt.toFixed(2)}` : '';
         }
+
+        // Evidenzia zone con puntata
+        ['player','banker','tie','player_pair','banker_pair'].forEach(type => {
+            const zone = document.getElementById(`bac-zone-${type}`);
+            if (!zone) return;
+            zone.style.opacity = state.baccarat.bets[type] > 0 ? '1' : (state.baccarat.status === 'betting' ? '0.85' : '0.6');
+        });
 
         // Result message
         const msg = document.getElementById('bac-msg');
+        if (!msg) return;
         if (state.baccarat.status === 'result') {
             const r = state.baccarat.lastResult;
-            let resText = r.winner.toUpperCase();
-            if (r.winner === 'tie') resText = 'PAREGGIO';
-            msg.innerText = `${resText}! Vinti: €${r.payout}`;
-            msg.style.color = r.payout > 0 ? '#00ff88' : '#ff4444';
+            let resText = r.winner === 'tie' ? 'PAREGGIO' : (r.winner === 'player' ? 'PUNTO VINCE' : 'BANCO VINCE');
+            // Aggiungi info coppie
+            let pairInfo = '';
+            if (r.player_pair) pairInfo += ` | PLAYER PAIR ×${r.player_pair_mult}`;
+            if (r.banker_pair) pairInfo += ` | BANKER PAIR ×${r.banker_pair_mult}`;
+            const profit = r.payout - r.total_bet;
+            msg.innerHTML = `${resText}${pairInfo}<br><span style="font-size:1.4rem">${profit >= 0 ? '+' : ''}€${profit.toFixed(2)}</span>`;
+            msg.style.color = profit >= 0 ? '#00ff88' : '#ff4444';
         } else if (state.baccarat.status === 'dealing') {
-            msg.innerText = 'Distribuzione...';
+            msg.innerHTML = 'Distribuzione...';
             msg.style.color = 'white';
         } else {
-            msg.innerText = 'Piazza le tue fiches';
-            msg.style.color = 'var(--text-secondary)';
+            msg.innerHTML = 'Piazza le tue fiches';
+            msg.style.color = 'gold';
         }
     },
+
     renderCard(card) {
-        const color = (card.suit === '♥' || card.suit === '♦') ? 'red' : 'white';
+        const color = (card.suit === '♥' || card.suit === '♦') ? '#cc0000' : '#111';
         return `
             <div class="playing-card" style="color: ${color}; width: 80px; height: 110px; background: white; border-radius: 8px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; border: 2px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
                 <div style="font-size: 1.2rem; line-height: 1;">${card.rank}<br><span style="font-size: 1rem;">${card.suit}</span></div>
