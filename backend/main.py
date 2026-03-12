@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 import time
 from backend.crash import crash_engine
 import backend.sette_mezzo as sm
+import backend.baccarat
 from backend.virtual_football import router as virtual_router, run_virtual_football_loop
 
 is_postgres = os.environ.get("DATABASE_URL") is not None
@@ -243,6 +244,7 @@ async def fetch_odds(user = Depends(get_current_user)):
                     seen_ids.add(event_id)
             except: continue
             
+    # CRITICAL FIX: The cache assignment MUST be outside the event loop
     odds_cache['data'] = all_odds
     odds_cache['timestamp'] = time.time()
     odds_cache['source'] = source
@@ -1057,7 +1059,60 @@ async def bj_skip_insurance(data: dict, current_user = Depends(get_current_user)
         conn.commit()
         conn.close()
         
+        
     return result
+
+@app.post("/api/baccarat/deal")
+async def play_baccarat(bets: Dict[str, float] = Body(...), user = Depends(get_current_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    
+    total_bet = sum(bets.values())
+    if total_bet <= 0:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Invalid bet amounts")
+        
+    query_bal = "SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?"
+    cursor.execute(query_bal, (user['id'],))
+    bal = cursor.fetchone()
+    if not bal or bal[0] < total_bet:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Saldo insufficiente")
+        
+    res = backend.baccarat.deal(bets, user['id'])
+    
+    # Update balance
+    new_bal = bal[0] - res['total_bet'] + res['payout']
+    update_q = "UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?"
+    cursor.execute(update_q, (new_bal, user['id']))
+    
+    # Record the bet
+    status = "won" if res['profit'] > 0 else ("lost" if res['profit'] < 0 else "void")
+    insert_q = """
+        INSERT INTO bets (user_id, selection, odds, amount, potential_win, status, type)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """ if is_postgres else """
+        INSERT INTO bets (user_id, selection, odds, amount, potential_win, status, type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """
+    cursor.execute(insert_q, (
+        user['id'], 
+        f"Baccarat: {res['winner']}", 
+        round(res['payout'] / max(1, res['total_bet']), 2) if res['total_bet'] > 0 else 0, 
+        res['total_bet'], 
+        res['payout'], 
+        status, 
+        'casino'
+    ))
+    
+    conn.commit()
+    conn.close()
+    
+    return {
+        "balance": round(new_bal, 2),
+        "game": res
+    }
 
 # VIRTUAL FOOTBALL ROUTER
 app.include_router(virtual_router, prefix="/api/virtual", tags=["Virtual Football"])
