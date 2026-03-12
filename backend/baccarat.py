@@ -4,6 +4,14 @@ import random
 SUITS = ['♠','♥','♦','♣']
 RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K']
 
+# Colori per seme
+SUIT_COLORS = {
+    '♠': 'black',
+    '♣': 'black',
+    '♥': 'red',
+    '♦': 'red',
+}
+
 def card_value(rank):
     if rank in ['10','J','Q','K']: return 0
     if rank == 'A': return 1
@@ -38,6 +46,28 @@ def apply_third_card(player, banker, deck):
         elif bs == 5 and tv in [4,5,6,7]: banker.append(deck.pop())
         elif bs == 6 and tv in [6,7]: banker.append(deck.pop())
 
+def classify_pair(c1, c2):
+    """
+    Classifica il tipo di coppia e ritorna il moltiplicatore:
+    - Coppia identica (stesso rank E stesso seme): 24:1
+    - Coppia stesso colore ma seme diverso: 12:1
+    - Coppia colore diverso: 6:1
+    - Non è coppia: None
+    """
+    if c1['rank'] != c2['rank']:
+        return None  # Non è una coppia
+
+    if c1['suit'] == c2['suit']:
+        return 24  # Coppia identica (stesso seme)
+
+    color1 = SUIT_COLORS[c1['suit']]
+    color2 = SUIT_COLORS[c2['suit']]
+
+    if color1 == color2:
+        return 12  # Stesso colore, seme diverso
+    else:
+        return 6   # Colore diverso
+
 def deal(bets: dict, user_id: int) -> dict:
     """
     bets = { player: float, banker: float, tie: float,
@@ -52,8 +82,11 @@ def deal(bets: dict, user_id: int) -> dict:
     bs = score(banker)
     winner = 'player' if ps > bs else ('banker' if bs > ps else 'tie')
 
-    player_pair = player[0]['rank'] == player[1]['rank']
-    banker_pair = banker[0]['rank'] == banker[1]['rank']
+    # Classifica le coppie con moltiplicatore variabile
+    player_pair_mult = classify_pair(player[0], player[1])
+    banker_pair_mult = classify_pair(banker[0], banker[1])
+    player_pair = player_pair_mult is not None
+    banker_pair = banker_pair_mult is not None
 
     payout = 0.0
     bp = bets.get('player', 0)
@@ -72,8 +105,11 @@ def deal(bets: dict, user_id: int) -> dict:
         payout += bp   # push rimborso
         payout += bb   # push rimborso
 
-    if player_pair and bpp > 0: payout += bpp * 12
-    if banker_pair and bbp > 0: payout += bbp * 12
+    # Pagamento coppie con moltiplicatore variabile
+    if player_pair and bpp > 0:
+        payout += bpp * player_pair_mult
+    if banker_pair and bbp > 0:
+        payout += bbp * banker_pair_mult
 
     profit = payout - total
 
@@ -81,7 +117,10 @@ def deal(bets: dict, user_id: int) -> dict:
         'player': player, 'banker': banker,
         'player_score': ps, 'banker_score': bs,
         'winner': winner,
-        'player_pair': player_pair, 'banker_pair': banker_pair,
+        'player_pair': player_pair,
+        'banker_pair': banker_pair,
+        'player_pair_mult': player_pair_mult,
+        'banker_pair_mult': banker_pair_mult,
         'payout': round(payout, 2),
         'profit': round(profit, 2),
         'total_bet': round(total, 2),
