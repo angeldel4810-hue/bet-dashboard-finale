@@ -65,7 +65,13 @@ window.api = {
                 auth.logout();
                 return null;
             }
-            return await response.json();
+            const data = await response.json();
+            if (!response.ok) {
+                const msg = data?.detail || `Errore ${response.status}`;
+                alert(`Errore: ${msg}`);
+                return null;
+            }
+            return data;
         } catch (e) {
             console.error('API Error:', e);
             return null;
@@ -1883,33 +1889,42 @@ window.baccarat = {
         state.baccarat.lastResult = null;
         this.updateUI();
 
-        const res = await api.request('/baccarat/deal', {
-            method: 'POST',
-            body: JSON.stringify(state.baccarat.bets)
-        });
+        let res = null;
+        try {
+            res = await api.request('/baccarat/deal', {
+                method: 'POST',
+                body: JSON.stringify(state.baccarat.bets)
+            });
+        } catch(e) {
+            console.error('Baccarat deal error:', e);
+        }
 
-        if (res) {
-            state.baccarat.player_hand = res.game.player;
-            state.baccarat.banker_hand = res.game.banker;
-            state.baccarat.player_score = res.game.player_score;
-            state.baccarat.banker_score = res.game.banker_score;
-            state.baccarat.winner = res.game.winner;
-            state.baccarat.lastResult = res.game;
-            
-            setTimeout(() => {
-                state.baccarat.status = 'result';
-                this.updateUI();
-                ui.fetchBalance();
-                setTimeout(() => {
-                    if (state.baccarat.status === 'result') {
-                        this.reset();
-                    }
-                }, 5000);
-            }, 1000);
-        } else {
+        if (!res || !res.game) {
+            // Errore — torna a betting senza resettare le puntate
             state.baccarat.status = 'betting';
             this.updateUI();
+            return;
         }
+
+        // Aggiorna saldo subito
+        state.balance = res.balance;
+        const balEl = document.getElementById('user-balance-nav');
+        if (balEl) balEl.innerText = `Saldo: €${res.balance.toFixed(2)}`;
+
+        // Mostra carte e risultato
+        state.baccarat.player_hand = res.game.player;
+        state.baccarat.banker_hand = res.game.banker;
+        state.baccarat.player_score = res.game.player_score;
+        state.baccarat.banker_score = res.game.banker_score;
+        state.baccarat.winner = res.game.winner;
+        state.baccarat.lastResult = res.game;
+        state.baccarat.status = 'result';
+        this.updateUI();
+
+        // Reset automatico dopo 5 secondi
+        setTimeout(() => {
+            if (state.baccarat.status === 'result') this.reset();
+        }, 5000);
     },
 
     reset() {
