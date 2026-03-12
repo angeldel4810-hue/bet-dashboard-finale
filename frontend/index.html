@@ -361,30 +361,32 @@
                             <!-- Tavolo Puntate -->
                             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; width: 100%; max-width: 800px;">
                                 <!-- Banker Pair -->
-                                <div onclick="baccarat.setBet('banker_pair', 5)" style="background: rgba(0,0,0,0.3); border: 2px dashed #ffd700; padding: 15px; border-radius: 10px; cursor: pointer;">
-                                    <div style="font-size: 0.7rem; color: #ffd700;">BANKER PAIR (12:1)</div>
-                                    <div id="bac-bet-banker_pair" style="font-size: 1.2rem; font-weight: bold; color: white;"></div>
+                                <div onclick="baccarat.setBet('banker_pair')" style="background: rgba(0,0,0,0.3); border: 2px dashed #ffd700; padding: 15px; border-radius: 10px; cursor: pointer;" id="bac-zone-banker_pair">
+                                    <div style="font-size: 0.65rem; color: #ffd700; line-height: 1.3;">BANKER PAIR<br><span style="font-size:0.6rem;">🟡 col.div: 6:1 | 🔵 sem.div: 12:1 | ⚡ identica: 24:1</span></div>
+                                    <div id="bac-bet-banker_pair" style="font-size: 1.2rem; font-weight: bold; color: white; margin-top:4px;"></div>
                                 </div>
                                 <div style="visibility: hidden;"></div>
                                 <!-- Player Pair -->
-                                <div onclick="baccarat.setBet('player_pair', 5)" style="background: rgba(0,0,0,0.3); border: 2px dashed #00ff88; padding: 15px; border-radius: 10px; cursor: pointer;">
-                                    <div style="font-size: 0.7rem; color: #00ff88;">PLAYER PAIR (12:1)</div>
-                                    <div id="bac-bet-player_pair" style="font-size: 1.2rem; font-weight: bold; color: white;"></div>
+                                <div onclick="baccarat.setBet('player_pair')" style="background: rgba(0,0,0,0.3); border: 2px dashed #00ff88; padding: 15px; border-radius: 10px; cursor: pointer;" id="bac-zone-player_pair">
+                                    <div style="font-size: 0.65rem; color: #00ff88; line-height: 1.3;">PLAYER PAIR<br><span style="font-size:0.6rem;">🟡 col.div: 6:1 | 🔵 sem.div: 12:1 | ⚡ identica: 24:1</span></div>
+                                    <div id="bac-bet-player_pair" style="font-size: 1.2rem; font-weight: bold; color: white; margin-top:4px;"></div>
                                 </div>
 
                                 <!-- BANKER -->
-                                <div onclick="baccarat.setBet('banker', 10)" style="background: rgba(255,0,0,0.1); border: 3px solid #ff4444; padding: 30px 15px; border-radius: 100px 100px 20px 20px; cursor: pointer; transition: background 0.2s;">
+                                <div onclick="baccarat.setBet('banker')" style="background: rgba(255,0,0,0.1); border: 3px solid #ff4444; padding: 30px 15px; border-radius: 100px 100px 20px 20px; cursor: pointer; transition: background 0.2s;" id="bac-zone-banker">
                                     <div style="font-size: 1.5rem; font-weight: bold; color: #ff4444;">BANCO</div>
+                                    <div style="font-size: 0.65rem; color: rgba(255,255,255,0.5);">1:0.95</div>
                                     <div id="bac-bet-banker" style="font-size: 1.2rem; font-weight: bold; color: white;"></div>
                                 </div>
                                 <!-- TIE -->
-                                <div onclick="baccarat.setBet('tie', 5)" style="background: rgba(0,255,0,0.1); border: 3px solid #00ff88; padding: 30px 15px; border-radius: 20px; cursor: pointer; align-self: center;">
+                                <div onclick="baccarat.setBet('tie')" style="background: rgba(0,255,0,0.1); border: 3px solid #00ff88; padding: 30px 15px; border-radius: 20px; cursor: pointer; align-self: center;" id="bac-zone-tie">
                                     <div style="font-size: 1.2rem; font-weight: bold; color: #00ff88;">TIE (9:1)</div>
                                     <div id="bac-bet-tie" style="font-size: 1.2rem; font-weight: bold; color: white;"></div>
                                 </div>
                                 <!-- PLAYER -->
-                                <div onclick="baccarat.setBet('player', 10)" style="background: rgba(0,0,255,0.1); border: 3px solid #3498db; padding: 30px 15px; border-radius: 100px 100px 20px 20px; cursor: pointer;">
+                                <div onclick="baccarat.setBet('player')" style="background: rgba(0,0,255,0.1); border: 3px solid #3498db; padding: 30px 15px; border-radius: 100px 100px 20px 20px; cursor: pointer;" id="bac-zone-player">
                                     <div style="font-size: 1.5rem; font-weight: bold; color: #3498db;">PUNTO</div>
+                                    <div style="font-size: 0.65rem; color: rgba(255,255,255,0.5);">1:1</div>
                                     <div id="bac-bet-player" style="font-size: 1.2rem; font-weight: bold; color: white;"></div>
                                 </div>
                             </div>
@@ -396,8 +398,16 @@
                             <div style="color: rgba(255,255,255,0.6); font-size: 0.8rem; text-transform: uppercase;">GIOCATORE <span id="bac-player-score" style="background:#3498db; color:white; padding:2px 8px; border-radius:10px; margin-left:5px;">0</span></div>
                         </div>
 
+                        <!-- Selettore Fiches -->
+                        <div style="margin-top: 1.5rem; text-align: center;">
+                            <div style="font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 1px;">Seleziona fiche</div>
+                            <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;" id="bac-chips">
+                                <!-- generato da JS -->
+                            </div>
+                        </div>
+
                         <!-- Footer Controlli -->
-                        <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 2rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 20px;">
+                        <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 20px;">
                             <button onclick="baccarat.clearBets()" style="background: #555; width: auto; padding: 10px 20px;">CANCELLA</button>
                             <button onclick="baccarat.deal()" style="background: gold; color: black; font-weight: 800; width: auto; padding: 10px 40px; font-size: 1.2rem;">DISTRIBUISCI</button>
                         </div>
