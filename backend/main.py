@@ -110,22 +110,51 @@ async def update_settings(settings: Dict[str, str] = Body(...)):
 
 odds_cache = {
     "data": [],
-    "timestamp": 0,
+    "timestamp": 0,   # in-memory, si resetta al riavvio
     "provider": "",
     "sports": "",
     "overround": 0.0,
     "source": ""
 }
 odds_lock = asyncio.Lock()
+CACHE_TTL = 21600  # 6 ore in secondi
+
+def _get_db_timestamp() -> float:
+    """Legge il timestamp dell'ultima fetch API dal DB (persiste tra riavvii)."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = 'odds_last_fetch'")
+        row = cursor.fetchone()
+        conn.close()
+        return float(row[0]) if row else 0.0
+    except Exception:
+        return 0.0
+
+def _set_db_timestamp(ts: float):
+    """Salva il timestamp dell'ultima fetch API nel DB."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        is_pg = hasattr(conn, 'get_dsn_parameters')
+        if is_pg:
+            cursor.execute("INSERT INTO settings (key, value) VALUES ('odds_last_fetch', %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (str(ts),))
+        else:
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('odds_last_fetch', ?)", (str(ts),))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[CACHE] Errore salvataggio timestamp: {e}")
 
 @app.get("/api/odds/status")
 async def odds_status(user = Depends(get_current_user)):
     """Mostra quando e' stata l'ultima fetch e quando sara' la prossima."""
-    ts = odds_cache.get('timestamp', 0)
+    # Prima controlla in memoria, poi nel DB
+    ts = odds_cache.get('timestamp', 0) or _get_db_timestamp()
     if ts == 0:
         return {"last_fetch": None, "next_fetch_in_minutes": 0, "cached_events": 0}
     elapsed = time.time() - ts
-    remaining = max(0, 21600 - elapsed)
+    remaining = max(0, CACHE_TTL - elapsed)
     return {
         "last_fetch": datetime.fromtimestamp(ts).strftime('%d/%m/%Y %H:%M'),
         "next_fetch_in_minutes": round(remaining / 60),
@@ -135,9 +164,10 @@ async def odds_status(user = Depends(get_current_user)):
 
 @app.post("/api/odds/force-refresh", dependencies=[Depends(check_admin)])
 async def force_odds_refresh():
-    """Admin: forza il refresh immediato delle quote (azzera il timestamp della cache)."""
+    """Admin: forza il refresh immediato delle quote (azzera la cache)."""
     odds_cache['timestamp'] = 0
-    return {"message": "Cache azzerata. Il prossimo /api/odds fara' una nuova chiamata all\'API."}
+    _set_db_timestamp(0)
+    return {"message": "Cache azzerata. La prossima chiamata a /api/odds aggiornerà le quote."}
 
 @app.get("/api/odds")
 async def fetch_odds(user = Depends(get_current_user)):
@@ -154,13 +184,28 @@ async def fetch_odds(user = Depends(get_current_user)):
     
     async with odds_lock:
         current_time = time.time()
-        
+
+        # Se la cache in memoria è scaduta, controlla anche il timestamp nel DB
+        # Questo gestisce il caso in cui il server si è riavviato ma il TTL non è scaduto
+        mem_ts = odds_cache.get('timestamp', 0)
+        if mem_ts == 0:
+            db_ts = _get_db_timestamp()
+            if db_ts > 0 and (current_time - db_ts < CACHE_TTL):
+                # Il TTL non è scaduto — non chiamare l'API, ma la cache in memoria
+                # è vuota (riavvio). Dobbiamo fare la fetch per riempirla.
+                # Impostiamo timestamp a db_ts per non sprecare crediti:
+                # se i dati sono ancora freschi, li ricarichiamo senza consumare l'API.
+                # Nota: senza dati in memoria, dobbiamo comunque chiamare l'API una volta.
+                pass  # lascia scadere e vai a fetch sotto
+            odds_cache['timestamp'] = db_ts  # sincronizza
+
         # Cache 6 ore — risparmia crediti API
-        if (current_time - odds_cache['timestamp'] < 21600) and \
+        if (current_time - odds_cache['timestamp'] < CACHE_TTL) and \
            (odds_cache['source'] == source) and \
            (odds_cache['provider'] == api_provider) and \
            (odds_cache['sports'] == sports_str) and \
-           (abs(odds_cache['overround'] - overround) < 0.01):
+           (abs(odds_cache['overround'] - overround) < 0.01) and \
+           len(odds_cache['data']) > 0:
             conn.close()
             return odds_cache['data']
         
@@ -210,12 +255,14 @@ async def fetch_odds(user = Depends(get_current_user)):
                 "bookmakers": [{"key": "manual", "title": "Manuale", "markets": markets}]
             })
             
+        _ts = time.time()
         odds_cache['data'] = odds_list
-        odds_cache['timestamp'] = time.time()
+        odds_cache['timestamp'] = _ts
         odds_cache['source'] = source
         odds_cache['provider'] = api_provider
         odds_cache['sports'] = sports_str
         odds_cache['overround'] = overround
+        _set_db_timestamp(_ts)  # persiste tra riavvii
         
         return odds_list
 
@@ -266,12 +313,14 @@ async def fetch_odds(user = Depends(get_current_user)):
             except: continue
             
     # CRITICAL FIX: The cache assignment MUST be outside the event loop
+    _ts = time.time()
     odds_cache['data'] = all_odds
-    odds_cache['timestamp'] = time.time()
+    odds_cache['timestamp'] = _ts
     odds_cache['source'] = source
     odds_cache['provider'] = api_provider
     odds_cache['sports'] = sports_str
     odds_cache['overround'] = overround
+    _set_db_timestamp(_ts)  # persiste tra riavvii
             
     return all_odds
 
