@@ -7,7 +7,6 @@ const state = {
     searchQuery: '',
     settings: null,
     crash: {
-        rafId: null,
         ws: null,
         status: 'waiting',
         multiplier: 1.0,
@@ -21,7 +20,7 @@ const state = {
         dealer_hand: [],
         player_score: 0,
         dealer_score: 0,
-        status: null,
+        status: 'betting', // betting, playing, win, loss, bust, push
         bet: 0
     },
     sette_mezzo: {
@@ -49,18 +48,16 @@ window.api = {
     async request(path, options = {}) {
         const headers = { 'Content-Type': 'application/json' };
         if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
+
         try {
             const response = await fetch(`/api${path}`, { ...options, headers });
-            if (response.status === 401) { auth.logout(); return null; }
-            const data = await response.json();
-            if (!response.ok) {
-                alert(data?.detail || data?.error || 'Errore del server');
+            if (response.status === 401) {
+                auth.logout();
                 return null;
             }
-            return data;
+            return await response.json();
         } catch (e) {
             console.error('API Error:', e);
-            alert('Errore di connessione al server');
             return null;
         }
     }
@@ -99,9 +96,6 @@ window.ui = {
     showDashboard() {
         document.getElementById('login-page').classList.add('hidden');
         document.getElementById('main-dashboard').classList.remove('hidden');
-        // Mostra navbar mobile
-        const mobileNav = document.getElementById('mobile-nav');
-        if (mobileNav) mobileNav.classList.add("active");
         if (state.role === 'admin') {
             document.getElementById('nav-admin').classList.remove('hidden');
             const mobAdmin = document.getElementById('mob-nav-admin');
@@ -276,21 +270,17 @@ window.ui = {
         document.getElementById('all-odds-modal').classList.add('hidden');
     },
     async fetchBalance() {
-        const now = Date.now();
-        if (now - (state._lastBalanceFetch || 0) < 2000) return; // throttle: max 1 call ogni 2s
-        state._lastBalanceFetch = now;
         const res = await api.request('/user/balance');
         if (res) {
             state.balance = res.balance;
-            const el = document.getElementById('user-balance-nav');
-            if (el) el.innerText = `Saldo: €${state.balance.toFixed(2)}`;
+            document.getElementById('user-balance-nav').innerText = `Saldo: €${state.balance.toFixed(2)}`;
         }
     }
 };
 
 const router = {
     navigate(section) {
-        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack', 'sette-mezzo', 'baccarat', 'virtual'];
+        const sections = ['odds', 'admin', 'mybets', 'casino', 'crash', 'blackjack', 'sette-mezzo', 'virtual'];
         sections.forEach(s => {
             const el = document.getElementById(`section-${s}`);
             if (el) el.classList.add('hidden');
@@ -334,26 +324,10 @@ const router = {
         const targetMobNav = document.getElementById(targetMobNavId);
         if (targetMobNav) targetMobNav.classList.add('active');
 
-        // Chiudi WS crash se non siamo nella sezione crash
-        if (section !== 'crash' && state.crash && state.crash.ws && state.crash.ws.readyState === WebSocket.OPEN) {
-            state.crash.ws.onclose = null; // evita auto-reconnect
-            state.crash.ws.close();
-            state.crash.ws = null;
-        }
         if (section === 'admin') admin.init();
         if (section === 'mybets') bets.loadHistory();
         if (section === 'crash') crash.init();
-        else if (typeof crash !== 'undefined' && crash.stopGraph) crash.stopGraph();
-        // Ferma il polling virtual se si naviga altrove
-        if (section !== 'virtual' && state.virtual && state.virtual.polling) {
-            clearInterval(state.virtual.polling);
-            state.virtual.polling = null;
-        }
-        if (section !== 'virtual' && state.betsPolling) {
-            clearInterval(state.betsPolling);
-            state.betsPolling = null;
-        }
-        if (section === 'virtual') { virtual.init(); if (window.innerWidth <= 600) virtual.applyMobileLayout(); }
+        if (section === 'virtual') virtual.init();
     }
 };
 
@@ -362,7 +336,7 @@ window.setteMezzo = {
         const amountInput = document.getElementById('sm-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/sette-mezzo/deal', {
@@ -508,7 +482,7 @@ window.blackjack = {
         const amountInput = document.getElementById('bj-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const bet = parseFloat(rawVal);
-        if (isNaN(bet) || bet < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(bet) || bet < 1.00) return alert("Scommessa minima €1.00");
         if (bet > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/blackjack/deal', {
@@ -716,13 +690,11 @@ window.blackjack = {
 window.dashboard = {
     init() {
         this.fetchOdds();
+        // Carichiamo subito le impostazioni per evitare attese nel render
         api.request('/settings').then(s => {
             if (s) state.settings = s;
         });
-        // Evita intervalli duplicati
-        if (!state.dashboardInterval) {
-            state.dashboardInterval = setInterval(() => this.updateTimer(), 1000);
-        }
+        setInterval(() => this.updateTimer(), 1000);
     },
     async fetchOdds() {
         const odds = await api.request('/odds');
@@ -801,7 +773,7 @@ window.dashboard = {
             const under25Price = totals?.outcomes.find(o => o.name.includes('Under') && o.point === 2.5)?.price;
 
             return `
-            <div class="odd-card">
+            <div class="odd-card fade-in">
                 <div class="sport-tag">${event.sport_title}</div>
                 <div class="event-name" title="${event.home_team} vs ${event.away_team}">
                     ${event.home_team} vs ${event.away_team}
@@ -947,7 +919,12 @@ window.admin = {
     async openUserDetail(userId) {
         this.currentUserId = userId;
         const detail = await api.request(`/admin/users/${userId}/detail`);
-        if (!detail) return;
+
+        // Handle error response or missing data
+        if (!detail || detail.detail) {
+            alert("Errore nel caricamento dei dettagli: " + (detail ? detail.detail : "Connessione fallita"));
+            return;
+        }
 
         // Safe population
         document.getElementById('detail-username').innerText = detail.username || '---';
@@ -972,7 +949,11 @@ window.admin = {
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
                          <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${(b.selections||[]).map(s => { const isV=(s.event_id||'').startsWith('v_'); const r=s.match_result; const badge=isV?(r==='In corso'?`<span style="background:rgba(0,200,100,0.15);color:#00c864;border-radius:5px;padding:1px 6px;font-size:0.75rem;margin-left:5px;">⏱ In corso</span>`:r?`<span style="background:rgba(255,200,0,0.12);color:#f5c842;border-radius:5px;padding:1px 6px;font-size:0.75rem;margin-left:5px;">⚽ ${r}</span>`:`<span style="opacity:0.4;font-size:0.75rem;margin-left:5px;">In attesa</span>`):''; return `<div style="font-size:0.85rem;margin-bottom:4px;">• ${s.home_team||'?'} vs ${s.away_team||'?'}: <b>${s.selection||'?'}</b> @${(s.odds||0).toFixed(2)}${badge}</div>`; }).join('')}
+                    ${b.selections.map(s => `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8;">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> @${s.odds.toFixed(2)}
+                        </div>
+                    `).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.forceUserBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 10px;">V</button>
@@ -1099,7 +1080,16 @@ window.admin = {
                         <span style="font-weight:bold; color:var(--accent)">Giocata di: ${b.username}</span>
                         <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
                     </div>
-                    ${(b.selections||[]).map(s => { const isV=(s.event_id||'').startsWith('v_'); const r=s.match_result; const badge=isV?(r==='In corso'?`<span style="background:rgba(0,200,100,0.15);color:#00c864;border-radius:5px;padding:1px 6px;font-size:0.75rem;margin-left:5px;">⏱ In corso</span>`:r?`<span style="background:rgba(255,200,0,0.12);color:#f5c842;border-radius:5px;padding:1px 6px;font-size:0.75rem;margin-left:5px;">⚽ ${r}</span>`:`<span style="opacity:0.4;font-size:0.75rem;margin-left:5px;">In attesa</span>`):''; return `<div style="font-size:0.85rem;margin-bottom:4px;">• ${s.home_team||'?'} vs ${s.away_team||'?'}: <b>${s.selection||'?'}</b> @${(s.odds||0).toFixed(2)}${badge}</div>`; }).join('')}
+                    ${b.selections.map(s => {
+                        let scoreBadge = '';
+                        if (s.v_status === 'finished' && s.v_score) {
+                            scoreBadge = `<span style="background:#ffd700; color:#000; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem; margin-left:10px;">Risultato: ${s.v_score}</span>`;
+                        }
+                        return `
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8; display:flex; align-items:center;">
+                            • ${s.home_team} vs ${s.away_team}: <b style="margin-left:5px;">${s.selection}</b> <span style="margin-left:5px;">@${s.odds.toFixed(2)}</span> ${scoreBadge}
+                        </div>
+                    `}).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
                         ${b.status === 'pending' ? `
                             <button onclick="admin.resolveBet(${b.id}, 'won')" style="background:var(--success); width:auto; padding:5px 15px;">Vincente</button>
@@ -1300,38 +1290,6 @@ window.crash = {
             this.connect();
         }
         this.drawGraph();
-        if (window.innerWidth <= 768) this.fixMobileLayout();
-    },
-    fixMobileLayout() {
-        setTimeout(() => {
-            // Trova il wrapper principale della sezione crash
-            const section = document.getElementById('section-crash');
-            if (!section) return;
-            // Cerca tutti i div con grid o display:flex a due colonne e li forza a colonna
-            section.querySelectorAll('[style]').forEach(el => {
-                const s = el.getAttribute('style') || '';
-                if (s.includes('grid') || (s.includes('display') && s.includes('flex') && !s.includes('column'))) {
-                    el.style.display = 'flex';
-                    el.style.flexDirection = 'column';
-                    el.style.width = '100%';
-                    el.style.gap = '12px';
-                }
-                // Rimuove larghezze fisse
-                if (s.includes('width') && (s.includes('px') || s.includes('%'))) {
-                    el.style.width = '100%';
-                    el.style.minWidth = '0';
-                    el.style.maxWidth = '100%';
-                }
-            });
-            // Canvas a tutta larghezza
-            const canvas = document.getElementById('crash-canvas');
-            if (canvas) {
-                canvas.style.width = '100%';
-                canvas.style.height = '220px';
-                canvas.width = canvas.parentElement ? canvas.parentElement.offsetWidth : window.innerWidth - 32;
-                canvas.height = 220;
-            }
-        }, 100);
     },
     connect() {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1345,10 +1303,7 @@ window.crash = {
 
         state.crash.ws.onclose = () => {
             console.log("WebSocket Crash chiuso. Riconnessione tra 3 secondi...");
-            setTimeout(() => { this.connect(); this.drawGraph(); }, 3000);
-        };
-        state.crash.ws.onerror = () => {
-            console.log("WebSocket Crash errore. Riconnessione...");
+            setTimeout(() => this.connect(), 3000);
         };
     },
     handleMessage(data) {
@@ -1356,24 +1311,6 @@ window.crash = {
             state.crash.status = data.status;
             state.crash.multiplier = data.multiplier;
             state.crash.history = data.history || [];
-            // Aggiorna il testo status in base allo stato iniziale ricevuto
-            const statusEl = document.getElementById('crash-status-text');
-            const multEl = document.getElementById('crash-multiplier');
-            if (statusEl && multEl) {
-                if (data.status === 'waiting') {
-                    statusEl.innerText = 'Prossimo round in arrivo...';
-                    multEl.innerText = '1.00x';
-                    multEl.style.color = 'white';
-                } else if (data.status === 'running') {
-                    statusEl.innerText = 'In volo...';
-                    multEl.innerText = `${data.multiplier.toFixed(2)}x`;
-                    multEl.style.color = '#ffbb00';
-                } else if (data.status === 'crashed') {
-                    statusEl.innerText = 'CRASH!';
-                    multEl.innerText = `${data.multiplier.toFixed(2)}x`;
-                    multEl.style.color = 'var(--danger)';
-                }
-            }
             this.updateUI();
             this.updateHistory();
         } else if (data.type === 'waiting') {
@@ -1443,7 +1380,7 @@ window.crash = {
         const amountInput = document.getElementById('crash-bet-amount');
         const rawVal = amountInput.value.replace(',', '.');
         const amount = parseFloat(rawVal);
-        if (isNaN(amount) || amount < 0.20) return alert("Scommessa minima €0.20");
+        if (isNaN(amount) || amount < 1.00) return alert("Scommessa minima €1.00");
         if (amount > state.balance) return alert("Saldo insufficiente");
 
         const res = await api.request('/crash/bet', {
@@ -1480,112 +1417,46 @@ window.crash = {
             </div>
         `).join('');
     },
-    stopGraph() {
-        if (state.crash.rafId) {
-            cancelAnimationFrame(state.crash.rafId);
-            clearTimeout(state.crash.rafId);
-            state.crash.rafId = null;
-        }
-    },
     drawGraph() {
-        // Ferma eventuali loop precedenti prima di avviarne uno nuovo
-        this.stopGraph();
-
         const canvas = document.getElementById('crash-canvas');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        canvas.width = canvas.offsetWidth || 300;
-        canvas.height = canvas.offsetHeight || 200;
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
 
-        let lastMultiplier = -1;
-        let lastStatus = '';
         const animate = () => {
-            const section = document.getElementById('section-crash');
-            if (!section || section.classList.contains('hidden')) {
-                state.crash.rafId = null;
-                return;
-            }
-            const currentStatus = state.crash.status;
-            const currentMult = state.crash.multiplier;
+            if (document.getElementById('section-crash').classList.contains('hidden')) return;
 
-            // Ridisegna solo se qualcosa è cambiato
-            if (currentStatus !== lastStatus || (currentStatus === 'running' && currentMult !== lastMultiplier)) {
-                lastStatus = currentStatus;
-                lastMultiplier = currentMult;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (state.crash.status === 'running') {
+                ctx.beginPath();
+                ctx.strokeStyle = '#ffbb00';
+                ctx.lineWidth = 4;
+                ctx.moveTo(0, canvas.height);
 
-                if (currentStatus === 'running') {
-                    ctx.beginPath();
-                    ctx.strokeStyle = '#ffbb00';
-                    ctx.lineWidth = 4;
-                    ctx.moveTo(0, canvas.height);
-                    const progress = Math.min((currentMult - 1) / 10, 1);
-                    const targetX = canvas.width * 0.8 * progress;
-                    const targetY = canvas.height - (canvas.height * 0.8 * progress);
-                    ctx.quadraticCurveTo(canvas.width * 0.4, canvas.height, targetX, targetY);
-                    ctx.stroke();
-                }
+                // Disegna una curva basata sul moltiplicatore attuale
+                const progress = Math.min((state.crash.multiplier - 1) / 10, 1);
+                const targetX = canvas.width * 0.8 * progress;
+                const targetY = canvas.height - (canvas.height * 0.8 * progress);
+
+                ctx.quadraticCurveTo(canvas.width * 0.4, canvas.height, targetX, targetY);
+                ctx.stroke();
             }
 
-            // Se non in running, abbassa il frame rate a ~10fps per risparmiare CPU
-            if (currentStatus !== 'running') {
-                state.crash.rafId = setTimeout(() => {
-                    state.crash.rafId = requestAnimationFrame(animate);
-                }, 100);
-            } else {
-                state.crash.rafId = requestAnimationFrame(animate);
-            }
+            requestAnimationFrame(animate);
         };
-        state.crash.rafId = requestAnimationFrame(animate);
+        animate();
     }
 };
 
 window.virtual = {
-    applyMobileLayout() {
-        if (window.innerWidth > 600) return;
-        setTimeout(() => {
-            const live        = document.getElementById("virtual-live-board");
-            const matchesEl   = document.getElementById("virtual-matches-container");
-            const standingsEl = document.getElementById("virtual-standings-body");
-            if (!live || !matchesEl) return;
-
-            // Risale alle sezioni card contenitori
-            const getBlock = el => el.closest("[class*='admin-section']") || el.closest("[style*='border-radius']") || el.parentElement;
-            const liveBlock     = live;
-            const matchesBlock  = getBlock(matchesEl);
-            const standingsBlock = standingsEl ? getBlock(standingsEl) : null;
-
-            // Trova il container comune più vicino
-            const parent = liveBlock.parentElement;
-            if (!parent) return;
-
-            // Imposta flex sul parent per usare order
-            parent.style.cssText += ";display:flex!important;flex-direction:column!important;gap:16px;";
-
-            // Assegna order direttamente agli elementi
-            liveBlock.style.order = "1";
-            matchesBlock.style.order = "2";
-            if (standingsBlock) standingsBlock.style.order = "3";
-
-            // Forza anche i match container interni a colonna singola
-            if (matchesEl) {
-                matchesEl.style.cssText += ";display:flex!important;flex-direction:column!important;gap:12px;";
-            }
-            const liveMatches = document.getElementById("virtual-live-matches");
-            if (liveMatches) {
-                liveMatches.style.cssText += ";display:flex!important;flex-direction:column!important;gap:8px;";
-            }
-        }, 400);
-    },
     init() {
         if (state.virtual.polling) clearInterval(state.virtual.polling);
         state.virtual.polling = setInterval(() => this.tick(), 1000);
         this.fetchStatus();
         this.fetchStandings();
         this.fetchMatches();
-        // Riordina layout su mobile dopo che il DOM è pronto
-        if (window.innerWidth <= 600) setTimeout(() => this.applyMobileLayout(), 800);
 
         // Optional: polling for my-bets if on bets section
         if (state.betsPolling) clearInterval(state.betsPolling);
@@ -1595,17 +1466,14 @@ window.virtual = {
             }
         }, 5000);
     },
-    tick() {
-        // Timer locale: decrementa senza aspettare la rete
-        if ((state.virtual.status === 'BETTING' || state.virtual.status === 'FINISHED') && state.virtual.timeLeft > 0) {
+    async tick() {
+        if (state.virtual.status === 'BETTING' && state.virtual.timeLeft > 0) {
             state.virtual.timeLeft--;
             this.updateTimerUI();
         }
-        // Fetch status ogni 3 secondi senza bloccare il tick
-        const now = Date.now();
-        if (now - state.virtual.lastFetch > 3000) {
-            state.virtual.lastFetch = now; // aggiorna subito per evitare fetch parallele
-            this.fetchStatus().catch(() => {});
+
+        if (Date.now() - state.virtual.lastFetch > 3000) {
+            await this.fetchStatus();
         }
     },
     async fetchStatus() {
@@ -1624,32 +1492,29 @@ window.virtual = {
 
             this.updateStatusUI();
 
-            if (statusChanged || matchdayChanged) {
-                // Stato o giornata cambiata: aggiorna tutto
-                this.fetchMatches().catch(() => {});
-                this.fetchStandings().catch(() => {});
-                ui.fetchBalance();
-            } else if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING') {
-                // Solo durante LIVE aggiorna i punteggi live (non le quote)
-                this._fetchLiveOnly().catch(() => {});
+            if (statusChanged || matchdayChanged || state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
+                this.fetchMatches().catch(e => console.error("Error fetching matches:", e));
+                if (statusChanged || matchdayChanged) {
+                    this.fetchStandings().catch(e => console.error("Error fetching standings:", e));
+                    ui.fetchBalance();
+                }
             }
         }
     },
     async fetchMatches() {
+        // Carica le partite per il betting (sempre current_matchday)
         const matches = await api.request('/virtual/matches');
         if (matches) {
             state.virtual.matches = matches;
             this.renderMatches();
         }
+        // Carica le partite per il tabellone (usa finished_matchday durante FINISHED)
         if (state.virtual.status === 'LIVE' || state.virtual.status === 'FINALIZING' || state.virtual.status === 'FINISHED') {
-            await this._fetchLiveOnly();
-        }
-    },
-    async _fetchLiveOnly() {
-        const liveMatches = await api.request('/virtual/live');
-        if (liveMatches) {
-            state.virtual.liveMatches = liveMatches;
-            this.renderLiveBoard();
+            const liveMatches = await api.request('/virtual/live');
+            if (liveMatches) {
+                state.virtual.liveMatches = liveMatches;
+                this.renderLiveBoard();
+            }
         }
     },
     async fetchStandings() {
@@ -1885,29 +1750,17 @@ window.virtual = {
 
         const isFinished = state.virtual.status === 'FINISHED';
 
+        // Aggiorna testo azione o titolo
         if (clockEl) {
-            const newClock = isFinished ? '🏆 Risultati Finali' : (state.virtual.actionText || '🏟️ In corso...');
-            if (clockEl.innerText !== newClock) {
-                clockEl.innerText = newClock;
-                clockEl.style.color = isFinished ? 'var(--accent)' : 'var(--danger)';
+            if (isFinished) {
+                clockEl.innerText = '🏆 Risultati Finali';
+                clockEl.style.color = 'var(--accent)';
+            } else {
+                clockEl.innerText = state.virtual.actionText || '🏟️ In corso...';
+                clockEl.style.color = 'var(--danger)';
             }
         }
 
-        // Aggiornamento DOM chirurgico: aggiorna solo i punteggi cambiati
-        const existing = container.querySelectorAll('[data-match-id]');
-        if (existing.length === state.virtual.liveMatches.length) {
-            // Aggiorna solo i punteggi
-            state.virtual.liveMatches.forEach((m, i) => {
-                const scoreEl = existing[i] ? existing[i].querySelector('[data-score]') : null;
-                if (scoreEl) {
-                    const newScore = `${m.home_score || 0} - ${m.away_score || 0}`;
-                    if (scoreEl.innerText !== newScore) scoreEl.innerText = newScore;
-                }
-            });
-            return;
-        }
-
-        // Prima volta o numero partite cambiato: ricostruisce
         try {
             container.innerHTML = state.virtual.liveMatches.map(m => {
                 const hName = (m.home_team && m.home_team.name) ? m.home_team.name : '---';
@@ -1916,9 +1769,9 @@ window.virtual = {
                 const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
 
                 return `
-                    <div data-match-id="${m.id}" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
                     <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${hName}</span>
-                    <span data-score style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
+                    <span style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
                         ${m.home_score || 0} - ${m.away_score || 0}
                     </span>
                     <span style="font-size: 0.85rem; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${aName}</span>
@@ -1943,119 +1796,5 @@ window.onload = () => {
         ui.showDashboard();
         dashboard.init();
         router.navigate('odds');
-    }
-};
-
-// --- BACCARAT ---
-const baccarat = {
-    sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
-
-    animateCard(container, card) {
-        return new Promise(resolve => {
-            const isRed = card.suit === '♥' || card.suit === '♦';
-            const el = document.createElement('div');
-            el.style.cssText = 'background:white;color:' + (isRed ? '#e17055' : '#2d3436') + ';border-radius:8px;padding:8px 10px;min-width:44px;text-align:center;font-size:1.1rem;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.5);opacity:0;transform:translateY(-25px) scale(0.85);transition:opacity 0.3s ease,transform 0.3s cubic-bezier(0.34,1.4,0.64,1);display:inline-block;margin:2px;';
-            el.innerHTML = '<div>' + card.rank + '</div><div>' + card.suit + '</div>';
-            container.appendChild(el);
-            requestAnimationFrame(() => { requestAnimationFrame(() => {
-                el.style.opacity = '1';
-                el.style.transform = 'translateY(0) scale(1)';
-            }); });
-            setTimeout(resolve, 350);
-        });
-    },
-
-    resetUI() {
-        const btn = document.getElementById('bac-deal-btn');
-        const playerCards = document.getElementById('bac-player-cards');
-        const bankerCards = document.getElementById('bac-banker-cards');
-        const resultEl = document.getElementById('bac-result');
-        if (playerCards) playerCards.innerHTML = '';
-        if (bankerCards) bankerCards.innerHTML = '';
-        if (resultEl) resultEl.style.display = 'none';
-        const ps = document.getElementById('bac-player-score');
-        const bs = document.getElementById('bac-banker-score');
-        if (ps) ps.innerText = '-';
-        if (bs) bs.innerText = '-';
-        if (btn) btn.disabled = false;
-    },
-
-    async deal() {
-        const player = parseFloat(document.getElementById('bac-bet-player').value || 0);
-        const tie    = parseFloat(document.getElementById('bac-bet-tie').value    || 0);
-        const banker = parseFloat(document.getElementById('bac-bet-banker').value || 0);
-        const pp     = parseFloat(document.getElementById('bac-player-pair').value || 0);
-        const bp     = parseFloat(document.getElementById('bac-banker-pair').value || 0);
-
-        const total = player + tie + banker + pp + bp;
-        if (total < 0.20) return alert('Inserisci almeno €0.20 su una puntata');
-
-        const btn         = document.getElementById('bac-deal-btn');
-        const playerCards = document.getElementById('bac-player-cards');
-        const bankerCards = document.getElementById('bac-banker-cards');
-        const resultEl    = document.getElementById('bac-result');
-
-        this.resetUI();
-        btn.disabled = true;
-
-        try {
-            const res = await api.request('/baccarat/deal', {
-                method: 'POST',
-                body: JSON.stringify({ player, tie, banker, player_pair: pp, banker_pair: bp })
-            });
-
-            if (!res) return;
-
-            // Animazione: P1, B1, P2, B2, [P3], [B3]
-            const seq = [
-                { c: playerCards, card: res.player[0] },
-                { c: bankerCards, card: res.banker[0] },
-                { c: playerCards, card: res.player[1] },
-                { c: bankerCards, card: res.banker[1] },
-            ];
-            if (res.player[2]) seq.push({ c: playerCards, card: res.player[2] });
-            if (res.banker[2]) seq.push({ c: bankerCards, card: res.banker[2] });
-
-            for (const item of seq) {
-                await this.animateCard(item.c, item.card);
-                await this.sleep(100);
-            }
-
-            // Punteggi
-            await this.sleep(200);
-            document.getElementById('bac-player-score').innerText = res.player_score;
-            document.getElementById('bac-banker-score').innerText = res.banker_score;
-
-            // Risultato
-            await this.sleep(400);
-            const labels = { player: 'GIOCATORE', banker: 'BANCO', tie: 'PAREGGIO' };
-            let msg = labels[res.winner] + ' VINCE';
-            if (res.player_pair) msg += '\nCoppia Giocatore: ' + (res.player_pair_label || '');
-            if (res.banker_pair) msg += '\nCoppia Banco: ' + (res.banker_pair_label || '');
-            const profit = res.profit;
-            msg += profit >= 0 ? '\n+€' + res.payout.toFixed(2) : '\n-€' + Math.abs(profit).toFixed(2);
-
-            resultEl.innerText = msg;
-            resultEl.style.background = profit >= 0 ? 'rgba(0,184,148,0.15)' : 'rgba(214,48,49,0.15)';
-            resultEl.style.color      = profit >= 0 ? '#00b894' : '#d63031';
-            resultEl.style.border     = '1px solid ' + (profit >= 0 ? 'rgba(0,184,148,0.4)' : 'rgba(214,48,49,0.3)');
-            resultEl.style.opacity    = '0';
-            resultEl.style.transition = 'opacity 0.4s';
-            resultEl.style.display    = 'block';
-            requestAnimationFrame(() => { requestAnimationFrame(() => { resultEl.style.opacity = '1'; }); });
-
-            // Saldo dopo risultato
-            await this.sleep(300);
-            if (res.new_balance !== undefined) {
-                state.balance = res.new_balance;
-                document.getElementById('user-balance-nav').innerText = 'Saldo: €' + res.new_balance.toFixed(2);
-            } else {
-                ui.fetchBalance();
-            }
-        } catch (err) {
-            console.error('Baccarat error:', err);
-        } finally {
-            btn.disabled = false;
-        }
     }
 };
