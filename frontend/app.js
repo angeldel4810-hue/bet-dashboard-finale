@@ -2084,37 +2084,42 @@ window.baccarat = {
 
     renderCardEl(card) {
         const isRed = card.suit === '♥' || card.suit === '♦';
-        const suitColor = isRed ? '#d10000' : '#1a1a1a';
+        const suitColor = isRed ? '#cc0000' : '#111';
+        // rank font più piccolo per 10 (2 cifre)
+        const rankSize = card.rank === '10' ? '0.75rem' : '0.9rem';
 
         const div = document.createElement('div');
         div.style.cssText = `
-            width:56px; height:82px;
-            background:white;
-            border-radius:8px;
-            border:1.5px solid #ccc;
-            box-shadow:0 4px 14px rgba(0,0,0,0.5);
-            display:flex; flex-direction:column;
-            justify-content:space-between;
-            padding:4px 5px;
-            flex-shrink:0;
-            color:${suitColor};
-            font-family:'Arial',sans-serif;
+            width: 58px;
+            height: 86px;
+            background: white;
+            border-radius: 9px;
+            border: 1.5px solid #c0c0c0;
+            box-shadow: 2px 4px 14px rgba(0,0,0,0.55);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 5px 5px 4px;
+            flex-shrink: 0;
+            color: ${suitColor};
+            font-family: 'Georgia', serif;
+            user-select: none;
         `;
 
-        // Top-left corner
+        // Angolo top-left
         const tl = document.createElement('div');
-        tl.style.cssText = `font-size:0.9rem;font-weight:900;line-height:1.1;`;
-        tl.innerHTML = `${card.rank}<br><span style="font-size:0.85rem">${card.suit}</span>`;
+        tl.style.cssText = `line-height:1; font-weight:700;`;
+        tl.innerHTML = `<div style="font-size:${rankSize};">${card.rank}</div><div style="font-size:0.8rem; margin-top:1px;">${card.suit}</div>`;
 
-        // Center suit
+        // Seme centrale
         const center = document.createElement('div');
-        center.style.cssText = `font-size:1.7rem;text-align:center;line-height:1;`;
+        center.style.cssText = `font-size:1.8rem; text-align:center; line-height:1;`;
         center.innerText = card.suit;
 
-        // Bottom-right corner (rotated)
+        // Angolo bottom-right (ruotato)
         const br = document.createElement('div');
-        br.style.cssText = `font-size:0.9rem;font-weight:900;line-height:1.1;text-align:right;transform:rotate(180deg);`;
-        br.innerHTML = `${card.rank}<br><span style="font-size:0.85rem">${card.suit}</span>`;
+        br.style.cssText = `line-height:1; font-weight:700; transform:rotate(180deg); text-align:left;`;
+        br.innerHTML = `<div style="font-size:${rankSize};">${card.rank}</div><div style="font-size:0.8rem; margin-top:1px;">${card.suit}</div>`;
 
         div.appendChild(tl);
         div.appendChild(center);
