@@ -4,8 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 import uvicorn
 from typing import List, Dict, Any
-from backend.database import get_db, init_db
-from backend.auth import create_access_token, verify_password, verify_password_sync, get_current_user, check_admin, get_password_hash, get_password_hash_sync
+from backend.database import get_db, init_db, db_conn
+from backend.auth import create_access_token, verify_password, get_current_user, check_admin, get_password_hash
 from backend.odds_api import get_odds_the_odds_api, get_odds_api_football, apply_overround, get_sports, get_odds_betsapi2_rapidapi
 import os
 import asyncio
@@ -17,6 +17,21 @@ import backend.sette_mezzo as sm
 from backend.virtual_football import router as virtual_router, run_virtual_football_loop
 
 is_postgres = os.environ.get("DATABASE_URL") is not None
+
+# ── Cache in-memory leggera ──────────────────────────────────────
+import time as _time
+_cache: dict = {}
+def _cache_get(key):
+    e = _cache.get(key)
+    if e and _time.monotonic() < e['x']: return e['v']
+    return None
+def _cache_set(key, val, ttl):
+    _cache[key] = {'v': val, 'x': _time.monotonic() + ttl}
+def _cache_del(key): _cache.pop(key, None)
+def _cache_del_prefix(prefix):
+    for k in list(_cache): 
+        if k.startswith(prefix): del _cache[k]
+# ────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Simus Bet Dashboard API")
 
@@ -42,30 +57,40 @@ async def startup_event():
 
 @app.post("/api/login")
 async def login(username: str = Body(...), password: str = Body(...)):
-    with db_conn() as conn:
-        cursor = conn.cursor()
-        is_postgres = hasattr(conn, 'get_dsn_parameters')
-        query = "SELECT id,username,password_hash,role,balance,status FROM users WHERE username = %s" if is_postgres else "SELECT id,username,password_hash,role,balance,status FROM users WHERE username = ?"
-        cursor.execute(query, (username,))
-        user_row = cursor.fetchone()
-
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Check if we are in PostgreSQL or SQLite
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    query = "SELECT * FROM users WHERE username = %s" if is_postgres else "SELECT * FROM users WHERE username = ?"
+    cursor.execute(query, (username,))
+    
+    user_row = cursor.fetchone()
     if not user_row:
+        conn.close()
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    uid      = user_row[0] if is_postgres else user_row["id"]
-    uname    = user_row[1] if is_postgres else user_row["username"]
-    phash    = user_row[2] if is_postgres else user_row["password_hash"]
-    role     = user_row[3] if is_postgres else user_row["role"]
-    ustatus  = user_row[5] if is_postgres else user_row["status"]
-
-    if not verify_password(password, phash):
+    if is_postgres:
+        user = {
+            'id': user_row[0],
+            'username': user_row[1],
+            'password_hash': user_row[2],
+            'role': user_row[3],
+            'status': user_row[5]
+        }
+    else:
+        user = dict(user_row)
+        
+    conn.close()
+    
+    if not user or not verify_password(password, user['password_hash']):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    if ustatus == 'blocked':
+        
+    if user['status'] == 'blocked':
         raise HTTPException(status_code=403, detail="Account bloccato. Contatta l'amministratore.")
-
-    access_token = create_access_token(data={"sub": uname, "role": role, "id": uid})
-    return {"access_token": access_token, "token_type": "bearer", "role": role}
+    
+    access_token = create_access_token(data={"sub": user['username'], "role": user['role'], "id": user['id']})
+    return {"access_token": access_token, "token_type": "bearer", "role": user['role']}
 
 # Helper to fetch settings (used frequently)
 def fetch_all_settings(conn):
@@ -79,9 +104,12 @@ def fetch_all_settings(conn):
 
 @app.get("/api/settings")
 async def get_settings(user = Depends(get_current_user)):
+    cached = _cache_get('settings')
+    if cached is not None: return cached
     conn = get_db()
     sett = fetch_all_settings(conn)
     conn.close()
+    _cache_set('settings', sett, ttl=30)
     return sett
 
 @app.post("/api/settings", dependencies=[Depends(check_admin)])
@@ -96,15 +124,15 @@ async def update_settings(settings: Dict[str, str] = Body(...)):
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
+    _cache_del("settings")
     return {"message": "Settings updated"}
 
 @app.get("/api/odds")
 async def fetch_odds(user = Depends(get_current_user)):
     cached_odds = _cache_get('odds')
-    if cached_odds is not None:
-        return cached_odds
-    with db_conn() as conn:
-        sett = fetch_all_settings(conn)
+    if cached_odds is not None: return cached_odds
+    conn = get_db()
+    sett = fetch_all_settings(conn)
     
     source = sett.get('odds_source', 'api')
     overround = float(sett.get('overround', '5'))
@@ -118,7 +146,7 @@ async def fetch_odds(user = Depends(get_current_user)):
     if source == 'manual':
         cursor.execute("SELECT * FROM manual_odds")
         rows = cursor.fetchall()
-        # conn chiusa automaticamente dal with db_conn()
+        conn.close()
         
         odds_list = []
         for r in rows:
@@ -157,9 +185,10 @@ async def fetch_odds(user = Depends(get_current_user)):
                 "commence_time": o['commence_time'],
                 "bookmakers": [{"key": "manual", "title": "Manuale", "markets": markets}]
             })
-        _cache_set('odds', odds_list, ttl=60)
+        _cache_set("odds", odds_list, ttl=60)
         return odds_list
 
+    conn.close()
     # API Mode follows...
     all_odds = []
     seen_ids = set()
@@ -204,7 +233,7 @@ async def fetch_odds(user = Depends(get_current_user)):
                     all_odds.append(event)
                     seen_ids.add(event_id)
             except: continue
-    _cache_set('odds', all_odds, ttl=60)
+    _cache_set("odds", all_odds, ttl=60)
     return all_odds
 
 @app.post("/api/admin/manual-odds", dependencies=[Depends(check_admin)])
@@ -228,10 +257,14 @@ async def add_manual_odd(data: Dict[str, Any] = Body(...)):
           data.get('price_over'), data.get('price_under'), data.get('price_goal'), data.get('price_nogoal')))
     conn.commit()
     conn.close()
+    _cache_del("odds")
     return {"message": "Scommessa aggiunta"}
 
 @app.get("/api/user/balance")
 async def get_balance(user = Depends(get_current_user)):
+    ck = f'bal:{user["username"]}'
+    cached = _cache_get(ck)
+    if cached is not None: return cached
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
@@ -239,7 +272,9 @@ async def get_balance(user = Depends(get_current_user)):
     cursor.execute(query, (user['username'],))
     row = cursor.fetchone()
     conn.close()
-    return {"balance": row[0] if is_postgres and row else (row['balance'] if row else 0)}
+    result = {"balance": row[0] if is_postgres and row else (row['balance'] if row else 0)}
+    _cache_set(ck, result, ttl=3)
+    return result
 
 @app.get("/api/admin/users", dependencies=[Depends(check_admin)])
 async def list_users():
@@ -265,7 +300,7 @@ async def create_user(data: dict):
     if not username or not password:
         raise HTTPException(status_code=400, detail="Username e password obbligatori")
 
-    hashed = get_password_hash_sync(password)
+    hashed = get_password_hash(password)
 
     conn = get_db()
     cursor = conn.cursor()
@@ -404,7 +439,7 @@ async def update_user_password(user_id: int, data: Dict[str, str] = Body(...)):
     if not new_pass or len(new_pass) < 4:
         raise HTTPException(status_code=400, detail="Password troppo corta")
     
-    hashed = get_password_hash_sync(new_pass)
+    hashed = get_password_hash(new_pass)
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
@@ -450,6 +485,7 @@ async def admin_adjust_balance(data: Dict[str, Any] = Body(...), admin = Depends
 
     conn.commit()
     conn.close()
+    _cache_del_prefix("bal:")
     return {"new_balance": new_balance}
 
 @app.get("/api/admin/bets", dependencies=[Depends(check_admin)])
@@ -481,33 +517,35 @@ async def list_all_bets():
 
 @app.get("/api/my-bets")
 async def get_my_bets_history(user = Depends(get_current_user)):
-    cache_key = f'mybets:{user["id"]}'
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    # user["id"] viene dal JWT — nessuna query DB per ricavarlo
-    u_id = user["id"]
-    with db_conn() as conn:
-        cursor = conn.cursor()
-        is_postgres = hasattr(conn, 'get_dsn_parameters')
-        b_query = "SELECT * FROM bets WHERE user_id = %s ORDER BY created_at DESC" if is_postgres else "SELECT * FROM bets WHERE user_id = ? ORDER BY created_at DESC"
-        cursor.execute(b_query, (u_id,))
-        rows = cursor.fetchall()
-        bets_list = []
-        for r in rows:
-            if is_postgres:
-                bet = {"id": r[0], "user_id": r[1], "amount": r[2], "total_odds": r[3], "potential_win": r[4], "status": r[5], "created_at": str(r[6])}
-            else:
-                bet = dict(r)
-            s_query = "SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?"
-            cursor.execute(s_query, (bet['id'],))
-            s_rows = cursor.fetchall()
-            if is_postgres:
-                bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
-            else:
-                bet['selections'] = [dict(sr) for sr in s_rows]
-            bets_list.append(bet)
-    _cache_set(cache_key, bets_list, ttl=5)
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    
+    u_query = "SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?"
+    cursor.execute(u_query, (user['username'],))
+    u_id = cursor.fetchone()[0]
+    
+    b_query = "SELECT * FROM bets WHERE user_id = %s ORDER BY created_at DESC" if is_postgres else "SELECT * FROM bets WHERE user_id = ? ORDER BY created_at DESC"
+    cursor.execute(b_query, (u_id,))
+    rows = cursor.fetchall()
+    
+    bets_list = []
+    for r in rows:
+        if is_postgres:
+            bet = {"id": r[0], "user_id": r[1], "amount": r[2], "total_odds": r[3], "potential_win": r[4], "status": r[5], "created_at": r[6]}
+        else:
+            bet = dict(r)
+            
+        s_query = "SELECT * FROM bet_selections WHERE bet_id = %s" if is_postgres else "SELECT * FROM bet_selections WHERE bet_id = ?"
+        cursor.execute(s_query, (bet['id'],))
+        s_rows = cursor.fetchall()
+        if is_postgres:
+            bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
+        else:
+            bet['selections'] = [dict(sr) for sr in s_rows]
+        bets_list.append(bet)
+        
+    conn.close()
     return bets_list
 
 @app.post("/api/bets")
@@ -576,7 +614,7 @@ async def place_bet(data: dict, current_user = Depends(get_current_user)):
 
     conn.commit()
     conn.close()
-    _cache_del(f'mybets:{current_user["id"]}')
+    _cache_del(f'bal:{current_user["username"]}')
     return {"message": f"Scommessa piazzata con successo! Vincita potenziale: €{potential_win:.2f}", "bet_id": bet_id}
 
 # --- Crash Game WebSocket ---
@@ -633,7 +671,7 @@ async def place_crash_bet(amount: float = Body(..., embed=True), user = Depends(
     
     # Aggiungi alla lista scommesse attive del motore (per semplicità in memoria)
     crash_engine.bets.append({"id": bet_id, "user_id": u_id, "username": user['username'], "amount": amount})
-    
+    _cache_del(f'bal:{user["username"]}')
     return {"bet_id": bet_id, "new_balance": balance - amount}
 
 @app.post("/api/crash/cashout")
@@ -666,7 +704,7 @@ async def crash_cashout(bet_id: int = Body(..., embed=True), user = Depends(get_
     
     # Rimuovi scommessa dalle attive
     crash_engine.bets = [b for b in crash_engine.bets if b['id'] != bet_id]
-    
+    _cache_del(f'bal:{user["username"]}')
     return {"message": "Cashout effettuato!", "payout": payout, "multiplier": multiplier}
 
 # Admin Resolve Bet
