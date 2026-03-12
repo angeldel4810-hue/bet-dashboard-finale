@@ -715,15 +715,12 @@ window.dashboard = {
         api.request('/settings').then(s => {
             if (s) state.settings = s;
         });
-        // Aggiorna il countdown ogni minuto (non ogni secondo, inutile)
+        // Aggiorna il countdown ogni minuto
         setInterval(() => this.updateTimer(), 60000);
     },
     async fetchOdds(forceRefresh = false) {
-        if (forceRefresh) {
-            // Solo admin: azzera cache backend
-            if (state.role === 'admin') {
-                await api.request('/odds/force-refresh', { method: 'POST' });
-            }
+        if (forceRefresh && state.role === 'admin') {
+            await api.request('/odds/force-refresh', { method: 'POST' });
         }
         const odds = await api.request('/odds');
         if (odds) state.odds = odds;
@@ -732,9 +729,15 @@ window.dashboard = {
             state.settings = await api.request('/settings');
         }
 
+        // Legge i minuti rimanenti reali dal server (non riparte sempre da 6h)
+        const status = await api.request('/odds/status');
+        if (status && status.next_fetch_in_minutes > 0) {
+            state.timer = status.next_fetch_in_minutes;
+        } else {
+            state.timer = 360; // fallback
+        }
+
         this.renderOdds();
-        // Timer a 6 ore in minuti
-        state.timer = 360;
         ui.fetchBalance();
         this.updateTimerDisplay();
     },
