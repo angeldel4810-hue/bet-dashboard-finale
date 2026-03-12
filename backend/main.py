@@ -1067,54 +1067,73 @@ async def play_baccarat(bets: Dict[str, float] = Body(...), user = Depends(get_c
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
-    
-    # Arrotonda per evitare floating point issues
-    bets = {k: round(float(v), 2) for k, v in bets.items() if float(v) > 0}
-    total_bet = round(sum(bets.values()), 2)
-    if total_bet < 0.20:
+
+    try:
+        # Ricava user_id in modo robusto (id potrebbe mancare in token vecchi)
+        u_id = user.get('id')
+        if not u_id:
+            q = "SELECT id FROM users WHERE username = %s" if is_postgres else "SELECT id FROM users WHERE username = ?"
+            cursor.execute(q, (user['username'],))
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                raise HTTPException(status_code=404, detail="Utente non trovato")
+            u_id = row[0]
+
+        # Arrotonda per evitare floating point issues
+        bets = {k: round(float(v), 2) for k, v in bets.items() if float(v) > 0}
+        total_bet = round(sum(bets.values()), 2)
+        if total_bet < 0.20:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Puntata minima \u20ac0.20")
+
+        # Controlla saldo
+        q_bal = "SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?"
+        cursor.execute(q_bal, (u_id,))
+        bal_row = cursor.fetchone()
+        if not bal_row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Utente non trovato")
+        balance = float(bal_row[0])
+
+        if balance < total_bet:
+            conn.close()
+            raise HTTPException(status_code=400, detail=f"Saldo insufficiente (hai \u20ac{balance:.2f}, puntata \u20ac{total_bet:.2f})")
+
+        # Gioca
+        res = backend.baccarat.deal(bets, u_id)
+
+        # Aggiorna saldo
+        new_bal = round(balance - res['total_bet'] + res['payout'], 2)
+        upd = "UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?"
+        cursor.execute(upd, (new_bal, u_id))
+
+        # Registra scommessa (solo colonne esistenti)
+        bet_status = "won" if res['profit'] > 0 else ("lost" if res['profit'] < 0 else "void")
+        fake_odds = round(res['payout'] / max(0.01, res['total_bet']), 2)
+        ins = """
+            INSERT INTO bets (user_id, amount, total_odds, potential_win, status)
+            VALUES (%s, %s, %s, %s, %s)
+        """ if is_postgres else """
+            INSERT INTO bets (user_id, amount, total_odds, potential_win, status)
+            VALUES (?, ?, ?, ?, ?)
+        """
+        cursor.execute(ins, (u_id, res['total_bet'], fake_odds, res['payout'], bet_status))
+
+        conn.commit()
         conn.close()
-        raise HTTPException(status_code=400, detail="Puntata minima \u20ac0.20")
-        
-    query_bal = "SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?"
-    cursor.execute(query_bal, (user['id'],))
-    bal = cursor.fetchone()
-    if not bal or bal[0] < total_bet:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Saldo insufficiente")
-        
-    res = backend.baccarat.deal(bets, user['id'])
-    
-    # Update balance
-    new_bal = bal[0] - res['total_bet'] + res['payout']
-    update_q = "UPDATE users SET balance = %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = ? WHERE id = ?"
-    cursor.execute(update_q, (new_bal, user['id']))
-    
-    # Record the bet
-    status = "won" if res['profit'] > 0 else ("lost" if res['profit'] < 0 else "void")
-    insert_q = """
-        INSERT INTO bets (user_id, selection, odds, amount, potential_win, status, type)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-    """ if is_postgres else """
-        INSERT INTO bets (user_id, selection, odds, amount, potential_win, status, type)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """
-    cursor.execute(insert_q, (
-        user['id'], 
-        f"Baccarat: {res['winner']}", 
-        round(res['payout'] / max(1, res['total_bet']), 2) if res['total_bet'] > 0 else 0, 
-        res['total_bet'], 
-        res['payout'], 
-        status, 
-        'casino'
-    ))
-    
-    conn.commit()
-    conn.close()
-    
-    return {
-        "balance": round(new_bal, 2),
-        "game": res
-    }
+
+        return {"balance": new_bal, "game": res}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[BACCARAT ERROR] {e}", flush=True)
+        try: conn.rollback()
+        except: pass
+        try: conn.close()
+        except: pass
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
 # VIRTUAL FOOTBALL ROUTER
 app.include_router(virtual_router, prefix="/api/virtual", tags=["Virtual Football"])
