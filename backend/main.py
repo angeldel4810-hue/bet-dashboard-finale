@@ -597,7 +597,8 @@ async def list_all_bets():
         else:
             bet['selections'] = [dict(sr) for sr in s_rows]
             
-        for sel in bet['selections']:
+        sels = bet['selections']
+        for sel in sels:
             if str(sel['event_id']).startswith('v_'):
                 v_id = str(sel['event_id']).replace('v_', '')
                 cursor.execute("SELECT status, home_score, away_score FROM virtual_matches WHERE id = %s" if is_postgres else "SELECT status, home_score, away_score FROM virtual_matches WHERE id = ?", (v_id,))
@@ -607,7 +608,22 @@ async def list_all_bets():
                     h_score = v_match[1] if is_postgres else v_match['home_score']
                     a_score = v_match[2] if is_postgres else v_match['away_score']
                     sel['v_score'] = f"{h_score} - {a_score}"
-                    
+
+        # Determina categoria
+        if not sels:
+            bet['category'] = 'casino'
+            bet['game'] = 'Casinò'
+        elif any(str(s['event_id']).startswith('casino_') for s in sels):
+            bet['category'] = 'casino'
+            gs = next((s for s in sels if str(s['event_id']).startswith('casino_')), sels[0])
+            bet['game'] = gs.get('home_team') or gs.get('selection') or 'Casinò'
+        elif any(str(s['event_id']).startswith('v_') for s in sels):
+            bet['category'] = 'virtual'
+            bet['game'] = 'Calcio Virtuale'
+        else:
+            bet['category'] = 'sport'
+            bet['game'] = 'Scommessa Sportiva'
+
         bets_list.append(bet)
         
     conn.close()
