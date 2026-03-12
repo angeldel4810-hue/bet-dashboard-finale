@@ -44,6 +44,7 @@ class VirtualEngine:
         self.action_text = ""   
 
 engine = VirtualEngine()
+_match_cache: dict = {}  # cache leggera per /matches e /live
 
 def check_is_psql(conn):
     return hasattr(conn, 'get_dsn_parameters')
@@ -411,6 +412,8 @@ async def _run_virtual_cycle():
                             else "UPDATE virtual_matches SET home_score=home_score+?, away_score=away_score+?, current_minute=? WHERE id=?",
                             (hg, ag, minute, mid))
                     conn2.commit()
+                    # Invalida cache live e matches
+                    _match_cache.clear()
                 finally:
                     conn2.close()
 
@@ -452,6 +455,11 @@ async def get_virtual_status():
 
 @router.get("/matches")
 async def get_virtual_matches():
+    import time as _t
+    _ck = f'vmatches:{engine.current_season_id}:{engine.current_matchday}'
+    _cached = _match_cache.get(_ck)
+    if _cached and _t.monotonic() < _cached['exp']:
+        return _cached['val']
     conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
     q = """
         SELECT m.id, m.matchday, m.status, m.home_score, m.away_score, 
@@ -496,10 +504,16 @@ async def get_virtual_matches():
                 "home_team":{"name":m["name"], "logo":m["logo_url"]},
                 "away_team":{"name":m["name:1"], "logo":m["logo_url:1"]}
             })
+    _match_cache[_ck] = {"val": res, "exp": _t.monotonic() + 3}
     return res
 
 @router.get("/live")
 async def get_virtual_live():
+    import time as _t
+    _ck = f'vlive:{engine.current_season_id}:{engine.current_matchday}'
+    _cached = _match_cache.get(_ck)
+    if _cached and _t.monotonic() < _cached['exp']:
+        return _cached['val']
     conn = get_db(); cursor = conn.cursor(); psql = check_is_psql(conn)
     day = engine.finished_matchday if engine.phase == 'FINISHED' else engine.current_matchday
     q = """
@@ -517,7 +531,9 @@ async def get_virtual_live():
     """
     cursor.execute(q, (engine.current_season_id, day))
     rows = cursor.fetchall(); conn.close()
-    return [{"id":r[0], "home_score":r[1], "away_score":r[2], "home_team":{"name":r[3]}, "away_team":{"name":r[4]}} if psql else {"id":r["id"], "home_score":r["home_score"], "away_score":r["away_score"], "home_team":{"name":r["name"]}, "away_team":{"name":r["name:1"]}} for r in rows]
+    res = [{"id":r[0], "home_score":r[1], "away_score":r[2], "home_team":{"name":r[3]}, "away_team":{"name":r[4]}} if psql else {"id":r["id"], "home_score":r["home_score"], "away_score":r["away_score"], "home_team":{"name":r["name"]}, "away_team":{"name":r["name:1"]}} for r in rows]
+    _match_cache[_ck] = {"val": res, "exp": _t.monotonic() + 2}
+    return res
 
 @router.get("/standings")
 async def get_virtual_standings():
