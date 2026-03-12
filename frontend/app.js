@@ -1147,7 +1147,7 @@ window.admin = {
         }
     },
     _adminBets: [],
-    _adminBetFilters: { sport: true, virtual: true, casino: true },
+    _adminBetFilters: { sport: true, virtual: true },
 
     toggleBetFilter(cat) {
         this._adminBetFilters[cat] = !this._adminBetFilters[cat];
@@ -1384,7 +1384,7 @@ window.bets = {
             ui.toggleSlip();
         }
     },
-    _filters: { sport: true, virtual: true, casino: true },
+    _filters: { sport: true, virtual: true },
     _allBets: [],
 
     toggleFilter(cat) {
