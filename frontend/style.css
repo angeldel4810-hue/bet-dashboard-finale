@@ -810,6 +810,9 @@ table tr:hover td {
     height: fit-content;
 }
 
+/* Desktop: classifica mobile nascosta */
+.virtual-standings-mobile { display: none; }
+
 @media (max-width: 900px) {
     .virtual-layout {
         grid-template-columns: 1fr !important;
@@ -817,6 +820,11 @@ table tr:hover td {
 
     .virtual-sidebar {
         display: none;
+    }
+
+    /* Mobile: mostra classifica sotto le partite */
+    .virtual-standings-mobile {
+        display: block;
     }
 
     #virtual-live-matches {
