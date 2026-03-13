@@ -271,10 +271,6 @@ def generate_fixtures(season_id, conn):
                         exact[f"{hg}-{ag}"] = exact.get(f"{hg}-{ag}", 0) + prob
                 total = p1 + px + p2; p1/=total; px/=total; p2/=total
                 
-                # Normalizzatori Extra per evitare derive su O/U e Goal/No Goal 
-                pgg = max(0.35, min(0.65, pgg)) # Forza GG tra 35% e 65% (quote da 1.50 a 2.80 max)
-                po = max(0.38, min(0.62, po)) # Forza Over 2.5 tra 38% e 62%
-                
                 sq = lambda p: round(max(1.05, min(99.0, (1.0/max(0.001,p))*margin)), 2)
                 co = {k: sq(v) for k, v in combo.items()}
                 ex_list = ["0-0","1-0","0-1","1-1","2-0","0-2","2-1","1-2","2-2","3-0","0-3","3-1","1-3","3-2","2-3"]
@@ -314,9 +310,34 @@ async def run_virtual_football_loop():
         
         cursor.execute("SELECT id, home_team_id, away_team_id FROM virtual_matches WHERE season_id = %s AND matchday = %s" if psql else "SELECT id, home_team_id, away_team_id FROM virtual_matches WHERE season_id = ? AND matchday = ?", (engine.current_season_id, engine.current_matchday))
         matches = cursor.fetchall()
+
+        # Carica forza squadre per la simulazione
+        cursor.execute("SELECT id, offense, defense FROM virtual_teams")
+        teams_cache = {}
+        for tr in cursor.fetchall():
+            tid, o, d = (tr[0],tr[1],tr[2]) if psql else (tr["id"],tr["offense"],tr["defense"])
+            teams_cache[tid] = {"o": o, "d": d}
         
         # Simulazione minuti 15, 30, 45, 60, 75, 90
+        # Carica i lambda attesi per ogni partita (coerenti con le quote)
         intervals = {25: "15'", 20: "30'", 15: "45'", 10: "60'", 5: "75'", 2: "90'"}
+        
+        # Mappa id → (prob_gol_casa_per_intervallo, prob_gol_ospiti_per_intervallo)
+        import math as _math
+        match_probs = {}
+        for m in matches:
+            mid = m[0] if psql else m["id"]
+            hid = m[1] if psql else m["home_team_id"]
+            aid = m[2] if psql else m["away_team_id"]
+            ht = teams_cache.get(hid, {"o": 70, "d": 70})
+            at = teams_cache.get(aid, {"o": 70, "d": 70})
+            exph = max(0.8, min(2.5, (ht["o"] - at["d"] + 50) / 100 * 1.3)) + 0.2
+            expa = max(0.6, min(2.1, (at["o"] - ht["d"] + 50) / 100 * 1.3))
+            # Converte lambda totale in probabilità per singolo intervallo (6 intervalli = 90')
+            ph = 1 - _math.exp(-exph / 6)
+            pa = 1 - _math.exp(-expa / 6)
+            match_probs[mid] = (ph, pa)
+
         for sim in range(30, 0, -1):
             await asyncio.sleep(1); engine.timer = sim
             if sim in intervals:
@@ -324,8 +345,9 @@ async def run_virtual_football_loop():
                 engine.action_text = f"⚽ Azione pericolosa ({engine.clock})"
                 for m in matches:
                     mid = m[0] if psql else m["id"]
-                    hg = 1 if random.random() < 0.18 else 0
-                    ag = 1 if random.random() < 0.15 else 0
+                    ph, pa = match_probs.get(mid, (0.18, 0.15))
+                    hg = 1 if random.random() < ph else 0
+                    ag = 1 if random.random() < pa else 0
                     cursor.execute("UPDATE virtual_matches SET home_score=home_score+%s, away_score=away_score+%s, current_minute=%s WHERE id=%s" if psql else "UPDATE virtual_matches SET home_score=home_score+?, away_score=away_score+?, current_minute=? WHERE id=?", (hg, ag, int(engine.clock.replace("'","")), mid))
                 conn.commit()
         conn.close()
