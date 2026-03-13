@@ -1785,9 +1785,11 @@ window.virtual = {
             tbody.innerHTML = state.virtual.standings.map((s, i) => `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <td style="padding: 8px 4px;">${i + 1}</td>
-                    <td style="padding: 8px 4px; display: flex; align-items: center; gap: 8px;">
-                        <img src="${s.logo || ''}" style="width: 16px; height: 16px; object-fit: contain;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
-                        ${s.team_name || '---'}
+                    <td style="padding: 8px 4px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <img src="${s.logo || ''}" style="width: 16px; height: 16px; object-fit: contain; flex-shrink:0;" onerror="this.src='https://cdn-icons-png.flaticon.com/512/53/53283.png'">
+                            <span>${s.team_name || '---'}</span>
+                        </div>
                     </td>
                     <td style="padding: 8px 4px; font-weight: bold;">${s.points || 0}</td>
                     <td style="padding: 8px 4px; color: var(--text-secondary);">${s.played || 0}</td>
