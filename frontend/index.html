@@ -486,17 +486,36 @@
                                 <!-- Matches here -->
                             </div>
                         </div>
+
+                        <!-- Classifica mobile — gestita via JS -->
+                        <div id="virtual-standings-mobile-wrap" style="margin-top: 2rem; display: none;">
+                            <div style="background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); padding: 1.5rem;">
+                                <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">Classifica Serie A</h3>
+                                <table style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">
+                                    <thead>
+                                        <tr style="color: var(--text-secondary); text-align: left; border-bottom: 1px solid var(--border-color);">
+                                            <th style="padding: 8px 4px;">Pos</th>
+                                            <th style="padding: 8px 4px;">Squadra</th>
+                                            <th style="padding: 8px 4px;">Pt</th>
+                                            <th style="padding: 8px 4px;">G</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="virtual-standings-body-mobile">
+                                        <!-- Standings mobile here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
 
+                    <!-- Sidebar classifica — visibile solo su desktop -->
                     <div class="virtual-sidebar">
-                        <div
-                            style="background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); padding: 1.5rem;">
+                        <div style="background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); padding: 1.5rem;">
                             <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">Classifica Serie A</h3>
                             <div style="overflow-x: auto;">
                                 <table style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">
                                     <thead>
-                                        <tr
-                                            style="color: var(--text-secondary); text-align: left; border-bottom: 1px solid var(--border-color);">
+                                        <tr style="color: var(--text-secondary); text-align: left; border-bottom: 1px solid var(--border-color);">
                                             <th style="padding: 8px 4px;">Pos</th>
                                             <th style="padding: 8px 4px;">Squadra</th>
                                             <th style="padding: 8px 4px;">Pt</th>

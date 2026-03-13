@@ -1777,12 +1777,13 @@ window.virtual = {
     },
     renderStandings() {
         const tbody = document.getElementById('virtual-standings-body');
-        if (!tbody) return;
+        const tbodyMobile = document.getElementById('virtual-standings-body-mobile');
+        if (!tbody && !tbodyMobile) return;
 
         if (!state.virtual.standings || !Array.isArray(state.virtual.standings)) return;
 
         try {
-            tbody.innerHTML = state.virtual.standings.map((s, i) => `
+            const rows = state.virtual.standings.map((s, i) => `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <td style="padding: 8px 4px;">${i + 1}</td>
                     <td style="padding: 8px 4px;">
@@ -1795,6 +1796,15 @@ window.virtual = {
                     <td style="padding: 8px 4px; color: var(--text-secondary);">${s.played || 0}</td>
                 </tr>
             `).join('');
+            if (tbody) tbody.innerHTML = rows;
+            if (tbodyMobile) tbodyMobile.innerHTML = rows;
+
+            // Gestione visibilità: JS è più affidabile delle media query su Safari iOS
+            const isMobile = window.innerWidth <= 900;
+            const sidebar = document.querySelector('.virtual-sidebar');
+            const mobileWrap = document.getElementById('virtual-standings-mobile-wrap');
+            if (sidebar) sidebar.style.display = isMobile ? 'none' : '';
+            if (mobileWrap) mobileWrap.style.display = isMobile ? 'block' : 'none';
         } catch (e) {
             console.error("Error rendering standings:", e);
         }
