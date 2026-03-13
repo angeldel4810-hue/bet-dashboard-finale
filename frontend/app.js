@@ -781,9 +781,10 @@ window.dashboard = {
             return;
         }
 
-        let filteredOdds = state.odds;
+        const cutoff = new Date(Date.now() + 60 * 1000);
+        let filteredOdds = state.odds.filter(e => !e.commence_time || new Date(e.commence_time) > cutoff);
         if (query) {
-            filteredOdds = state.odds.filter(event => {
+            filteredOdds = filteredOdds.filter(event => {
                 const h = (event.home_team || '').toLowerCase();
                 const a = (event.away_team || '').toLowerCase();
                 const s = (event.sport_title || '').toLowerCase();
@@ -1316,6 +1317,16 @@ window.admin = {
 
 window.bets = {
     addToSlip(eventId, event, market, selection, odds) {
+        // Controllo tempo: blocca silenziosamente partite già iniziate o entro 1 min
+        if (!String(eventId).startsWith('v_')) {
+            const matchData = (state.odds || []).find(e => e.id === eventId);
+            if (!matchData) return; // non in cache = già scaduta
+            if (matchData.commence_time) {
+                const startTime = new Date(matchData.commence_time);
+                if (startTime <= new Date(Date.now() + 60 * 1000)) return;
+            }
+        }
+
         // Controllo se stiamo cercando di mischiare Reale e Virtuale
         if (state.slip.length > 0) {
             const isNewVirtual = String(eventId).startsWith('v_');
