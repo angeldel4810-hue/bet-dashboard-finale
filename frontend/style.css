@@ -814,4 +814,16 @@ table tr:hover td {
     .virtual-layout {
         grid-template-columns: 1fr !important;
     }
+
+    .virtual-sidebar {
+        display: none;
+    }
+
+    #virtual-live-matches {
+        grid-template-columns: 1fr !important;
+    }
+
+    #virtual-matches-container > div {
+        padding: 0.9rem !important;
+    }
 }

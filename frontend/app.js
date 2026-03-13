@@ -1973,13 +1973,13 @@ window.virtual = {
                 const border = isFinished ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.05)';
 
                 return `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: ${border};">
-                    <span style="font-size: 0.85rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${hName}</span>
-                    <span style="background: #000; color: ${scoreColor}; padding: 4px 12px; border-radius: 4px; font-weight: 900; margin: 0 15px; min-width: 60px; text-align: center; font-family: monospace; font-size: 1.1rem; border: 1px solid #333;">
-                        ${m.home_score || 0} - ${m.away_score || 0}
-                    </span>
-                    <span style="font-size: 0.85rem; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">${aName}</span>
-                </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border:${border}; gap:8px;">
+                        <span style="font-size:0.85rem; flex:1; font-weight:600; word-break:break-word;">${hName}</span>
+                        <span style="background:#000; color:${scoreColor}; padding:4px 10px; border-radius:4px; font-weight:900; flex-shrink:0; min-width:54px; text-align:center; font-family:monospace; font-size:1rem; border:1px solid #333;">
+                            ${m.home_score || 0} - ${m.away_score || 0}
+                        </span>
+                        <span style="font-size:0.85rem; flex:1; text-align:right; font-weight:600; word-break:break-word;">${aName}</span>
+                    </div>
                     `;
             }).join('');
         } catch (e) {
