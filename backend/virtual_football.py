@@ -250,12 +250,12 @@ def generate_fixtures(season_id, conn):
         for h, a in matches:
             def get_o(hid, aid):
                 ht, at = teams[hid], teams[aid]
-                exph = max(0.7, min(2.8, (ht["o"] - at["d"] + 50) / 100 * 1.4 * 1.08))
-                expa = max(0.5, min(2.4, (at["o"] - ht["d"] + 50) / 100 * 1.4 * 0.95))
+                exph = min(3.5, max(0.9, (ht["o"] - at["d"] + 50) / 100 * 1.4 * 1.08)) * 1.649
+                expa = min(3.0, max(0.6, (at["o"] - ht["d"] + 50) / 100 * 1.4 * 0.95)) * 1.649
                 p1, px, p2, po, pgg = 0, 0, 0, 0, 0
                 combo, exact = {}, {}
-                for hg in range(7):
-                    for ag in range(7):
+                for hg in range(10):
+                    for ag in range(10):
                         prob = poisson_prob(exph, hg) * poisson_prob(expa, ag)
                         res = "1" if hg > ag else ("X" if hg == ag else "2")
                         if hg > ag: p1 += prob
@@ -331,8 +331,8 @@ async def run_virtual_football_loop():
             aid = m[2] if psql else m["away_team_id"]
             ht = teams_cache.get(hid, {"o": 70, "d": 70})
             at = teams_cache.get(aid, {"o": 70, "d": 70})
-            exph = max(0.7, min(2.8, (ht["o"] - at["d"] + 50) / 100 * 1.4 * 1.08))
-            expa = max(0.5, min(2.4, (at["o"] - ht["d"] + 50) / 100 * 1.4 * 0.95))
+            exph = min(3.5, max(0.9, (ht["o"] - at["d"] + 50) / 100 * 1.4 * 1.08)) * 1.649
+            expa = min(3.0, max(0.6, (at["o"] - ht["d"] + 50) / 100 * 1.4 * 0.95)) * 1.649
             # Converte lambda totale in probabilità per singolo intervallo (6 intervalli = 90')
             ph = 1 - _math.exp(-exph / 6)
             pa = 1 - _math.exp(-expa / 6)
