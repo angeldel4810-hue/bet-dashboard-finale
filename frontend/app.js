@@ -250,7 +250,8 @@ window.ui = {
                 const outcomesHtml = m.outcomes.map(o => {
                     let name = o.name;
                     if (m.key === 'btts') {
-                        name = (name === 'Yes' ? 'Goal' : 'No Goal');
+                        if (['Yes', 'yes', 'Goal', 'GG', '1'].includes(name)) name = 'Goal';
+                        else name = 'No Goal';
                     } else if (m.key.includes('totals') && o.point !== undefined) {
                         if (!name.includes(o.point.toString())) {
                             name = `${o.name} ${o.point}`;
