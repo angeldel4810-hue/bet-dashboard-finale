@@ -278,6 +278,18 @@ async def fetch_odds(user = Depends(get_current_user)):
                     {"name": "Goal", "price": round(o['price_goal'] / (1 + overround/100), 2)},
                     {"name": "No Goal", "price": round(o['price_nogoal'] / (1 + overround/100), 2)}
                 ]})
+            # Filtra partite già iniziate o che iniziano entro 1 minuto
+            try:
+                ct = o.get('commence_time', '')
+                if ct:
+                    event_time = datetime.fromisoformat(ct.replace('Z', '+00:00'))
+                    if not event_time.tzinfo:
+                        event_time = event_time.replace(tzinfo=timezone.utc)
+                    if event_time <= datetime.now(timezone.utc) + timedelta(minutes=1):
+                        continue
+            except Exception:
+                pass
+
             odds_list.append({
                 "id": o['id'],
                 "sport_title": o['sport_title'],
@@ -339,7 +351,7 @@ async def fetch_odds(user = Depends(get_current_user)):
                                 if isinstance(outcome.get('price'), (int, float)):
                                     new_price = round(outcome['price'] / (1 + overround/100), 2)
                                     outcome['price'] = max(new_price, 1.05)
-                if event_time > now:
+                if event_time > now + timedelta(minutes=1):
                     all_odds.append(event)
                     seen_ids.add(event_id)
             except: continue
@@ -475,7 +487,12 @@ async def get_user_detail(user_id: int):
                 bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
             else:
                 bet['selections'] = [dict(sr) for sr in s_rows]
-                
+
+            # Escludi scommesse casino (nessuna selection o event_id casino_*)
+            sels = bet['selections']
+            if not sels or any(str(s['event_id']).startswith('casino_') for s in sels):
+                continue
+
             for sel in bet['selections']:
                 if str(sel['event_id']).startswith('v_'):
                     v_id = str(sel['event_id']).replace('v_', '')
