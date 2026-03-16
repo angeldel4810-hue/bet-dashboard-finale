@@ -164,6 +164,19 @@ def init_db():
             cursor.execute("ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS assigned_to_user_id INTEGER DEFAULT NULL")
         except Exception:
             pass
+        # Safe migration: create tables if they don't exist (for existing Render DBs)
+        try:
+            cursor.execute("""CREATE TABLE IF NOT EXISTS withdrawal_requests (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), username TEXT, amount REAL, iban TEXT, holder_name TEXT, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())""")
+        except Exception:
+            pass
+        try:
+            cursor.execute("""CREATE TABLE IF NOT EXISTS bonuses (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, min_deposit REAL DEFAULT 0, bonus_percent INTEGER DEFAULT 0, bonus_fixed REAL DEFAULT 0, active BOOLEAN DEFAULT TRUE, assigned_to_user_id INTEGER DEFAULT NULL, created_at TIMESTAMP DEFAULT NOW())""")
+        except Exception:
+            pass
+        try:
+            cursor.execute("""CREATE TABLE IF NOT EXISTS user_bonuses (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), bonus_id INTEGER REFERENCES bonuses(id), applied_amount REAL, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())""")
+        except Exception:
+            pass
         cursor.execute("""CREATE TABLE IF NOT EXISTS virtual_standings (id SERIAL PRIMARY KEY, season_id INTEGER REFERENCES virtual_seasons(id), team_id INTEGER REFERENCES virtual_teams(id), points INTEGER DEFAULT 0, played INTEGER DEFAULT 0, won INTEGER DEFAULT 0, drawn INTEGER DEFAULT 0, lost INTEGER DEFAULT 0, goals_for INTEGER DEFAULT 0, goals_against INTEGER DEFAULT 0, UNIQUE(season_id, team_id))""")
 
         for k, v in [('overround','5'),('odds_source','manual'),('apikey',''),('api_provider','the-odds-api'),('active_sports',''),('crash_house_edge','3'),('virtual_house_edge','15'),('virtual_pay_mode','auto')]:
