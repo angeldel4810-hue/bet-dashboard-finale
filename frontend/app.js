@@ -120,10 +120,12 @@ window.ui = {
             document.getElementById('nav-admin').classList.remove('hidden');
             const mobAdmin = document.getElementById('mob-nav-admin');
             if (mobAdmin) mobAdmin.classList.remove('hidden');
-            // Timer e pulsante refresh solo per admin
             const timerArea = document.getElementById('admin-timer-area');
             if (timerArea) timerArea.style.display = 'flex';
         }
+        // Mostra link Profilo nella nav desktop
+        const navProfile = document.getElementById('nav-profile');
+        if (navProfile) navProfile.classList.remove('hidden');
         this.fetchBalance();
     },
     closeModal() {
@@ -297,7 +299,15 @@ window.ui = {
         const res = await api.request('/user/balance');
         if (res) {
             state.balance = res.balance;
+            if (res.username) state.username = res.username;
             document.getElementById('user-balance-nav').innerText = `Saldo: €${state.balance.toFixed(2)}`;
+            // Aggiorna profilo se aperto
+            const profileBalance = document.getElementById('profile-balance');
+            if (profileBalance) profileBalance.innerText = `€${state.balance.toFixed(2)}`;
+            const profileUsername = document.getElementById('profile-username');
+            if (profileUsername && res.username) profileUsername.innerText = res.username;
+            const avatarLetter = document.getElementById('profile-avatar-letter');
+            if (avatarLetter && res.username) avatarLetter.innerText = res.username[0].toUpperCase();
         }
     }
 };
@@ -329,7 +339,7 @@ const router = {
             'sette-mezzo': 'nav-casino',
             'baccarat': 'nav-casino',
             'virtual': 'nav-casino',
-            'profile': 'mob-nav-profile'
+            'profile': 'nav-profile'
         };
         // Mappa mobile nav
         const mobNavMap = {
@@ -1316,6 +1326,21 @@ window.admin = {
     async loadAdminBonuses() {
         const container = document.getElementById('admin-bonuses-list');
         if (!container) return;
+
+        // Popola select utenti (solo la prima volta)
+        const userSelect = document.getElementById('bonus-user-target');
+        if (userSelect && userSelect.options.length <= 1) {
+            const users = await api.request('/admin/users');
+            if (users) {
+                users.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.id;
+                    opt.innerText = u.username;
+                    userSelect.appendChild(opt);
+                });
+            }
+        }
+
         const data = await api.request('/admin/bonuses');
         if (!data || data.length === 0) {
             container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:1.5rem;">Nessun bonus creato.</div>';
@@ -1324,15 +1349,22 @@ window.admin = {
         container.innerHTML = data.map(b => {
             const bonusParts = [];
             if (b.bonus_percent > 0) bonusParts.push(`+${b.bonus_percent}%`);
-            if (b.bonus_fixed > 0) bonusParts.push(`+€${b.bonus_fixed.toFixed(2)}`);
+            if (b.bonus_fixed > 0) bonusParts.push(`+€${parseFloat(b.bonus_fixed).toFixed(2)}`);
+            const isPersonal = b.assigned_to_user_id || b.assigned_username;
             return `
-            <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-left:4px solid #ffd700; border-radius:10px; padding:0.9rem 1rem; margin-bottom:0.7rem; display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
+            <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-left:4px solid ${isPersonal ? '#a855f7' : '#ffd700'}; border-radius:10px; padding:0.9rem 1rem; margin-bottom:0.7rem; display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
                 <div>
-                    <div style="font-weight:800; color:#ffd700;">${b.title}</div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-weight:800; color:${isPersonal ? '#a855f7' : '#ffd700'};">${b.title}</span>
+                        ${isPersonal
+                            ? `<span style="font-size:0.7rem;background:rgba(168,85,247,0.2);color:#a855f7;border:1px solid #a855f7;border-radius:20px;padding:1px 8px;">👤 ${b.assigned_username || 'utente #'+b.assigned_to_user_id}</span>`
+                            : `<span style="font-size:0.7rem;background:rgba(255,215,0,0.15);color:#ffd700;border:1px solid #ffd700;border-radius:20px;padding:1px 8px;">🌍 Globale</span>`
+                        }
+                    </div>
                     <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:2px;">${b.description || '---'}</div>
                     <div style="font-size:0.78rem; margin-top:4px;">
                         Bonus: <b>${bonusParts.join(' + ') || '—'}</b>
-                        &nbsp;·&nbsp; Min. ricarica: <b>€${(b.min_deposit||0).toFixed(0)}</b>
+                        &nbsp;·&nbsp; Min. ricarica: <b>€${parseFloat(b.min_deposit||0).toFixed(0)}</b>
                         &nbsp;·&nbsp; Stato: <b style="color:${b.active ? 'var(--success)' : 'var(--danger)'};">${b.active ? 'Attivo' : 'Disattivato'}</b>
                     </div>
                 </div>
@@ -1347,11 +1379,15 @@ window.admin = {
         const min_deposit = parseFloat(document.getElementById('bonus-min').value || 0);
         const bonus_percent = parseInt(document.getElementById('bonus-percent').value || 0);
         const bonus_fixed = parseFloat(document.getElementById('bonus-fixed').value || 0);
+        const userTarget = document.getElementById('bonus-user-target').value;
+        const assigned_to_user_id = userTarget ? parseInt(userTarget) : null;
+
         if (!title) return alert('Inserisci un titolo per il bonus');
         if (bonus_percent === 0 && bonus_fixed === 0) return alert('Inserisci almeno un bonus (% o fisso)');
+
         const res = await api.request('/admin/bonuses', {
             method: 'POST',
-            body: JSON.stringify({ title, description: desc, min_deposit, bonus_percent, bonus_fixed })
+            body: JSON.stringify({ title, description: desc, min_deposit, bonus_percent, bonus_fixed, assigned_to_user_id })
         });
         if (res) {
             document.getElementById('bonus-title').value = '';
@@ -1359,6 +1395,7 @@ window.admin = {
             document.getElementById('bonus-min').value = '0';
             document.getElementById('bonus-percent').value = '0';
             document.getElementById('bonus-fixed').value = '0';
+            document.getElementById('bonus-user-target').value = '';
             this.loadAdminBonuses();
         }
     },
@@ -2383,14 +2420,29 @@ window.profile = {
     _selectedBonusId: null,
 
     async init() {
+        // Ricarica dati freschi dal server
+        const balRes = await api.request('/user/balance');
+        if (balRes) {
+            state.balance = balRes.balance;
+            if (balRes.username) {
+                state.username = balRes.username;
+                localStorage.setItem('username', balRes.username);
+            }
+            const navEl = document.getElementById('user-balance-nav');
+            if (navEl) navEl.innerText = `Saldo: €${state.balance.toFixed(2)}`;
+        }
+
+        const username = state.username || localStorage.getItem('username') || '---';
         const usernameEl = document.getElementById('profile-username');
         const avatarEl = document.getElementById('profile-avatar-letter');
         const balanceEl = document.getElementById('profile-balance');
         const hintEl = document.getElementById('deposit-username-hint');
-        if (usernameEl) usernameEl.innerText = state.username || '---';
-        if (avatarEl) avatarEl.innerText = (state.username || '?')[0].toUpperCase();
+
+        if (usernameEl) usernameEl.innerText = username;
+        if (avatarEl) avatarEl.innerText = username !== '---' ? username[0].toUpperCase() : '?';
         if (balanceEl) balanceEl.innerText = `€${(state.balance || 0).toFixed(2)}`;
-        if (hintEl) hintEl.innerText = state.username || '---';
+        if (hintEl) hintEl.innerText = username;
+
         await this.loadBonuses();
     },
 
@@ -2406,21 +2458,27 @@ window.profile = {
         }
         container.innerHTML = bonuses.map(b => {
             const used = b.already_used;
+            const isPersonal = b.is_personal;
+            const borderColor = used ? 'rgba(255,255,255,0.1)' : (isPersonal ? '#a855f7' : '#ffd700');
+            const titleColor = used ? 'var(--text-secondary)' : (isPersonal ? '#a855f7' : '#ffd700');
             const bonusDesc = [];
             if (b.bonus_percent > 0) bonusDesc.push(`+${b.bonus_percent}% sulla ricarica`);
-            if (b.bonus_fixed > 0) bonusDesc.push(`+€${b.bonus_fixed.toFixed(2)} fissi`);
-            if (b.min_deposit > 0) bonusDesc.push(`min. ricarica €${b.min_deposit.toFixed(0)}`);
+            if (b.bonus_fixed > 0) bonusDesc.push(`+€${parseFloat(b.bonus_fixed).toFixed(2)} fissi`);
+            if (b.min_deposit > 0) bonusDesc.push(`min. €${parseFloat(b.min_deposit).toFixed(0)}`);
             return `
-            <div style="border:2px solid ${used ? 'rgba(255,255,255,0.1)' : '#ffd700'}; border-radius:12px; padding:0.9rem 1rem; display:flex; justify-content:space-between; align-items:center; gap:0.8rem; ${used ? 'opacity:0.45;' : ''}">
+            <div style="border:2px solid ${borderColor}; border-radius:12px; padding:0.9rem 1rem; display:flex; justify-content:space-between; align-items:center; gap:0.8rem; ${used ? 'opacity:0.45;' : ''}">
                 <div>
-                    <div style="font-weight:800; font-size:0.95rem; color:${used ? 'var(--text-secondary)' : '#ffd700'};">${b.title}</div>
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <span style="font-weight:800; font-size:0.95rem; color:${titleColor};">${b.title}</span>
+                        ${isPersonal && !used ? '<span style="font-size:0.65rem;background:rgba(168,85,247,0.2);color:#a855f7;border:1px solid #a855f7;border-radius:20px;padding:1px 7px;">🎁 Solo per te</span>' : ''}
+                    </div>
                     <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:2px;">${b.description || bonusDesc.join(' · ')}</div>
                     <div style="font-size:0.72rem; color:var(--text-secondary); margin-top:2px;">${bonusDesc.join(' · ')}</div>
                 </div>
                 <div style="flex-shrink:0;">
                     ${used
                         ? '<span style="font-size:0.75rem;color:var(--text-secondary);">✅ Usato</span>'
-                        : `<button onclick="profile.useBonusFlow(${b.id})" style="background:#ffd700;color:#000;border:none;border-radius:8px;padding:7px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">Usa</button>`
+                        : `<button onclick="profile.useBonusFlow(${b.id})" style="background:${isPersonal ? '#a855f7' : '#ffd700'};color:#000;border:none;border-radius:8px;padding:7px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">Usa</button>`
                     }
                 </div>
             </div>`;
@@ -2485,40 +2543,52 @@ window.profile = {
     },
 
     onDepositAmountChange() {
-        // niente — solo per futura estensione
+        // placeholder per future estensioni
     },
 
-    async proceedDeposit() {
-        const amountInput = document.getElementById('deposit-amount-input');
-        const amount = parseFloat(amountInput?.value || 0);
+    proceedDeposit() {
+        // Apertura link — usa anchor per compatibilità iOS Safari (window.open bloccato da async)
+        const a = document.createElement('a');
+        a.href = 'https://pay.sumup.com/b2c/QEAW96U8';
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
 
-        // Apre SumUp
-        window.open('https://pay.sumup.com/b2c/QEAW96U8', '_blank');
         document.getElementById('modal-deposit').classList.add('hidden');
 
-        // Se c'è un bonus selezionato, applica dopo una piccola pausa (l'utente ha già aperto SumUp)
-        if (this._selectedBonusId && amount > 0) {
-            const bonus = this._bonuses.find(b => b.id === this._selectedBonusId);
-            if (bonus && amount >= bonus.min_deposit) {
-                const res = await api.request('/bonuses/apply', {
-                    method: 'POST',
-                    body: JSON.stringify({ bonus_id: this._selectedBonusId, deposit_amount: amount })
-                });
-                if (res && res.new_balance !== undefined) {
-                    state.balance = res.new_balance;
-                    document.getElementById('user-balance-nav').innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
-                    alert(`🎁 ${res.message}`);
-                    this._selectedBonusId = null;
-                    await this.loadBonuses();
-                }
-            }
-        }
-
+        // Applica bonus se selezionato (asincrono separato)
+        const amountInput = document.getElementById('deposit-amount-input');
+        const amount = parseFloat(amountInput?.value || 0);
         if (amountInput) amountInput.value = '';
+
+        if (this._selectedBonusId && amount > 0) {
+            this._applyBonus(this._selectedBonusId, amount);
+        }
+    },
+
+    async _applyBonus(bonusId, amount) {
+        const bonus = this._bonuses.find(b => b.id === bonusId);
+        if (!bonus || amount < bonus.min_deposit) return;
+        const res = await api.request('/bonuses/apply', {
+            method: 'POST',
+            body: JSON.stringify({ bonus_id: bonusId, deposit_amount: amount })
+        });
+        if (res && res.new_balance !== undefined) {
+            state.balance = res.new_balance;
+            document.getElementById('user-balance-nav').innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
+            const profileBalance = document.getElementById('profile-balance');
+            if (profileBalance) profileBalance.innerText = `€${res.new_balance.toFixed(2)}`;
+            alert(`🎁 ${res.message}`);
+            this._selectedBonusId = null;
+            await this.loadBonuses();
+        }
     },
 
     showWithdrawal() {
-        document.getElementById('modal-withdrawal').classList.remove('hidden');
+        const modal = document.getElementById('modal-withdrawal');
+        if (modal) modal.classList.remove('hidden');
     },
 
     async submitWithdrawal() {

@@ -41,6 +41,7 @@
                 <a onclick="router.navigate('casino')" id="nav-casino">Casinò</a>
                 <a href="#" id="nav-mybets" onclick="router.navigate('mybets')">Mie Giocate</a>
                 <a href="#" id="nav-admin" class="hidden" onclick="router.navigate('admin')">Admin</a>
+                <a href="#" id="nav-profile" class="hidden" onclick="router.navigate('profile')">Profilo</a>
             </div>
 
             <div class="nav-extra" style="display: flex; align-items: center; gap: 10px;">
@@ -541,7 +542,6 @@
             </div>
 
             <!-- Profile Section -->
-            <!-- Profile Section -->
             <div id="section-profile" class="hidden">
                 <div style="max-width:480px; margin:0 auto; padding:0 0.5rem 2rem;">
 
@@ -602,73 +602,6 @@
                         </button>
                     </div>
 
-                </div>
-            </div>
-
-            <!-- Deposit Modal -->
-            <div id="modal-deposit" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:flex-end;justify-content:center;">
-                <div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));">
-                    <div style="text-align:center;margin-bottom:1.2rem;">
-                        <div id="deposit-method-icon" style="font-size:2rem;margin-bottom:6px;">💳</div>
-                        <div id="deposit-method-name" style="font-weight:800;font-size:1.1rem;">Ricarica</div>
-                    </div>
-
-                    <!-- Importo ricarica -->
-                    <div style="margin-bottom:1rem;">
-                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Importo che stai ricaricando (€)</label>
-                        <input id="deposit-amount-input" type="number" min="1" step="0.01" placeholder="Es. 20.00" oninput="profile.onDepositAmountChange()"
-                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
-                    </div>
-
-                    <!-- Selezione bonus -->
-                    <div id="deposit-bonus-section" style="margin-bottom:1.2rem; display:none;">
-                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:8px;">🎁 Bonus disponibili (opzionale)</label>
-                        <div id="deposit-bonus-list" style="display:flex;flex-direction:column;gap:6px;"></div>
-                    </div>
-
-                    <!-- Disclaimer -->
-                    <div style="background:rgba(255,165,0,0.12);border:2px solid #ff9500;border-radius:12px;padding:1rem;margin-bottom:1.2rem;">
-                        <div style="font-size:0.95rem;font-weight:900;color:#ff9500;margin-bottom:6px;">⚠️ IMPORTANTE</div>
-                        <div style="font-size:0.85rem;line-height:1.6;color:var(--text-primary);">
-                            Inserisci come <b>nome e cognome</b> il tuo <b>username: <span id="deposit-username-hint" style="color:var(--accent);">---</span></b><br>
-                            Questo è necessario per identificare il pagamento e accreditare il saldo.
-                        </div>
-                    </div>
-
-                    <button onclick="profile.proceedDeposit()" style="width:100%;background:var(--accent);color:#000;font-weight:900;font-size:1rem;padding:14px;border:none;border-radius:12px;cursor:pointer;margin-bottom:0.8rem;">
-                        Prosegui al pagamento →
-                    </button>
-                    <button onclick="document.getElementById('modal-deposit').classList.add('hidden')" style="width:100%;background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);padding:12px;border-radius:12px;cursor:pointer;">
-                        Annulla
-                    </button>
-                </div>
-            </div>
-
-            <!-- Withdrawal Modal -->
-            <div id="modal-withdrawal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:flex-end;justify-content:center;">
-                <div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));">
-                    <div style="font-weight:800;font-size:1.1rem;text-align:center;margin-bottom:1.2rem;">🏦 Richiesta Prelievo</div>
-                    <div style="margin-bottom:1rem;">
-                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Importo (€)</label>
-                        <input id="wd-amount" type="number" min="10" step="0.01" placeholder="Es. 50.00"
-                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
-                    </div>
-                    <div style="margin-bottom:1rem;">
-                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">IBAN</label>
-                        <input id="wd-iban" type="text" placeholder="IT60 X054 2811 1010 0000 0123 456"
-                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:0.9rem;box-sizing:border-box;font-family:monospace;">
-                    </div>
-                    <div style="margin-bottom:1.2rem;">
-                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Intestatario conto</label>
-                        <input id="wd-name" type="text" placeholder="Nome Cognome"
-                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
-                    </div>
-                    <button onclick="profile.submitWithdrawal()" style="width:100%;background:var(--accent);color:#000;font-weight:900;font-size:1rem;padding:14px;border:none;border-radius:12px;cursor:pointer;margin-bottom:0.8rem;">
-                        Invia richiesta
-                    </button>
-                    <button onclick="document.getElementById('modal-withdrawal').classList.add('hidden')" style="width:100%;background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);padding:12px;border-radius:12px;cursor:pointer;">
-                        Annulla
-                    </button>
                 </div>
             </div>
 
@@ -993,6 +926,12 @@
                                         <label>Bonus fisso (€)</label>
                                         <input type="number" id="bonus-fixed" value="0" min="0" step="0.5">
                                     </div>
+                                    <div class="input-group" style="margin:0; grid-column:1/-1;">
+                                        <label>👤 Assegna a utente specifico (lascia vuoto per tutti)</label>
+                                        <select id="bonus-user-target" style="width:100%; padding:0.75rem; background:#0d1117; border:1px solid var(--border-color); border-radius:8px; color:white;">
+                                            <option value="">— Globale (tutti gli utenti) —</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <button onclick="admin.createBonus()" style="width:auto; padding:8px 24px; background:var(--accent); color:#000; font-weight:700;">
                                     ➕ Crea Bonus
@@ -1067,6 +1006,73 @@
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                 <span>Admin</span>
             </a>
+            <!-- Deposit Modal -->
+            <div id="modal-deposit" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:flex-end;justify-content:center;">
+                <div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));">
+                    <div style="text-align:center;margin-bottom:1.2rem;">
+                        <div id="deposit-method-icon" style="font-size:2rem;margin-bottom:6px;">💳</div>
+                        <div id="deposit-method-name" style="font-weight:800;font-size:1.1rem;">Ricarica</div>
+                    </div>
+
+                    <!-- Importo ricarica -->
+                    <div style="margin-bottom:1rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Importo che stai ricaricando (€)</label>
+                        <input id="deposit-amount-input" type="number" min="1" step="0.01" placeholder="Es. 20.00" oninput="profile.onDepositAmountChange()"
+                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
+                    </div>
+
+                    <!-- Selezione bonus -->
+                    <div id="deposit-bonus-section" style="margin-bottom:1.2rem; display:none;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:8px;">🎁 Bonus disponibili (opzionale)</label>
+                        <div id="deposit-bonus-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+                    </div>
+
+                    <!-- Disclaimer -->
+                    <div style="background:rgba(255,165,0,0.12);border:2px solid #ff9500;border-radius:12px;padding:1rem;margin-bottom:1.2rem;">
+                        <div style="font-size:0.95rem;font-weight:900;color:#ff9500;margin-bottom:6px;">⚠️ IMPORTANTE</div>
+                        <div style="font-size:0.85rem;line-height:1.6;color:var(--text-primary);">
+                            Inserisci come <b>nome e cognome</b> il tuo <b>username: <span id="deposit-username-hint" style="color:var(--accent);">---</span></b><br>
+                            Questo è necessario per identificare il pagamento e accreditare il saldo.
+                        </div>
+                    </div>
+
+                    <button onclick="profile.proceedDeposit()" style="width:100%;background:var(--accent);color:#000;font-weight:900;font-size:1rem;padding:14px;border:none;border-radius:12px;cursor:pointer;margin-bottom:0.8rem;">
+                        Prosegui al pagamento →
+                    </button>
+                    <button onclick="document.getElementById('modal-deposit').classList.add('hidden')" style="width:100%;background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);padding:12px;border-radius:12px;cursor:pointer;">
+                        Annulla
+                    </button>
+                </div>
+            </div>
+
+            <!-- Withdrawal Modal -->
+            <div id="modal-withdrawal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:flex-end;justify-content:center;">
+                <div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));">
+                    <div style="font-weight:800;font-size:1.1rem;text-align:center;margin-bottom:1.2rem;">🏦 Richiesta Prelievo</div>
+                    <div style="margin-bottom:1rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Importo (€)</label>
+                        <input id="wd-amount" type="number" min="10" step="0.01" placeholder="Es. 50.00"
+                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
+                    </div>
+                    <div style="margin-bottom:1rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">IBAN</label>
+                        <input id="wd-iban" type="text" placeholder="IT60 X054 2811 1010 0000 0123 456"
+                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:0.9rem;box-sizing:border-box;font-family:monospace;">
+                    </div>
+                    <div style="margin-bottom:1.2rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Intestatario conto</label>
+                        <input id="wd-name" type="text" placeholder="Nome Cognome"
+                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
+                    </div>
+                    <button onclick="profile.submitWithdrawal()" style="width:100%;background:var(--accent);color:#000;font-weight:900;font-size:1rem;padding:14px;border:none;border-radius:12px;cursor:pointer;margin-bottom:0.8rem;">
+                        Invia richiesta
+                    </button>
+                    <button onclick="document.getElementById('modal-withdrawal').classList.add('hidden')" style="width:100%;background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);padding:12px;border-radius:12px;cursor:pointer;">
+                        Annulla
+                    </button>
+                </div>
+            </div>
+
         </div>
     </div>
 </body>
