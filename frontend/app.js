@@ -2543,6 +2543,10 @@ window.profile = {
         this.renderDepositBonuses();
     },
 
+    onDepositAmountChange() {
+        // placeholder — nessuna azione necessaria per ora
+    },
+
     // IMPORTANTE: NON async — iOS Safari blocca window.open nelle funzioni async
     proceedDeposit() {
         // Apri link con <a> click — unico metodo affidabile su iOS Safari
