@@ -2418,26 +2418,35 @@ window.profile = {
     _bonuses: [],
     _selectedBonusId: null,
 
-    async init() {
-        // Carica dati freschi dal server
-        const balRes = await api.request('/user/balance');
-        if (balRes) {
-            state.balance = balRes.balance;
-            if (balRes.username) {
-                state.username = balRes.username;
-                localStorage.setItem('username', balRes.username);
-            }
-        }
+    init() {
+        // Usa immediatamente i dati già in state (sincrono, nessuna attesa)
         const username = state.username || localStorage.getItem('username') || '---';
+        const balance = state.balance || 0;
 
-        // Popola UI profilo
-        const el = (id) => document.getElementById(id);
-        if (el('profile-username')) el('profile-username').innerText = username;
-        if (el('profile-avatar-letter')) el('profile-avatar-letter').innerText = username !== '---' ? username[0].toUpperCase() : '?';
-        if (el('profile-balance')) el('profile-balance').innerText = `€${(state.balance || 0).toFixed(2)}`;
-        if (el('deposit-username-hint')) el('deposit-username-hint').innerText = username;
-        if (el('user-balance-nav')) el('user-balance-nav').innerText = `Saldo: €${(state.balance || 0).toFixed(2)}`;
+        const g = (id) => document.getElementById(id);
+        if (g('profile-username')) g('profile-username').innerText = username;
+        if (g('profile-avatar-letter')) g('profile-avatar-letter').innerText = username !== '---' ? username[0].toUpperCase() : '?';
+        if (g('profile-balance')) g('profile-balance').innerText = `€${balance.toFixed(2)}`;
+        if (g('deposit-username-hint')) g('deposit-username-hint').innerText = username;
 
+        // Poi aggiorna in background
+        this._refreshAndLoadBonuses();
+    },
+
+    async _refreshAndLoadBonuses() {
+        const res = await api.request('/user/balance');
+        if (res) {
+            state.balance = res.balance;
+            state.username = res.username || state.username;
+            if (res.username) localStorage.setItem('username', res.username);
+            const g = (id) => document.getElementById(id);
+            const u = state.username || '---';
+            if (g('profile-username')) g('profile-username').innerText = u;
+            if (g('profile-avatar-letter')) g('profile-avatar-letter').innerText = u !== '---' ? u[0].toUpperCase() : '?';
+            if (g('profile-balance')) g('profile-balance').innerText = `€${res.balance.toFixed(2)}`;
+            if (g('deposit-username-hint')) g('deposit-username-hint').innerText = u;
+            if (g('user-balance-nav')) g('user-balance-nav').innerText = `Saldo: €${res.balance.toFixed(2)}`;
+        }
         await this.loadBonuses();
     },
 
@@ -2492,19 +2501,19 @@ window.profile = {
     openDeposit(method) {
         const icons = { card: '💳', apple: '🍎', google: 'G' };
         const names = { card: 'Carta di credito / debito', apple: 'Apple Pay', google: 'Google Pay' };
-        const el = (id) => document.getElementById(id);
-        if (el('deposit-method-icon')) el('deposit-method-icon').innerText = icons[method] || '💳';
-        if (el('deposit-method-name')) el('deposit-method-name').innerText = names[method] || 'Ricarica';
+        const g = (id) => document.getElementById(id);
+        if (g('deposit-method-icon')) g('deposit-method-icon').innerText = icons[method] || '💳';
+        if (g('deposit-method-name')) g('deposit-method-name').innerText = names[method] || 'Ricarica';
         const username = state.username || localStorage.getItem('username') || '---';
-        if (el('deposit-username-hint')) el('deposit-username-hint').innerText = username;
+        if (g('deposit-username-hint')) g('deposit-username-hint').innerText = username;
         this.renderDepositBonuses();
-        const modal = el('modal-deposit');
-        if (modal) modal.classList.remove('hidden');
+        const modal = g('modal-deposit');
+        if (modal) { modal.style.display = 'flex'; modal.classList.remove('hidden'); }
     },
 
     closeDeposit() {
         const modal = document.getElementById('modal-deposit');
-        if (modal) modal.classList.add('hidden');
+        if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
     },
 
     renderDepositBonuses() {
@@ -2597,12 +2606,12 @@ window.profile = {
 
     openWithdrawal() {
         const modal = document.getElementById('modal-withdrawal');
-        if (modal) modal.classList.remove('hidden');
+        if (modal) { modal.style.display = 'flex'; modal.classList.remove('hidden'); }
     },
 
     closeWithdrawal() {
         const modal = document.getElementById('modal-withdrawal');
-        if (modal) modal.classList.add('hidden');
+        if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
     },
 
     async submitWithdrawal() {
@@ -2640,8 +2649,11 @@ window.profile = {
 
 window.onload = () => {
     if (state.token) {
-        ui.showDashboard();
-        dashboard.init();
-        router.navigate('odds');
+        // Small delay to ensure DOM is fully parsed
+        setTimeout(() => {
+            ui.showDashboard();
+            dashboard.init();
+            router.navigate('odds');
+        }, 50);
     }
 };
