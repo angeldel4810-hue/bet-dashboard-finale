@@ -831,3 +831,8 @@ table tr:hover td {
         padding: 0.9rem !important;
     }
 }
+/* Modal overlay - flex only when visible */
+#modal-deposit:not(.hidden),
+#modal-withdrawal:not(.hidden) {
+    display: flex !important;
+}

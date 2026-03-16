@@ -2415,12 +2415,11 @@ window.baccarat = {
 };
 
 window.profile = {
-    _depositMethod: null,
     _bonuses: [],
     _selectedBonusId: null,
 
     async init() {
-        // Ricarica dati freschi dal server
+        // Carica dati freschi dal server
         const balRes = await api.request('/user/balance');
         if (balRes) {
             state.balance = balRes.balance;
@@ -2428,87 +2427,84 @@ window.profile = {
                 state.username = balRes.username;
                 localStorage.setItem('username', balRes.username);
             }
-            const navEl = document.getElementById('user-balance-nav');
-            if (navEl) navEl.innerText = `Saldo: €${state.balance.toFixed(2)}`;
         }
-
         const username = state.username || localStorage.getItem('username') || '---';
-        const usernameEl = document.getElementById('profile-username');
-        const avatarEl = document.getElementById('profile-avatar-letter');
-        const balanceEl = document.getElementById('profile-balance');
-        const hintEl = document.getElementById('deposit-username-hint');
 
-        if (usernameEl) usernameEl.innerText = username;
-        if (avatarEl) avatarEl.innerText = username !== '---' ? username[0].toUpperCase() : '?';
-        if (balanceEl) balanceEl.innerText = `€${(state.balance || 0).toFixed(2)}`;
-        if (hintEl) hintEl.innerText = username;
+        // Popola UI profilo
+        const el = (id) => document.getElementById(id);
+        if (el('profile-username')) el('profile-username').innerText = username;
+        if (el('profile-avatar-letter')) el('profile-avatar-letter').innerText = username !== '---' ? username[0].toUpperCase() : '?';
+        if (el('profile-balance')) el('profile-balance').innerText = `€${(state.balance || 0).toFixed(2)}`;
+        if (el('deposit-username-hint')) el('deposit-username-hint').innerText = username;
+        if (el('user-balance-nav')) el('user-balance-nav').innerText = `Saldo: €${(state.balance || 0).toFixed(2)}`;
 
         await this.loadBonuses();
     },
 
     async loadBonuses() {
         const bonuses = await api.request('/bonuses');
-        if (!bonuses) return;
-        this._bonuses = bonuses;
+        this._bonuses = bonuses || [];
         const container = document.getElementById('profile-bonuses-list');
         if (!container) return;
-        if (bonuses.length === 0) {
-            container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);font-size:0.85rem;padding:0.5rem 0;">Nessun bonus disponibile al momento.</div>';
+
+        if (!bonuses || bonuses.length === 0) {
+            container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);font-size:0.85rem;padding:0.8rem 0;">Nessun bonus disponibile al momento.</div>';
             return;
         }
+
         container.innerHTML = bonuses.map(b => {
             const used = b.already_used;
-            const isPersonal = b.is_personal;
-            const borderColor = used ? 'rgba(255,255,255,0.1)' : (isPersonal ? '#a855f7' : '#ffd700');
+            const isPersonal = !!b.is_personal;
+            const borderColor = used ? 'rgba(255,255,255,0.08)' : (isPersonal ? '#a855f7' : '#ffd700');
             const titleColor = used ? 'var(--text-secondary)' : (isPersonal ? '#a855f7' : '#ffd700');
-            const bonusDesc = [];
-            if (b.bonus_percent > 0) bonusDesc.push(`+${b.bonus_percent}% sulla ricarica`);
-            if (b.bonus_fixed > 0) bonusDesc.push(`+€${parseFloat(b.bonus_fixed).toFixed(2)} fissi`);
-            if (b.min_deposit > 0) bonusDesc.push(`min. €${parseFloat(b.min_deposit).toFixed(0)}`);
-            return `
-            <div style="border:2px solid ${borderColor}; border-radius:12px; padding:0.9rem 1rem; display:flex; justify-content:space-between; align-items:center; gap:0.8rem; ${used ? 'opacity:0.45;' : ''}">
-                <div>
-                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                        <span style="font-weight:800; font-size:0.95rem; color:${titleColor};">${b.title}</span>
+            const parts = [];
+            if (b.bonus_percent > 0) parts.push(`+${b.bonus_percent}%`);
+            if (b.bonus_fixed > 0) parts.push(`+€${parseFloat(b.bonus_fixed).toFixed(2)}`);
+            if (b.min_deposit > 0) parts.push(`min. €${parseFloat(b.min_deposit).toFixed(0)}`);
+
+            return `<div style="border:2px solid ${borderColor}; border-radius:12px; padding:0.8rem 1rem; display:flex; justify-content:space-between; align-items:center; gap:0.8rem; margin-bottom:8px; ${used ? 'opacity:0.4;' : ''}">
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:2px;">
+                        <b style="color:${titleColor}; font-size:0.9rem;">${b.title}</b>
                         ${isPersonal && !used ? '<span style="font-size:0.65rem;background:rgba(168,85,247,0.2);color:#a855f7;border:1px solid #a855f7;border-radius:20px;padding:1px 7px;">🎁 Solo per te</span>' : ''}
                     </div>
-                    <div style="font-size:0.78rem; color:var(--text-secondary); margin-top:2px;">${b.description || bonusDesc.join(' · ')}</div>
-                    <div style="font-size:0.72rem; color:var(--text-secondary); margin-top:2px;">${bonusDesc.join(' · ')}</div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary);">${b.description || parts.join(' · ')}</div>
+                    <div style="font-size:0.7rem;color:var(--text-secondary);margin-top:1px;">${parts.join(' · ')}</div>
                 </div>
                 <div style="flex-shrink:0;">
                     ${used
                         ? '<span style="font-size:0.75rem;color:var(--text-secondary);">✅ Usato</span>'
-                        : `<button onclick="profile.useBonusFlow(${b.id})" style="background:${isPersonal ? '#a855f7' : '#ffd700'};color:#000;border:none;border-radius:8px;padding:7px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">Usa</button>`
+                        : `<button onclick="profile.openDepositWithBonus(${b.id})"
+                            style="background:${isPersonal ? '#a855f7' : '#ffd700'};color:#000;border:none;border-radius:8px;padding:7px 14px;font-weight:800;font-size:0.8rem;cursor:pointer;">
+                            Usa
+                          </button>`
                     }
                 </div>
             </div>`;
         }).join('');
     },
 
-    useBonusFlow(bonusId) {
-        // Apre il modal deposit con il bonus preselezionato
+    openDepositWithBonus(bonusId) {
         this._selectedBonusId = bonusId;
-        this.showDeposit('card');
-        // Scrolla alla sezione bonus nel modal
-        setTimeout(() => {
-            const bonusSec = document.getElementById('deposit-bonus-section');
-            if (bonusSec) bonusSec.scrollIntoView({ behavior: 'smooth' });
-        }, 200);
+        this.openDeposit('card');
     },
 
-    showDeposit(method) {
-        this._depositMethod = method;
-        const icons = { card: '💳', apple: ' ', google: 'G' };
+    openDeposit(method) {
+        const icons = { card: '💳', apple: '🍎', google: 'G' };
         const names = { card: 'Carta di credito / debito', apple: 'Apple Pay', google: 'Google Pay' };
-        const iconEl = document.getElementById('deposit-method-icon');
-        const nameEl = document.getElementById('deposit-method-name');
-        if (iconEl) iconEl.innerText = icons[method] || '💳';
-        if (nameEl) nameEl.innerText = names[method] || 'Ricarica';
-        const hintEl = document.getElementById('deposit-username-hint');
-        if (hintEl) hintEl.innerText = state.username || '---';
-        // Popola bonus nel modal
+        const el = (id) => document.getElementById(id);
+        if (el('deposit-method-icon')) el('deposit-method-icon').innerText = icons[method] || '💳';
+        if (el('deposit-method-name')) el('deposit-method-name').innerText = names[method] || 'Ricarica';
+        const username = state.username || localStorage.getItem('username') || '---';
+        if (el('deposit-username-hint')) el('deposit-username-hint').innerText = username;
         this.renderDepositBonuses();
-        document.getElementById('modal-deposit').classList.remove('hidden');
+        const modal = el('modal-deposit');
+        if (modal) modal.classList.remove('hidden');
+    },
+
+    closeDeposit() {
+        const modal = document.getElementById('modal-deposit');
+        if (modal) modal.classList.add('hidden');
     },
 
     renderDepositBonuses() {
@@ -2516,85 +2512,102 @@ window.profile = {
         const section = document.getElementById('deposit-bonus-section');
         const listEl = document.getElementById('deposit-bonus-list');
         if (!section || !listEl) return;
-        if (available.length === 0) { section.style.display = 'none'; return; }
+
+        if (available.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
         section.style.display = 'block';
+
         listEl.innerHTML = available.map(b => {
-            const isSelected = this._selectedBonusId === b.id;
-            return `
-            <div onclick="profile.selectBonus(${b.id})" id="dep-bonus-${b.id}"
-                style="border:2px solid ${isSelected ? '#ffd700' : 'rgba(255,255,255,0.15)'}; border-radius:10px; padding:10px 12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:${isSelected ? 'rgba(255,215,0,0.08)' : 'transparent'}; transition:all 0.15s;">
+            const sel = this._selectedBonusId === b.id;
+            const color = sel ? '#ffd700' : 'rgba(255,255,255,0.12)';
+            const bg = sel ? 'rgba(255,215,0,0.08)' : 'transparent';
+            return `<div onclick="profile.selectBonus(${b.id})"
+                style="border:2px solid ${color};border-radius:10px;padding:10px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:${bg};margin-bottom:6px;transition:all 0.15s;">
                 <div>
-                    <div style="font-weight:700; font-size:0.88rem; color:${isSelected ? '#ffd700' : 'white'};">${b.title}</div>
-                    <div style="font-size:0.75rem; color:var(--text-secondary);">${b.description || ''}</div>
+                    <div style="font-weight:700;font-size:0.85rem;color:${sel ? '#ffd700' : 'white'};">${b.title}</div>
+                    <div style="font-size:0.72rem;color:var(--text-secondary);">${b.description || ''}</div>
                 </div>
-                <div style="font-size:1.2rem;">${isSelected ? '✅' : '⬜'}</div>
+                <span style="font-size:1.1rem;">${sel ? '✅' : '⬜'}</span>
             </div>`;
-        }).join('') + `
-        <div onclick="profile.selectBonus(null)" id="dep-bonus-none"
-            style="border:2px solid ${!this._selectedBonusId ? '#ffd700' : 'rgba(255,255,255,0.15)'}; border-radius:10px; padding:10px 12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:${!this._selectedBonusId ? 'rgba(255,215,0,0.08)' : 'transparent'}; transition:all 0.15s;">
-            <div style="font-size:0.88rem; color:var(--text-secondary);">Nessun bonus</div>
-            <div style="font-size:1.2rem;">${!this._selectedBonusId ? '✅' : '⬜'}</div>
+        }).join('') + `<div onclick="profile.selectBonus(null)"
+            style="border:2px solid ${!this._selectedBonusId ? '#ffd700' : 'rgba(255,255,255,0.12)'};border-radius:10px;padding:10px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:${!this._selectedBonusId ? 'rgba(255,215,0,0.08)' : 'transparent'};transition:all 0.15s;">
+            <div style="font-size:0.85rem;color:var(--text-secondary);">Nessun bonus</div>
+            <span style="font-size:1.1rem;">${!this._selectedBonusId ? '✅' : '⬜'}</span>
         </div>`;
     },
 
-    selectBonus(bonusId) {
-        this._selectedBonusId = bonusId;
+    selectBonus(id) {
+        this._selectedBonusId = id;
         this.renderDepositBonuses();
     },
 
-    onDepositAmountChange() {
-        // placeholder per future estensioni
-    },
-
+    // IMPORTANTE: NON async — iOS Safari blocca window.open nelle funzioni async
     proceedDeposit() {
-        // Apertura link — usa anchor per compatibilità iOS Safari (window.open bloccato da async)
-        const a = document.createElement('a');
-        a.href = 'https://pay.sumup.com/b2c/QEAW96U8';
-        a.target = '_blank';
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // Apri link con <a> click — unico metodo affidabile su iOS Safari
+        const link = document.createElement('a');
+        link.href = 'https://pay.sumup.com/b2c/QEAW96U8';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
 
-        document.getElementById('modal-deposit').classList.add('hidden');
+        // Chiudi modal
+        this.closeDeposit();
 
-        // Applica bonus se selezionato (asincrono separato)
-        const amountInput = document.getElementById('deposit-amount-input');
-        const amount = parseFloat(amountInput?.value || 0);
-        if (amountInput) amountInput.value = '';
+        // Applica bonus se selezionato
+        const amountEl = document.getElementById('deposit-amount-input');
+        const amount = parseFloat(amountEl ? amountEl.value : 0);
+        if (amountEl) amountEl.value = '';
 
         if (this._selectedBonusId && amount > 0) {
-            this._applyBonus(this._selectedBonusId, amount);
+            const bonusId = this._selectedBonusId;
+            this._selectedBonusId = null;
+            this.applyBonus(bonusId, amount);
         }
     },
 
-    async _applyBonus(bonusId, amount) {
+    async applyBonus(bonusId, amount) {
         const bonus = this._bonuses.find(b => b.id === bonusId);
-        if (!bonus || amount < bonus.min_deposit) return;
+        if (!bonus) return;
+        if (amount < (bonus.min_deposit || 0)) {
+            alert(`⚠️ Importo minimo per questo bonus: €${bonus.min_deposit}`);
+            return;
+        }
         const res = await api.request('/bonuses/apply', {
             method: 'POST',
             body: JSON.stringify({ bonus_id: bonusId, deposit_amount: amount })
         });
         if (res && res.new_balance !== undefined) {
             state.balance = res.new_balance;
-            document.getElementById('user-balance-nav').innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
-            const profileBalance = document.getElementById('profile-balance');
-            if (profileBalance) profileBalance.innerText = `€${res.new_balance.toFixed(2)}`;
+            const navEl = document.getElementById('user-balance-nav');
+            if (navEl) navEl.innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
+            const profileBal = document.getElementById('profile-balance');
+            if (profileBal) profileBal.innerText = `€${res.new_balance.toFixed(2)}`;
             alert(`🎁 ${res.message}`);
-            this._selectedBonusId = null;
             await this.loadBonuses();
         }
     },
 
-    showWithdrawal() {
+    openWithdrawal() {
         const modal = document.getElementById('modal-withdrawal');
         if (modal) modal.classList.remove('hidden');
     },
 
+    closeWithdrawal() {
+        const modal = document.getElementById('modal-withdrawal');
+        if (modal) modal.classList.add('hidden');
+    },
+
     async submitWithdrawal() {
-        const amount = parseFloat(document.getElementById('wd-amount').value);
-        const iban = document.getElementById('wd-iban').value.trim();
-        const name = document.getElementById('wd-name').value.trim();
+        const amountEl = document.getElementById('wd-amount');
+        const ibanEl = document.getElementById('wd-iban');
+        const nameEl = document.getElementById('wd-name');
+        const amount = parseFloat(amountEl ? amountEl.value : 0);
+        const iban = ibanEl ? ibanEl.value.trim() : '';
+        const name = nameEl ? nameEl.value.trim() : '';
 
         if (!amount || amount < 10) return alert('Importo minimo €10.00');
         if (!iban) return alert('Inserisci il tuo IBAN');
@@ -2607,16 +2620,19 @@ window.profile = {
 
         if (res && res.new_balance !== undefined) {
             state.balance = res.new_balance;
-            document.getElementById('user-balance-nav').innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
-            document.getElementById('modal-withdrawal').classList.add('hidden');
-            document.getElementById('wd-amount').value = '';
-            document.getElementById('wd-iban').value = '';
-            document.getElementById('wd-name').value = '';
-            this.init();
-            alert('✅ Richiesta inviata. Il saldo sarà aggiornato entro 2-3 giorni lavorativi.');
+            const navEl = document.getElementById('user-balance-nav');
+            if (navEl) navEl.innerText = `Saldo: €${res.new_balance.toFixed(2)}`;
+            if (amountEl) amountEl.value = '';
+            if (ibanEl) ibanEl.value = '';
+            if (nameEl) nameEl.value = '';
+            this.closeWithdrawal();
+            const profileBal = document.getElementById('profile-balance');
+            if (profileBal) profileBal.innerText = `€${res.new_balance.toFixed(2)}`;
+            alert('✅ Richiesta inviata. Il saldo è già stato aggiornato.');
         }
     }
 };
+
 
 window.onload = () => {
     if (state.token) {
