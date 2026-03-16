@@ -497,12 +497,7 @@ button:hover {
     box-shadow: 0 6px 20px var(--accent-glow);
 }
 
-.admin-section {
-    background: linear-gradient(180deg, rgba(20, 25, 35, 0.5), rgba(10, 15, 25, 0.7));
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
-}
+/* admin-section override removed - using card-bg */
 
 table th {
     background: rgba(0, 0, 0, 0.3);
@@ -831,8 +826,51 @@ table tr:hover td {
         padding: 0.9rem !important;
     }
 }
-/* Modal overlay - flex only when visible */
+/* Modal overlay */
 #modal-deposit:not(.hidden),
 #modal-withdrawal:not(.hidden) {
     display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Modal inner panel */
+#modal-deposit > div,
+#modal-withdrawal > div {
+    position: relative;
+    z-index: 1;
+}
+
+/* Modal overlay - centered */
+#modal-deposit:not(.hidden),
+#modal-withdrawal:not(.hidden) {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* ===== MODAL OVERLAY - CENTRATO SU TUTTE LE SCHERMATE ===== */
+#modal-deposit,
+#modal-withdrawal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 9999;
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
+    padding: 2rem 1rem;
+    box-sizing: border-box;
+}
+#modal-deposit:not(.hidden),
+#modal-withdrawal:not(.hidden) {
+    display: flex !important;
+}
+#modal-deposit > div,
+#modal-withdrawal > div {
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 440px;
+    margin: auto;
 }

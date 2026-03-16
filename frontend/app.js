@@ -2508,12 +2508,12 @@ window.profile = {
         if (g('deposit-username-hint')) g('deposit-username-hint').innerText = username;
         this.renderDepositBonuses();
         const modal = g('modal-deposit');
-        if (modal) { modal.style.display = 'flex'; modal.classList.remove('hidden'); }
+        if (modal) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
     },
 
     closeDeposit() {
         const modal = document.getElementById('modal-deposit');
-        if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
+        if (modal) { modal.classList.add('hidden'); modal.style.display = ''; }
     },
 
     renderDepositBonuses() {
@@ -2606,12 +2606,12 @@ window.profile = {
 
     openWithdrawal() {
         const modal = document.getElementById('modal-withdrawal');
-        if (modal) { modal.style.display = 'flex'; modal.classList.remove('hidden'); }
+        if (modal) { modal.classList.remove('hidden'); modal.style.display = 'flex'; }
     },
 
     closeWithdrawal() {
         const modal = document.getElementById('modal-withdrawal');
-        if (modal) { modal.style.display = 'none'; modal.classList.add('hidden'); }
+        if (modal) { modal.classList.add('hidden'); modal.style.display = ''; }
     },
 
     async submitWithdrawal() {
