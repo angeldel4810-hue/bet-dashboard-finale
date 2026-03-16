@@ -155,9 +155,15 @@ def init_db():
         cursor.execute("""CREATE TABLE IF NOT EXISTS virtual_teams (id SERIAL PRIMARY KEY, name TEXT UNIQUE, offense INTEGER DEFAULT 70, defense INTEGER DEFAULT 70, logo_url TEXT)""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS virtual_seasons (id SERIAL PRIMARY KEY, status TEXT DEFAULT 'active', current_matchday INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT NOW())""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS virtual_matches (id SERIAL PRIMARY KEY, season_id INTEGER REFERENCES virtual_seasons(id), matchday INTEGER, home_team_id INTEGER REFERENCES virtual_teams(id), away_team_id INTEGER REFERENCES virtual_teams(id), home_score INTEGER DEFAULT 0, away_score INTEGER DEFAULT 0, status TEXT DEFAULT 'scheduled', current_minute INTEGER DEFAULT 0, odds_1 REAL, odds_x REAL, odds_2 REAL, odds_over25 REAL, odds_under25 REAL, odds_gg REAL, odds_ng REAL, odds_combo TEXT, odds_exact TEXT)""")
+        # Bonus tables with safe migrations
         cursor.execute("""CREATE TABLE IF NOT EXISTS bonuses (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, min_deposit REAL DEFAULT 0, bonus_percent INTEGER DEFAULT 0, bonus_fixed REAL DEFAULT 0, active BOOLEAN DEFAULT TRUE, assigned_to_user_id INTEGER DEFAULT NULL, created_at TIMESTAMP DEFAULT NOW())""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS user_bonuses (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), bonus_id INTEGER REFERENCES bonuses(id), applied_amount REAL, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS withdrawal_requests (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), username TEXT, amount REAL, iban TEXT, holder_name TEXT, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())""")
+        # Migrations for existing DBs
+        try:
+            cursor.execute("ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS assigned_to_user_id INTEGER DEFAULT NULL")
+        except Exception:
+            pass
         cursor.execute("""CREATE TABLE IF NOT EXISTS virtual_standings (id SERIAL PRIMARY KEY, season_id INTEGER REFERENCES virtual_seasons(id), team_id INTEGER REFERENCES virtual_teams(id), points INTEGER DEFAULT 0, played INTEGER DEFAULT 0, won INTEGER DEFAULT 0, drawn INTEGER DEFAULT 0, lost INTEGER DEFAULT 0, goals_for INTEGER DEFAULT 0, goals_against INTEGER DEFAULT 0, UNIQUE(season_id, team_id))""")
 
         for k, v in [('overround','5'),('odds_source','manual'),('apikey',''),('api_provider','the-odds-api'),('active_sports',''),('crash_house_edge','3'),('virtual_house_edge','15'),('virtual_pay_mode','auto')]:

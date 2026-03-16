@@ -1421,7 +1421,10 @@ async def admin_delete_bonus(bid: int):
     conn = get_db()
     cursor = conn.cursor()
     is_pg = hasattr(conn, 'get_dsn_parameters')
-    cursor.execute("UPDATE bonuses SET active = %s WHERE id = %s" if is_pg else "UPDATE bonuses SET active = 0 WHERE id = ?", *((False, bid),) if is_pg else ((bid,),))
+    if is_pg:
+        cursor.execute("UPDATE bonuses SET active = FALSE WHERE id = %s", (bid,))
+    else:
+        cursor.execute("UPDATE bonuses SET active = 0 WHERE id = ?", (bid,))
     conn.commit(); conn.close()
     return {"message": "Bonus disattivato"}
 
