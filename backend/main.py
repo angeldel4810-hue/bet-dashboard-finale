@@ -400,7 +400,8 @@ async def get_balance(user = Depends(get_current_user)):
     cursor.execute(query, (user['username'],))
     row = cursor.fetchone()
     conn.close()
-    return {"balance": row[0] if is_postgres and row else (row['balance'] if row else 0)}
+    bal = row[0] if is_postgres and row else (row['balance'] if row else 0)
+    return {"balance": bal, "username": user['username']}
 
 @app.get("/api/admin/users", dependencies=[Depends(check_admin)])
 async def list_users():
@@ -1306,7 +1307,7 @@ async def play_baccarat(bets: Dict[str, float] = Body(...), user = Depends(get_c
 
 @app.get("/api/bonuses")
 async def get_bonuses(user = Depends(get_current_user)):
-    """Ritorna i bonus attivi con info se l'utente li ha già usati."""
+    """Ritorna i bonus attivi visibili all'utente: globali + quelli assegnati a lui."""
     conn = get_db()
     cursor = conn.cursor()
     is_pg = hasattr(conn, 'get_dsn_parameters')
@@ -1314,18 +1315,22 @@ async def get_bonuses(user = Depends(get_current_user)):
     u_row = cursor.fetchone()
     u_id = u_row[0] if is_pg else u_row['id']
 
+    # Bonus globali (assigned_to_user_id IS NULL) + bonus specifici per questo utente
     if is_pg:
-        cursor.execute("SELECT * FROM bonuses WHERE active = TRUE ORDER BY id DESC")
+        cursor.execute("SELECT * FROM bonuses WHERE active = TRUE AND (assigned_to_user_id IS NULL OR assigned_to_user_id = %s) ORDER BY assigned_to_user_id DESC NULLS LAST, id DESC", (u_id,))
     else:
-        cursor.execute("SELECT * FROM bonuses WHERE active = 1 ORDER BY id DESC")
+        cursor.execute("SELECT * FROM bonuses WHERE active = 1 AND (assigned_to_user_id IS NULL OR assigned_to_user_id = ?) ORDER BY CASE WHEN assigned_to_user_id IS NOT NULL THEN 0 ELSE 1 END, id DESC", (u_id,))
     rows = cursor.fetchall()
 
     result = []
     for r in rows:
-        b = {"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"bonus_percent":r[4],"bonus_fixed":r[5]} if is_pg else dict(r)
-        # Controlla se già usato
+        if is_pg:
+            b = {"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"bonus_percent":r[4],"bonus_fixed":r[5],"assigned_to_user_id":r[7]}
+        else:
+            b = dict(r)
         cursor.execute("SELECT id FROM user_bonuses WHERE user_id = %s AND bonus_id = %s" if is_pg else "SELECT id FROM user_bonuses WHERE user_id = ? AND bonus_id = ?", (u_id, b['id']))
         b['already_used'] = cursor.fetchone() is not None
+        b['is_personal'] = b.get('assigned_to_user_id') is not None
         result.append(b)
 
     conn.close()
@@ -1382,12 +1387,16 @@ async def apply_bonus(data: dict, user = Depends(get_current_user)):
 async def admin_get_bonuses():
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM bonuses ORDER BY id DESC")
-    rows = cursor.fetchall()
     is_pg = hasattr(conn, 'get_dsn_parameters')
+    # Join con users per avere lo username dell'assegnatario
+    if is_pg:
+        cursor.execute("""SELECT b.*, u.username as assigned_username FROM bonuses b LEFT JOIN users u ON b.assigned_to_user_id = u.id ORDER BY b.id DESC""")
+    else:
+        cursor.execute("""SELECT b.*, u.username as assigned_username FROM bonuses b LEFT JOIN users u ON b.assigned_to_user_id = u.id ORDER BY b.id DESC""")
+    rows = cursor.fetchall()
     conn.close()
     if is_pg:
-        return [{"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"bonus_percent":r[4],"bonus_fixed":r[5],"active":r[6]} for r in rows]
+        return [{"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"bonus_percent":r[4],"bonus_fixed":r[5],"active":r[6],"assigned_to_user_id":r[7],"assigned_username":r[8]} for r in rows]
     return [dict(r) for r in rows]
 
 @app.post("/api/admin/bonuses", dependencies=[Depends(check_admin)])
@@ -1395,12 +1404,15 @@ async def admin_create_bonus(data: dict = Body(...)):
     conn = get_db()
     cursor = conn.cursor()
     is_pg = hasattr(conn, 'get_dsn_parameters')
+    assigned_to = data.get('assigned_to_user_id')  # None = globale, int = specifico utente
+    if assigned_to is not None:
+        assigned_to = int(assigned_to)
     if is_pg:
-        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, bonus_percent, bonus_fixed) VALUES (%s,%s,%s,%s,%s)",
-            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0))))
+        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, bonus_percent, bonus_fixed, assigned_to_user_id) VALUES (%s,%s,%s,%s,%s,%s)",
+            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0)), assigned_to))
     else:
-        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, bonus_percent, bonus_fixed) VALUES (?,?,?,?,?)",
-            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0))))
+        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, bonus_percent, bonus_fixed, assigned_to_user_id) VALUES (?,?,?,?,?,?)",
+            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0)), assigned_to))
     conn.commit(); conn.close()
     return {"message": "Bonus creato"}
 
