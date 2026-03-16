@@ -982,7 +982,7 @@
                         style="background: var(--danger); margin-top: 2rem;">Chiudi</button>
                 </div>
             </div>
-            <script src="app.js?v=1773698162"></script>
+            <script src="app.js?v=1773698882"></script>
         </div>
         
         <div class="mobile-nav" id="mobile-nav">
@@ -1007,8 +1007,8 @@
                 <span>Admin</span>
             </a>
             <!-- Deposit Modal -->
-            <div id="modal-deposit" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;align-items:flex-end;justify-content:center;">
-                <div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));">
+            <div id="modal-deposit" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;">
+                <div style="background:#1a1f2e;border:1px solid var(--border-color);border-radius:16px;padding:2rem;width:90%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);">
                     <div style="text-align:center;margin-bottom:1.2rem;">
                         <div id="deposit-method-icon" style="font-size:2rem;margin-bottom:6px;">💳</div>
                         <div id="deposit-method-name" style="font-weight:800;font-size:1.1rem;">Ricarica</div>
@@ -1046,28 +1046,28 @@
             </div>
 
             <!-- Withdrawal Modal -->
-            <div id="modal-withdrawal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;align-items:flex-end;justify-content:center;">
-                <div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));">
-                    <div style="font-weight:800;font-size:1.1rem;text-align:center;margin-bottom:1.2rem;">🏦 Richiesta Prelievo</div>
+            <div id="modal-withdrawal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;justify-content:center;align-items:center;">
+                <div style="background:#1a1f2e;border:1px solid var(--border-color);border-radius:16px;padding:2rem;width:90%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);">
+                    <div style="font-weight:800;font-size:1.2rem;text-align:center;margin-bottom:1.5rem;color:white;">🏦 Richiesta Prelievo</div>
                     <div style="margin-bottom:1rem;">
-                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Importo (€)</label>
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;font-weight:600;">Importo (€)</label>
                         <input id="wd-amount" type="number" min="10" step="0.01" placeholder="Es. 50.00"
-                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
+                            style="width:100%;background:#0d1117;border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
                     </div>
                     <div style="margin-bottom:1rem;">
-                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">IBAN</label>
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;font-weight:600;">IBAN</label>
                         <input id="wd-iban" type="text" placeholder="IT60 X054 2811 1010 0000 0123 456"
-                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:0.9rem;box-sizing:border-box;font-family:monospace;">
+                            style="width:100%;background:#0d1117;border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:0.9rem;box-sizing:border-box;font-family:monospace;">
                     </div>
-                    <div style="margin-bottom:1.2rem;">
-                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Intestatario conto</label>
+                    <div style="margin-bottom:1.5rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;font-weight:600;">Intestatario conto</label>
                         <input id="wd-name" type="text" placeholder="Nome Cognome"
-                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
+                            style="width:100%;background:#0d1117;border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
                     </div>
                     <button onclick="profile.submitWithdrawal()" style="width:100%;background:var(--accent);color:#000;font-weight:900;font-size:1rem;padding:14px;border:none;border-radius:12px;cursor:pointer;margin-bottom:0.8rem;">
-                        Invia richiesta
+                        💸 Invia richiesta
                     </button>
-                    <button onclick="profile.closeWithdrawal()" style="width:100%;background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);padding:12px;border-radius:12px;cursor:pointer;">
+                    <button onclick="profile.closeWithdrawal()" style="width:100%;background:#2d333b;border:1px solid var(--border-color);color:var(--text-secondary);padding:12px;border-radius:12px;cursor:pointer;font-size:0.9rem;">
                         Annulla
                     </button>
                 </div>
