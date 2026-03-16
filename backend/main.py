@@ -30,9 +30,97 @@ app.add_middleware(
 )
 
 # Initialize DB on startup
+def _force_migrate_new_tables():
+    """Ensures new tables exist on already-deployed Render instances."""
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = hasattr(conn, 'get_dsn_parameters')
+    try:
+        if psql:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    username TEXT,
+                    amount REAL,
+                    iban TEXT,
+                    holder_name TEXT,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS bonuses (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    min_deposit REAL DEFAULT 0,
+                    bonus_percent INTEGER DEFAULT 0,
+                    bonus_fixed REAL DEFAULT 0,
+                    active BOOLEAN DEFAULT TRUE,
+                    assigned_to_user_id INTEGER DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_bonuses (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    bonus_id INTEGER,
+                    applied_amount REAL,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            # Add column if missing (safe migration)
+            cursor.execute("""
+                DO $$ BEGIN
+                    ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS assigned_to_user_id INTEGER DEFAULT NULL;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$
+            """)
+        else:
+            cursor.executescript("""
+                CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER, username TEXT, amount REAL,
+                    iban TEXT, holder_name TEXT,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS bonuses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL, description TEXT,
+                    min_deposit REAL DEFAULT 0, bonus_percent INTEGER DEFAULT 0,
+                    bonus_fixed REAL DEFAULT 0, active INTEGER DEFAULT 1,
+                    assigned_to_user_id INTEGER DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS user_bonuses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER, bonus_id INTEGER,
+                    applied_amount REAL, status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+        conn.commit()
+        print("[MIGRATION] New tables ensured OK")
+    except Exception as e:
+        print(f"[MIGRATION] Error: {e}")
+        try: conn.rollback()
+        except: pass
+    finally:
+        conn.close()
+
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    # Force migration for new tables on existing Render deployments
+    try:
+        _force_migrate_new_tables()
+    except Exception as e:
+        print(f"[MIGRATION] Warning: {e}")
     # Avvia il loop del Crash Game in background
     asyncio.create_task(crash_engine.start_loop())
     # Avvia il loop del Calcio Virtuale in background
