@@ -539,8 +539,7 @@ table tr:hover td {
 @media (max-width: 600px) {
     .container {
         padding: 1rem;
-        padding-bottom: 80px;
-        /* Spazio per la nav bar in basso */
+        padding-bottom: calc(76px + env(safe-area-inset-bottom));
     }
 
     nav {
@@ -558,12 +557,14 @@ table tr:hover td {
         bottom: 0;
         left: 0;
         width: 100%;
-        background: #161b22;
+        background: rgba(22, 27, 34, 0.97);
         border-top: 1px solid var(--border-color);
-        padding: 10px 0;
+        padding: 8px 0;
+        padding-bottom: calc(8px + env(safe-area-inset-bottom));
         justify-content: space-around;
         z-index: 1000;
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
     }
 
     .mobile-nav-item {
@@ -571,9 +572,12 @@ table tr:hover td {
         flex-direction: column;
         align-items: center;
         color: var(--text-secondary);
-        font-size: 0.7rem;
+        font-size: 0.62rem;
         text-decoration: none;
         cursor: pointer;
+        flex: 1;
+        padding: 2px 4px;
+        min-width: 0;
     }
 
     .mobile-nav-item.active {
@@ -581,9 +585,10 @@ table tr:hover td {
     }
 
     .mobile-nav-item svg {
-        margin-bottom: 4px;
-        width: 20px;
-        height: 20px;
+        margin-bottom: 3px;
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
     }
 
     /* Gruppo destra in alto */

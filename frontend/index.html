@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Simus Bet | Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -540,6 +540,138 @@
                 </div>
             </div>
 
+            <!-- Profile Section -->
+            <!-- Profile Section -->
+            <div id="section-profile" class="hidden">
+                <div style="max-width:480px; margin:0 auto; padding:0 0.5rem 2rem;">
+
+                    <!-- Card profilo -->
+                    <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:16px; padding:1.5rem; margin-bottom:1rem; text-align:center;">
+                        <div style="width:64px; height:64px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:1.8rem; font-weight:900; color:#000; margin:0 auto 0.8rem;">
+                            <span id="profile-avatar-letter">?</span>
+                        </div>
+                        <div id="profile-username" style="font-size:1.2rem; font-weight:800; margin-bottom:4px;">---</div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:1rem;">Utente registrato</div>
+                        <div style="background:rgba(0,255,136,0.1); border:1px solid var(--accent); border-radius:10px; padding:0.8rem;">
+                            <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:2px;">SALDO DISPONIBILE</div>
+                            <div id="profile-balance" style="font-size:1.8rem; font-weight:900; color:var(--accent);">€0.00</div>
+                        </div>
+                    </div>
+
+                    <!-- Bonus disponibili -->
+                    <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:16px; padding:1.5rem; margin-bottom:1rem;">
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:1rem;">🎁 I miei Bonus</div>
+                        <div id="profile-bonuses-list">
+                            <div style="text-align:center; color:var(--text-secondary); font-size:0.85rem; padding:1rem 0;">Caricamento bonus...</div>
+                        </div>
+                    </div>
+
+                    <!-- Ricarica -->
+                    <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:16px; padding:1.5rem; margin-bottom:1rem;">
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:1rem;">💳 Ricarica</div>
+                        <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                            <button onclick="profile.showDeposit('card')" style="background:linear-gradient(135deg,#1a1a2e,#16213e); border:1px solid var(--border-color); border-radius:10px; padding:12px 16px; color:white; text-align:left; cursor:pointer; display:flex; align-items:center; gap:12px;">
+                                <span style="font-size:1.3rem;">💳</span>
+                                <div><div style="font-weight:700; font-size:0.9rem;">Carta di credito / debito</div><div style="font-size:0.75rem; color:var(--text-secondary);">Visa, Mastercard</div></div>
+                            </button>
+                            <button onclick="profile.showDeposit('apple')" style="background:#000; border:1px solid #333; border-radius:10px; padding:12px 16px; color:white; text-align:left; cursor:pointer; display:flex; align-items:center; gap:12px;">
+                                <span style="font-size:1.3rem;"> </span>
+                                <div><div style="font-weight:700; font-size:0.9rem;">Apple Pay</div><div style="font-size:0.75rem; color:#888;">Pagamento rapido</div></div>
+                            </button>
+                            <button onclick="profile.showDeposit('google')" style="background:linear-gradient(135deg,#4285f4,#34a853); border:none; border-radius:10px; padding:12px 16px; color:white; text-align:left; cursor:pointer; display:flex; align-items:center; gap:12px;">
+                                <span style="font-size:1.3rem;">G</span>
+                                <div><div style="font-weight:700; font-size:0.9rem;">Google Pay</div><div style="font-size:0.75rem; color:rgba(255,255,255,0.7);">Pagamento rapido</div></div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Prelievo -->
+                    <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:16px; padding:1.5rem; margin-bottom:1rem;">
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:1px; margin-bottom:1rem;">🏦 Prelievo</div>
+                        <button onclick="profile.showWithdrawal()" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--border-color); border-radius:10px; padding:12px 16px; color:white; text-align:left; cursor:pointer; display:flex; align-items:center; gap:12px;">
+                            <span style="font-size:1.3rem;">🏦</span>
+                            <div><div style="font-weight:700; font-size:0.9rem;">Conto bancario (IBAN)</div><div style="font-size:0.75rem; color:var(--text-secondary);">2-3 giorni lavorativi</div></div>
+                        </button>
+                    </div>
+
+                    <!-- Logout -->
+                    <div style="background:var(--card-bg); border:1px solid rgba(255,68,68,0.3); border-radius:16px; overflow:hidden;">
+                        <button onclick="auth.logout()" style="width:100%; background:transparent; border:none; color:#ff4444; font-weight:700; font-size:1rem; padding:1.1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                            Logout
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Deposit Modal -->
+            <div id="modal-deposit" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:flex-end;justify-content:center;">
+                <div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));">
+                    <div style="text-align:center;margin-bottom:1.2rem;">
+                        <div id="deposit-method-icon" style="font-size:2rem;margin-bottom:6px;">💳</div>
+                        <div id="deposit-method-name" style="font-weight:800;font-size:1.1rem;">Ricarica</div>
+                    </div>
+
+                    <!-- Importo ricarica -->
+                    <div style="margin-bottom:1rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Importo che stai ricaricando (€)</label>
+                        <input id="deposit-amount-input" type="number" min="1" step="0.01" placeholder="Es. 20.00" oninput="profile.onDepositAmountChange()"
+                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
+                    </div>
+
+                    <!-- Selezione bonus -->
+                    <div id="deposit-bonus-section" style="margin-bottom:1.2rem; display:none;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:8px;">🎁 Bonus disponibili (opzionale)</label>
+                        <div id="deposit-bonus-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+                    </div>
+
+                    <!-- Disclaimer -->
+                    <div style="background:rgba(255,165,0,0.12);border:2px solid #ff9500;border-radius:12px;padding:1rem;margin-bottom:1.2rem;">
+                        <div style="font-size:0.95rem;font-weight:900;color:#ff9500;margin-bottom:6px;">⚠️ IMPORTANTE</div>
+                        <div style="font-size:0.85rem;line-height:1.6;color:var(--text-primary);">
+                            Inserisci come <b>nome e cognome</b> il tuo <b>username: <span id="deposit-username-hint" style="color:var(--accent);">---</span></b><br>
+                            Questo è necessario per identificare il pagamento e accreditare il saldo.
+                        </div>
+                    </div>
+
+                    <button onclick="profile.proceedDeposit()" style="width:100%;background:var(--accent);color:#000;font-weight:900;font-size:1rem;padding:14px;border:none;border-radius:12px;cursor:pointer;margin-bottom:0.8rem;">
+                        Prosegui al pagamento →
+                    </button>
+                    <button onclick="document.getElementById('modal-deposit').classList.add('hidden')" style="width:100%;background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);padding:12px;border-radius:12px;cursor:pointer;">
+                        Annulla
+                    </button>
+                </div>
+            </div>
+
+            <!-- Withdrawal Modal -->
+            <div id="modal-withdrawal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:flex-end;justify-content:center;">
+                <div style="background:var(--card-bg);border-radius:20px 20px 0 0;padding:1.5rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));">
+                    <div style="font-weight:800;font-size:1.1rem;text-align:center;margin-bottom:1.2rem;">🏦 Richiesta Prelievo</div>
+                    <div style="margin-bottom:1rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Importo (€)</label>
+                        <input id="wd-amount" type="number" min="10" step="0.01" placeholder="Es. 50.00"
+                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
+                    </div>
+                    <div style="margin-bottom:1rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">IBAN</label>
+                        <input id="wd-iban" type="text" placeholder="IT60 X054 2811 1010 0000 0123 456"
+                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:0.9rem;box-sizing:border-box;font-family:monospace;">
+                    </div>
+                    <div style="margin-bottom:1.2rem;">
+                        <label style="font-size:0.8rem;color:var(--text-secondary);display:block;margin-bottom:6px;">Intestatario conto</label>
+                        <input id="wd-name" type="text" placeholder="Nome Cognome"
+                            style="width:100%;background:rgba(255,255,255,0.07);border:1px solid var(--border-color);border-radius:10px;padding:12px;color:white;font-size:1rem;box-sizing:border-box;">
+                    </div>
+                    <button onclick="profile.submitWithdrawal()" style="width:100%;background:var(--accent);color:#000;font-weight:900;font-size:1rem;padding:14px;border:none;border-radius:12px;cursor:pointer;margin-bottom:0.8rem;">
+                        Invia richiesta
+                    </button>
+                    <button onclick="document.getElementById('modal-withdrawal').classList.add('hidden')" style="width:100%;background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);padding:12px;border-radius:12px;cursor:pointer;">
+                        Annulla
+                    </button>
+                </div>
+            </div>
+
             <!-- Admin Section -->
             <div id="section-admin" class="hidden">
                 <div class="admin-tabs">
@@ -548,6 +680,8 @@
                     <button class="admin-tab" onclick="admin.switchTab('users')">Gestione Utenti</button>
                     <button class="admin-tab" onclick="admin.switchTab('odds')">Quote Manuali</button>
                     <button class="admin-tab" onclick="admin.switchTab('settings')">Impostazioni</button>
+                    <button class="admin-tab" onclick="admin.switchTab('withdrawals')">💸 Prelievi</button>
+                    <button class="admin-tab" onclick="admin.switchTab('bonuses')">🎁 Bonus</button>
                 </div>
 
                 <!-- Tab: Dashboard / KPIs -->
@@ -819,6 +953,59 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Tab: Prelievi -->
+                    <div id="admin-tab-withdrawals" class="admin-tab-content hidden">
+                        <div class="admin-section">
+                            <h2>💸 Richieste di Prelievo</h2>
+                            <div id="admin-withdrawals-container">
+                                <div style="text-align:center;color:var(--text-secondary);padding:2rem;">Caricamento...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab: Bonus -->
+                    <div id="admin-tab-bonuses" class="admin-tab-content hidden">
+                        <div class="admin-section">
+                            <h2>🎁 Gestione Bonus</h2>
+
+                            <!-- Form crea bonus -->
+                            <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:12px; padding:1.2rem; margin-bottom:1.5rem;">
+                                <div style="font-weight:700; margin-bottom:1rem;">Crea nuovo bonus</div>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem; margin-bottom:0.8rem;">
+                                    <div class="input-group" style="margin:0;">
+                                        <label>Titolo (es. "Benvenuto 50%")</label>
+                                        <input type="text" id="bonus-title" placeholder="Es. Primo Deposito">
+                                    </div>
+                                    <div class="input-group" style="margin:0;">
+                                        <label>Descrizione breve</label>
+                                        <input type="text" id="bonus-desc" placeholder="Es. Ricarica €20 e ottieni il 50%">
+                                    </div>
+                                    <div class="input-group" style="margin:0;">
+                                        <label>Ricarica minima (€)</label>
+                                        <input type="number" id="bonus-min" value="0" min="0" step="1">
+                                    </div>
+                                    <div class="input-group" style="margin:0;">
+                                        <label>Bonus % sulla ricarica</label>
+                                        <input type="number" id="bonus-percent" value="0" min="0" max="200" step="1">
+                                    </div>
+                                    <div class="input-group" style="margin:0;">
+                                        <label>Bonus fisso (€)</label>
+                                        <input type="number" id="bonus-fixed" value="0" min="0" step="0.5">
+                                    </div>
+                                </div>
+                                <button onclick="admin.createBonus()" style="width:auto; padding:8px 24px; background:var(--accent); color:#000; font-weight:700;">
+                                    ➕ Crea Bonus
+                                </button>
+                            </div>
+
+                            <!-- Lista bonus esistenti -->
+                            <div id="admin-bonuses-list">
+                                <div style="text-align:center;color:var(--text-secondary);padding:2rem;">Caricamento...</div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -861,33 +1048,23 @@
         
         <div class="mobile-nav" id="mobile-nav">
             <a onclick="router.navigate('odds')" class="mobile-nav-item active" id="mob-nav-odds">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M4 6h16M4 12h16M4 18h16"></path>
-                </svg>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
                 <span>Quote</span>
             </a>
             <a onclick="router.navigate('casino')" class="mobile-nav-item" id="mob-nav-casino">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                </svg>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"/></svg>
                 <span>Casinò</span>
             </a>
             <a onclick="router.navigate('mybets')" class="mobile-nav-item" id="mob-nav-mybets">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
-                    </path>
-                </svg>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                 <span>Giocate</span>
             </a>
+            <a onclick="router.navigate('profile')" class="mobile-nav-item" id="mob-nav-profile">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                <span>Profilo</span>
+            </a>
             <a onclick="router.navigate('admin')" class="mobile-nav-item hidden" id="mob-nav-admin">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
-                    </path>
-                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                 <span>Admin</span>
             </a>
         </div>
