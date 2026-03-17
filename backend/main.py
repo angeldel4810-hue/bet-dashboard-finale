@@ -1576,9 +1576,9 @@ async def request_withdrawal(data: dict, user = Depends(get_current_user)):
     cursor.execute("UPDATE users SET balance = balance - %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance - ? WHERE id = ?", (amount, u_id))
 
     # Log in transactions
-    t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if is_postgres else \
+    t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s::numeric,%s::numeric,%s::numeric,%s,%s)" if is_postgres else \
           "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-    cursor.execute(t_q, (u_id, 'withdrawal_requested', -amount, balance, balance - amount, None, f"Richiesta prelievo €{amount:.2f} - IBAN {iban[:10]}..."))
+    cursor.execute(t_q, (u_id, 'withdrawal_requested', float(-amount), float(balance), float(balance - amount), None, f"Richiesta prelievo €{amount:.2f} - IBAN {iban[:10]}..."))
 
     # Salva richiesta prelievo
     if is_postgres:
@@ -1743,6 +1743,8 @@ async def list_withdrawals():
 @app.post("/api/admin/withdrawals/{wid}/resolve", dependencies=[Depends(check_admin)])
 async def resolve_withdrawal(wid: int, data: dict = Body(...)):
     status = data.get("status")  # 'approved' or 'rejected'
+    if status not in ('approved', 'rejected'):
+        raise HTTPException(status_code=400, detail="Status non valido")
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
@@ -1752,20 +1754,20 @@ async def resolve_withdrawal(wid: int, data: dict = Body(...)):
             cursor.execute("SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = %s", (wid,))
         else:
             cursor.execute("SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = ?", (wid,))
-            
+
         row = cursor.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Richiesta non trovata")
 
         if is_postgres:
-            r = {"id": row[0], "user_id": row[1], "amount": float(row[2]), "status": row[3]}
+            r = {"id": row[0], "user_id": row[1], "amount": float(row[2] or 0), "status": row[3]}
         else:
             r = dict(row)
 
         if r.get('status') != 'pending':
             raise HTTPException(status_code=400, detail="Già elaborata")
 
-        uid = r.get('user_id')
+        uid = int(r.get('user_id'))
         amount = float(r.get('amount') or 0)
 
         # Get current balance
@@ -1776,26 +1778,34 @@ async def resolve_withdrawal(wid: int, data: dict = Body(...)):
         bal_before = float(bal_row[0] if is_postgres else bal_row['balance'])
 
         if status == 'rejected':
-            # Reclaim balance with explicit cast for Postgres
             if is_postgres:
-                cursor.execute("UPDATE users SET balance = CAST(balance AS NUMERIC) + %s WHERE id = %s", (amount, uid))
+                cursor.execute("UPDATE users SET balance = CAST(balance AS NUMERIC) + CAST(%s AS NUMERIC) WHERE id = %s", (amount, uid))
             else:
                 cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, uid))
-            bal_after = bal_before + amount
+            bal_after = round(bal_before + amount, 2)
             reason = f"Prelievo €{amount:.2f} rifiutato - saldo reintegrato"
+            t_amount = float(0)
         else:
-            # Already deducted
-            bal_after = bal_before
+            bal_after = round(bal_before, 2)
             reason = f"Prelievo €{amount:.2f} approvato"
+            t_amount = float(-amount)
 
-        t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if is_postgres else \
+        t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s::numeric,%s::numeric,%s::numeric,%s,%s)" if is_postgres else \
               "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-        t_amount = float(-amount) if status == 'approved' else float(0)
         cursor.execute(t_q, (uid, f'withdrawal_{status}', t_amount, float(bal_before), float(bal_after), None, reason))
 
         cursor.execute("UPDATE withdrawal_requests SET status = %s WHERE id = %s" if is_postgres else "UPDATE withdrawal_requests SET status = ? WHERE id = ?", (status, wid))
         conn.commit()
         return {"message": f"Prelievo {status}", "status": status}
+    except HTTPException:
+        try: conn.rollback()
+        except: pass
+        raise
+    except Exception as e:
+        print(f"[WITHDRAWAL RESOLVE ERROR] wid={wid} status={status} error={e}", flush=True)
+        try: conn.rollback()
+        except: pass
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
     finally:
         conn.close()
 
