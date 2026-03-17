@@ -1667,59 +1667,66 @@ async def resolve_deposit(did: int, data: dict = Body(...)):
     conn = get_db()
     cursor = conn.cursor()
     psql = hasattr(conn, 'get_dsn_parameters')
-    # Explicitly select columns to be safe across schema variations
-    q = "SELECT id, user_id, amount, status, bonus_id, bonus_amount FROM deposit_requests WHERE id = %s" if psql else \
-        "SELECT id, user_id, amount, status, bonus_id, bonus_amount FROM deposit_requests WHERE id = ?"
-    cursor.execute(q, (did,))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Richiesta non trovata")
-    
-    if psql:
-        r = {"id":row[0],"user_id":row[1],"amount":row[2],"status":row[3],"bonus_id":row[4],"bonus_amount":row[5]}
-    else:
-        r = dict(row)
-        
-    if r.get('status') != 'pending':
-        conn.close()
-        raise HTTPException(status_code=400, detail="Già elaborata")
-        
-    if status == 'approved':
-        amt = float(r.get('amount') or 0)
-        b_amt = float(r.get('bonus_amount') or 0)
-        total = amt + b_amt
-        u_id = r.get('user_id')
-        
-        # Credit balance
-        cursor.execute("SELECT balance FROM users WHERE id = %s" if psql else "SELECT balance FROM users WHERE id = ?", (u_id,))
-        bal_row = cursor.fetchone()
-        if not bal_row:
-            conn.close()
-            raise HTTPException(status_code=404, detail="Utente non trovato")
+    try:
+        # Explicit data selection
+        if psql:
+            cursor.execute("SELECT id, user_id, amount, status, bonus_id, bonus_amount FROM deposit_requests WHERE id = %s", (did,))
+        else:
+            cursor.execute("SELECT id, user_id, amount, status, bonus_id, bonus_amount FROM deposit_requests WHERE id = ?", (did,))
             
-        bal_before = float(bal_row[0] if psql else bal_row['balance'])
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if psql else "UPDATE users SET balance = balance + ? WHERE id = ?", (total, u_id))
-        bal_after = bal_before + total
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Richiesta non trovata")
         
-        # Log transaction
-        reason = f"Ricarica approvata €{amt:.2f}" + (f" + bonus €{b_amt:.2f}" if b_amt > 0 else "")
-        t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if psql else \
-              "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-        cursor.execute(t_q, (u_id, 'deposit', total, bal_before, bal_after, None, reason))
-        
-        # Record bonus use
-        if r.get('bonus_id'):
+        if psql:
+            r = {"id":row[0],"user_id":row[1],"amount":float(row[2]),"status":row[3],"bonus_id":row[4],"bonus_amount":float(row[5] or 0)}
+        else:
+            r = dict(row)
+            
+        if r.get('status') != 'pending':
+            raise HTTPException(status_code=400, detail="Già elaborata")
+            
+        if status == 'approved':
+            amt = float(r.get('amount') or 0)
+            b_amt = float(r.get('bonus_amount') or 0)
+            total = amt + b_amt
+            u_id = r.get('user_id')
+            
+            # Credit balance with explicit cast for Postgres compatibility
+            cursor.execute("SELECT balance FROM users WHERE id = %s" if psql else "SELECT balance FROM users WHERE id = ?", (u_id,))
+            bal_row = cursor.fetchone()
+            if not bal_row:
+                raise HTTPException(status_code=404, detail="Utente non trovato")
+                
+            bal_before = float(bal_row[0] if psql else bal_row['balance'])
+            
+            # Use explicit cast to float/numeric for Postgres
             if psql:
-                cursor.execute("INSERT INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (%s,%s,%s,'applied') ON CONFLICT DO NOTHING", (u_id, r['bonus_id'], r['bonus_amount']))
+                cursor.execute("UPDATE users SET balance = CAST(balance AS NUMERIC) + %s WHERE id = %s", (total, u_id))
             else:
-                cursor.execute("INSERT OR IGNORE INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (?,?,?,'applied')", (u_id, r['bonus_id'], r['bonus_amount']))
-    
-    # Update status
-    cursor.execute("UPDATE deposit_requests SET status = %s WHERE id = %s" if psql else "UPDATE deposit_requests SET status = ? WHERE id = ?", (status, did))
-
-    conn.commit(); conn.close()
-    return {"message": f"Ricarica {status}"}
+                cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (total, u_id))
+                
+            bal_after = bal_before + total
+            
+            # Log transaction
+            reason = f"Ricarica approvata €{amt:.2f}" + (f" + bonus €{b_amt:.2f}" if b_amt > 0 else "")
+            t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if psql else \
+                  "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+            cursor.execute(t_q, (u_id, 'deposit', total, bal_before, bal_after, None, reason))
+            
+            # Record bonus use
+            if r.get('bonus_id'):
+                if psql:
+                    cursor.execute("INSERT INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (%s,%s,%s,'applied') ON CONFLICT DO NOTHING", (u_id, r['bonus_id'], r['bonus_amount']))
+                else:
+                    cursor.execute("INSERT OR IGNORE INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (?,?,?,'applied')", (u_id, r['bonus_id'], r['bonus_amount']))
+        
+        # Update status
+        cursor.execute("UPDATE deposit_requests SET status = %s WHERE id = %s" if psql else "UPDATE deposit_requests SET status = ? WHERE id = ?", (status, did))
+        conn.commit()
+        return {"message": f"Ricarica {status}", "status": status}
+    finally:
+        conn.close()
 
 @app.get("/api/admin/withdrawals", dependencies=[Depends(check_admin)])
 async def list_withdrawals():
@@ -1739,54 +1746,57 @@ async def resolve_withdrawal(wid: int, data: dict = Body(...)):
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
+    try:
+        # Explicit select for safety
+        if is_postgres:
+            cursor.execute("SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = %s", (wid,))
+        else:
+            cursor.execute("SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = ?", (wid,))
+            
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Richiesta non trovata")
 
-    # Explicit select for safety
-    q = "SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = %s" if is_postgres else \
-        "SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = ?"
-    cursor.execute(q, (wid,))
-    row = cursor.fetchone()
-    if not row:
+        if is_postgres:
+            r = {"id": row[0], "user_id": row[1], "amount": float(row[2]), "status": row[3]}
+        else:
+            r = dict(row)
+
+        if r.get('status') != 'pending':
+            raise HTTPException(status_code=400, detail="Già elaborata")
+
+        uid = r.get('user_id')
+        amount = float(r.get('amount') or 0)
+
+        # Get current balance
+        cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (uid,))
+        bal_row = cursor.fetchone()
+        if not bal_row:
+            raise HTTPException(status_code=404, detail="Utente non trovato")
+        bal_before = float(bal_row[0] if is_postgres else bal_row['balance'])
+
+        if status == 'rejected':
+            # Reclaim balance with explicit cast for Postgres
+            if is_postgres:
+                cursor.execute("UPDATE users SET balance = CAST(balance AS NUMERIC) + %s WHERE id = %s", (amount, uid))
+            else:
+                cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, uid))
+            bal_after = bal_before + amount
+            reason = f"Prelievo €{amount:.2f} rifiutato - saldo reintegrato"
+        else:
+            # Already deducted
+            bal_after = bal_before
+            reason = f"Prelievo €{amount:.2f} approvato"
+
+        t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if is_postgres else \
+              "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+        cursor.execute(t_q, (uid, f'withdrawal_{status}', -amount if status == 'approved' else 0, bal_before, bal_after, None, reason))
+
+        cursor.execute("UPDATE withdrawal_requests SET status = %s WHERE id = %s" if is_postgres else "UPDATE withdrawal_requests SET status = ? WHERE id = ?", (status, wid))
+        conn.commit()
+        return {"message": f"Prelievo {status}", "status": status}
+    finally:
         conn.close()
-        raise HTTPException(status_code=404, detail="Richiesta non trovata")
-
-    if is_postgres:
-        r = {"id": row[0], "user_id": row[1], "amount": row[2], "status": row[3]}
-    else:
-        r = dict(row)
-
-    if r.get('status') != 'pending':
-        conn.close()
-        raise HTTPException(status_code=400, detail="Già elaborata")
-
-    uid = r.get('user_id')
-    amount = float(r.get('amount') or 0)
-
-    # Get current balance
-    cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (uid,))
-    bal_row = cursor.fetchone()
-    if not bal_row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Utente non trovato")
-    bal_before = float(bal_row[0] if is_postgres else bal_row['balance'])
-
-    if status == 'rejected':
-        # Reclaim balance
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (amount, uid))
-        bal_after = bal_before + amount
-        reason = f"Prelievo €{amount:.2f} rifiutato - saldo reintegrato"
-    else:
-        # Already deducted
-        bal_after = bal_before
-        reason = f"Prelievo €{amount:.2f} approvato"
-
-    t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if is_postgres else \
-          "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-    cursor.execute(t_q, (uid, f'withdrawal_{status}', -amount if status == 'approved' else 0, bal_before, bal_after, None, reason))
-
-    cursor.execute("UPDATE withdrawal_requests SET status = %s WHERE id = %s" if is_postgres else "UPDATE withdrawal_requests SET status = ? WHERE id = ?", (status, wid))
-    conn.commit()
-    conn.close()
-    return {"message": f"Prelievo {status}"}
 
 # VIRTUAL FOOTBALL ROUTER
 app.include_router(virtual_router, prefix="/api/virtual", tags=["Virtual Football"])
