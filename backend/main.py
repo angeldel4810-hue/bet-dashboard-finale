@@ -1790,7 +1790,8 @@ async def resolve_withdrawal(wid: int, data: dict = Body(...)):
 
         t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if is_postgres else \
               "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-        cursor.execute(t_q, (uid, f'withdrawal_{status}', -amount if status == 'approved' else 0, bal_before, bal_after, None, reason))
+        t_amount = float(-amount) if status == 'approved' else float(0)
+        cursor.execute(t_q, (uid, f'withdrawal_{status}', t_amount, float(bal_before), float(bal_after), None, reason))
 
         cursor.execute("UPDATE withdrawal_requests SET status = %s WHERE id = %s" if is_postgres else "UPDATE withdrawal_requests SET status = ? WHERE id = ?", (status, wid))
         conn.commit()
