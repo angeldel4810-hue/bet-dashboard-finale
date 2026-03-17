@@ -902,18 +902,19 @@ window.admin = {
         document.querySelectorAll('.admin-tab-content').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('active'));
 
-        document.getElementById(`admin-tab-${tabName}`).classList.remove('hidden');
-        document.querySelector(`.admin-tab[onclick="admin.switchTab('${tabName}')"]`).classList.add('active');
+        const tabEl = document.getElementById(`admin-tab-${tabName}`);
+        if (tabEl) tabEl.classList.remove('hidden');
 
-        if (tabName === 'dashboard') {
-            this.loadDashboardKPIs();
-        }
-        if (tabName === 'withdrawals') {
-            this.loadWithdrawals();
-        }
-        if (tabName === 'bonuses') {
-            this.loadAdminBonuses();
-        }
+        // Find active button safely without querySelector attribute selector issues
+        document.querySelectorAll('.admin-tab').forEach(btn => {
+            if (btn.onclick && btn.onclick.toString().includes(`'${tabName}'`)) {
+                btn.classList.add('active');
+            }
+        });
+
+        if (tabName === 'dashboard') this.loadDashboardKPIs();
+        if (tabName === 'withdrawals') this.loadWithdrawals();
+        if (tabName === 'bonuses') this.loadAdminBonuses();
     },
     async loadDashboardKPIs() {
         const users = await api.request('/admin/users');
@@ -1285,9 +1286,14 @@ window.admin = {
     async loadWithdrawals() {
         const container = document.getElementById('admin-withdrawals-container');
         if (!container) return;
+        container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:2rem;">Caricamento...</div>';
         const data = await api.request('/admin/withdrawals');
-        if (!data || data.length === 0) {
-            container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:2rem;">Nessuna richiesta di prelievo.</div>';
+        if (!data) {
+            container.innerHTML = '<div style="text-align:center;color:var(--danger);padding:2rem;">Errore caricamento. Le tabelle potrebbero non essere ancora create — riavvia il server.</div>';
+            return;
+        }
+        if (data.length === 0) {
+            container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:2rem;">Nessuna richiesta di prelievo ancora.</div>';
             return;
         }
         const statusColors = { pending: 'var(--accent)', approved: 'var(--success)', rejected: 'var(--danger)' };
@@ -2622,7 +2628,7 @@ window.profile = {
         const iban = ibanEl ? ibanEl.value.trim() : '';
         const name = nameEl ? nameEl.value.trim() : '';
 
-        if (!amount || amount < 10) return alert('Importo minimo €10.00');
+        if (!amount || amount < 5) return alert('Importo minimo €5.00');
         if (!iban) return alert('Inserisci il tuo IBAN');
         if (!name) return alert('Inserisci il nome intestatario');
 

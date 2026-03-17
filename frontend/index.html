@@ -886,69 +886,46 @@
                             </div>
                         </div>
                     </div>
-
-                    <!-- Tab: Prelievi -->
-                    <div id="admin-tab-withdrawals" class="admin-tab-content hidden">
-                        <div class="admin-section">
-                            <h2>💸 Richieste di Prelievo</h2>
-                            <div id="admin-withdrawals-container">
-                                <div style="text-align:center;color:var(--text-secondary);padding:2rem;">Caricamento...</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Tab: Bonus -->
-                    <div id="admin-tab-bonuses" class="admin-tab-content hidden">
-                        <div class="admin-section">
-                            <h2>🎁 Gestione Bonus</h2>
-
-                            <!-- Form crea bonus -->
-                            <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:12px; padding:1.2rem; margin-bottom:1.5rem;">
-                                <div style="font-weight:700; margin-bottom:1rem;">Crea nuovo bonus</div>
-                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem; margin-bottom:0.8rem;">
-                                    <div class="input-group" style="margin:0;">
-                                        <label>Titolo (es. "Benvenuto 50%")</label>
-                                        <input type="text" id="bonus-title" placeholder="Es. Primo Deposito">
-                                    </div>
-                                    <div class="input-group" style="margin:0;">
-                                        <label>Descrizione breve</label>
-                                        <input type="text" id="bonus-desc" placeholder="Es. Ricarica €20 e ottieni il 50%">
-                                    </div>
-                                    <div class="input-group" style="margin:0;">
-                                        <label>Ricarica minima (€)</label>
-                                        <input type="number" id="bonus-min" value="0" min="0" step="1">
-                                    </div>
-                                    <div class="input-group" style="margin:0;">
-                                        <label>Bonus % sulla ricarica</label>
-                                        <input type="number" id="bonus-percent" value="0" min="0" max="200" step="1">
-                                    </div>
-                                    <div class="input-group" style="margin:0;">
-                                        <label>Bonus fisso (€)</label>
-                                        <input type="number" id="bonus-fixed" value="0" min="0" step="0.5">
-                                    </div>
-                                    <div class="input-group" style="margin:0; grid-column:1/-1;">
-                                        <label>👤 Assegna a utente specifico (lascia vuoto per tutti)</label>
-                                        <select id="bonus-user-target" style="width:100%; padding:0.75rem; background:#0d1117; border:1px solid var(--border-color); border-radius:8px; color:white;">
-                                            <option value="">— Globale (tutti gli utenti) —</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <button onclick="admin.createBonus()" style="width:auto; padding:8px 24px; background:var(--accent); color:#000; font-weight:700;">
-                                    ➕ Crea Bonus
-                                </button>
-                            </div>
-
-                            <!-- Lista bonus esistenti -->
-                            <div id="admin-bonuses-list">
-                                <div style="text-align:center;color:var(--text-secondary);padding:2rem;">Caricamento...</div>
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
+
+                <!-- Tab: Prelievi -->
+                <div id="admin-tab-withdrawals" class="admin-tab-content hidden">
+                    <div class="admin-section">
+                        <h2>💸 Richieste di Prelievo</h2>
+                        <div id="admin-withdrawals-container">
+                            <div style="text-align:center;color:var(--text-secondary);padding:2rem;">Caricamento...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Bonus -->
+                <div id="admin-tab-bonuses" class="admin-tab-content hidden">
+                    <div class="admin-section">
+                        <h2>🎁 Gestione Bonus</h2>
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border-color);border-radius:12px;padding:1.2rem;margin-bottom:1.5rem;">
+                            <div style="font-weight:700;margin-bottom:1rem;">Crea nuovo bonus</div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:0.8rem;">
+                                <div class="input-group" style="margin:0;"><label>Titolo</label><input type="text" id="bonus-title" placeholder="Es. Primo Deposito"></div>
+                                <div class="input-group" style="margin:0;"><label>Descrizione</label><input type="text" id="bonus-desc" placeholder="Es. +50%"></div>
+                                <div class="input-group" style="margin:0;"><label>Ricarica min. (€)</label><input type="number" id="bonus-min" value="0" min="0" step="1"></div>
+                                <div class="input-group" style="margin:0;"><label>Bonus %</label><input type="number" id="bonus-percent" value="0" min="0" max="200" step="1"></div>
+                                <div class="input-group" style="margin:0;"><label>Bonus fisso (€)</label><input type="number" id="bonus-fixed" value="0" min="0" step="0.5"></div>
+                                <div class="input-group" style="margin:0;grid-column:1/-1;">
+                                    <label>👤 Assegna a utente (vuoto=tutti)</label>
+                                    <select id="bonus-user-target" style="width:100%;padding:0.75rem;background:#0d1117;border:1px solid var(--border-color);border-radius:8px;color:white;">
+                                        <option value="">— Globale (tutti gli utenti) —</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button onclick="admin.createBonus()" style="width:auto;padding:8px 24px;background:var(--accent);color:#000;font-weight:700;">➕ Crea Bonus</button>
+                        </div>
+                        <div id="admin-bonuses-list"><div style="text-align:center;color:var(--text-secondary);padding:2rem;">Caricamento...</div></div>
+                    </div>
+                </div>
+
             </div>
 
-            <!-- Modale Nuovo Utente -->
+                        <!-- Modale Nuovo Utente -->
             <div id="modal-user" class="hidden"
                 style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;">
                 <div class="login-card" style="max-width: 350px;">
