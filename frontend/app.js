@@ -913,6 +913,7 @@ window.admin = {
         });
 
         if (tabName === 'dashboard') this.loadDashboardKPIs();
+        if (tabName === 'deposits') this.loadDeposits();
         if (tabName === 'withdrawals') this.loadWithdrawals();
         if (tabName === 'bonuses') this.loadAdminBonuses();
     },
@@ -1078,7 +1079,13 @@ window.admin = {
                         <div style="font-weight: bold; color: ${t.amount >= 0 ? 'var(--success)' : 'var(--danger)'}">
                             ${t.amount >= 0 ? '+' : ''}${t.amount.toFixed(2)}
                         </div>
-                        <div style="color: var(--text-secondary); font-size: 0.75rem;">${t.type} - ${t.reason || ''}</div>
+                        <div style="color: var(--text-secondary); font-size: 0.75rem;">${{
+                        'admin_adjustment': '⚙️ Rettifica admin',
+                        'deposit': '💳 Ricarica',
+                        'withdrawal_requested': '🏦 Prelievo richiesto',
+                        'withdrawal_approved': '✅ Prelievo approvato',
+                        'withdrawal_rejected': '❌ Prelievo rifiutato',
+                    }[t.type] || t.type} ${t.reason ? '— ' + t.reason : ''}</div>
                     </div>
                     <div style="text-align: right;">
                         <div>€${t.balance_after.toFixed(2)}</div>
@@ -1283,6 +1290,52 @@ window.admin = {
         ui.closeModal();
         this.loadUsers();
     },
+    async loadDeposits() {
+        const container = document.getElementById('admin-deposits-container');
+        if (!container) return;
+        container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:2rem;">Caricamento...</div>';
+        const data = await api.request('/admin/deposits');
+        if (!data) {
+            container.innerHTML = '<div style="text-align:center;color:var(--danger);padding:2rem;">Errore caricamento.</div>';
+            return;
+        }
+        if (data.length === 0) {
+            container.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:2rem;">Nessuna richiesta di ricarica.</div>';
+            return;
+        }
+        const statusColors = { pending: '#f59e0b', approved: 'var(--success)', rejected: 'var(--danger)' };
+        const statusLabels = { pending: '⏳ In attesa', approved: '✅ Approvata', rejected: '❌ Rifiutata' };
+        container.innerHTML = data.map(d => `
+            <div style="background:var(--card-bg);border:1px solid var(--border-color);border-left:4px solid ${statusColors[d.status]||'#aaa'};border-radius:10px;padding:1rem;margin-bottom:0.8rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;">
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <span style="font-weight:800;color:var(--accent);">${d.username}</span>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);">#${d.id} · ${d.created_at ? new Date(d.created_at).toLocaleString('it-IT') : '---'}</span>
+                    </div>
+                    <span style="font-weight:900;color:${statusColors[d.status]||'#aaa'};font-size:0.85rem;">${statusLabels[d.status]||d.status}</span>
+                </div>
+                <div style="font-size:0.88rem;margin-bottom:4px;">💶 Ricarica: <b>€${(d.amount||0).toFixed(2)}</b></div>
+                ${parseFloat(d.bonus_amount||0) > 0 ? `<div style="font-size:0.82rem;color:#ffd700;margin-bottom:4px;">🎁 Bonus: <b>+€${parseFloat(d.bonus_amount).toFixed(2)}</b></div>` : ''}
+                <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:0.6rem;">Totale accredito se approvata: <b style="color:var(--success);">€${(parseFloat(d.amount||0)+parseFloat(d.bonus_amount||0)).toFixed(2)}</b></div>
+                ${d.status === 'pending' ? `
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="admin.resolveDeposit(${d.id},'approved')" style="background:var(--success);width:auto;padding:5px 16px;font-size:0.82rem;">✅ Approva</button>
+                        <button onclick="admin.resolveDeposit(${d.id},'rejected')" style="background:var(--danger);width:auto;padding:5px 16px;font-size:0.82rem;">❌ Rifiuta</button>
+                    </div>` : ''}
+            </div>
+        `).join('');
+    },
+
+    async resolveDeposit(did, status) {
+        const label = status === 'approved' ? 'approvare' : 'rifiutare';
+        if (!confirm(`Sei sicuro di voler ${label} questa ricarica?`)) return;
+        const res = await api.request(`/admin/deposits/${did}/resolve`, {
+            method: 'POST',
+            body: JSON.stringify({ status })
+        });
+        if (res) this.loadDeposits();
+    },
+
     async loadWithdrawals() {
         const container = document.getElementById('admin-withdrawals-container');
         if (!container) return;
@@ -1385,6 +1438,7 @@ window.admin = {
         const min_deposit = parseFloat(document.getElementById('bonus-min').value || 0);
         const bonus_percent = parseInt(document.getElementById('bonus-percent').value || 0);
         const bonus_fixed = parseFloat(document.getElementById('bonus-fixed').value || 0);
+        const max_deposit = parseFloat(document.getElementById('bonus-max')?.value || 0);
         const userTarget = document.getElementById('bonus-user-target').value;
         const assigned_to_user_id = userTarget ? parseInt(userTarget) : null;
 
@@ -1393,12 +1447,13 @@ window.admin = {
 
         const res = await api.request('/admin/bonuses', {
             method: 'POST',
-            body: JSON.stringify({ title, description: desc, min_deposit, bonus_percent, bonus_fixed, assigned_to_user_id })
+            body: JSON.stringify({ title, description: desc, min_deposit, max_deposit, bonus_percent, bonus_fixed, assigned_to_user_id })
         });
         if (res) {
             document.getElementById('bonus-title').value = '';
             document.getElementById('bonus-desc').value = '';
             document.getElementById('bonus-min').value = '0';
+            if (document.getElementById('bonus-max')) document.getElementById('bonus-max').value = '0';
             document.getElementById('bonus-percent').value = '0';
             document.getElementById('bonus-fixed').value = '0';
             document.getElementById('bonus-user-target').value = '';
@@ -2562,9 +2617,25 @@ window.profile = {
         // placeholder — nessuna azione necessaria per ora
     },
 
-    // IMPORTANTE: NON async — iOS Safari blocca window.open nelle funzioni async
-    proceedDeposit() {
-        // Apri link con <a> click — unico metodo affidabile su iOS Safari
+    // Apre SumUp E invia richiesta di ricarica in attesa di approvazione admin
+    async proceedDeposit() {
+        const amountEl = document.getElementById('deposit-amount-input');
+        const amount = parseFloat(amountEl ? amountEl.value : 0);
+
+        if (!amount || amount <= 0) {
+            alert('Inserisci un importo valido prima di procedere.');
+            return;
+        }
+
+        // 1. Invia richiesta al backend (pending)
+        const res = await api.request('/deposit/request', {
+            method: 'POST',
+            body: JSON.stringify({ amount, bonus_id: this._selectedBonusId || null })
+        });
+
+        if (!res) return; // error shown by api.request
+
+        // 2. Apri SumUp con <a>.click() — funziona su iOS Safari
         const link = document.createElement('a');
         link.href = 'https://pay.sumup.com/b2c/QEAW96U8';
         link.target = '_blank';
@@ -2573,19 +2644,12 @@ window.profile = {
         link.click();
         document.body.removeChild(link);
 
-        // Chiudi modal
+        // 3. Reset e chiudi modal
+        if (amountEl) amountEl.value = '';
+        this._selectedBonusId = null;
         this.closeDeposit();
 
-        // Applica bonus se selezionato
-        const amountEl = document.getElementById('deposit-amount-input');
-        const amount = parseFloat(amountEl ? amountEl.value : 0);
-        if (amountEl) amountEl.value = '';
-
-        if (this._selectedBonusId && amount > 0) {
-            const bonusId = this._selectedBonusId;
-            this._selectedBonusId = null;
-            this.applyBonus(bonusId, amount);
-        }
+        alert(`✅ ${res.message}${parseFloat(res.bonus_amount||0) > 0 ? '\n🎁 Bonus di €'+parseFloat(res.bonus_amount).toFixed(2)+' verrà accreditato dopo approvazione.' : ''}`);
     },
 
     async applyBonus(bonusId, amount) {
