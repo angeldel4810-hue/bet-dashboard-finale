@@ -1526,8 +1526,8 @@ async def request_withdrawal(data: dict, user = Depends(get_current_user)):
 
     if not iban or not name:
         raise HTTPException(status_code=400, detail="IBAN e nome obbligatori")
-    if amount < 10:
-        raise HTTPException(status_code=400, detail="Importo minimo prelievo €10.00")
+    if amount < 5:
+        raise HTTPException(status_code=400, detail="Importo minimo prelievo €5.00")
 
     conn = get_db()
     cursor = conn.cursor()
