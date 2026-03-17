@@ -1616,7 +1616,8 @@ async def request_deposit(data: dict = Body(...), user = Depends(get_current_use
     # Calculate bonus amount if applicable
     bonus_amount = 0.0
     if bonus_id:
-        q = "SELECT id, title, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = %s AND active = TRUE" if psql else              "SELECT id, title, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = ? AND active = 1"
+        q = "SELECT id, title, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = %s AND active = TRUE" if psql else \
+            "SELECT id, title, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = ? AND active = 1"
         cursor.execute(q, (bonus_id,))
         b = cursor.fetchone()
         if b:
@@ -1628,12 +1629,22 @@ async def request_deposit(data: dict = Body(...), user = Depends(get_current_use
             max_dep = float(b.get('max_deposit') or 0)
             bp = float(b.get('bonus_percent') or 0)
             bf = float(b.get('bonus_fixed') or 0)
-            if amount >= min_dep and (max_dep == 0 or amount <= max_dep):
+            if amount < min_dep:
+                conn.close()
+                raise HTTPException(status_code=400, detail=f"Ricarica minima per il bonus selezionato: €{min_dep:.2f}")
+            elif max_dep > 0 and amount > max_dep:
+                conn.close()
+                raise HTTPException(status_code=400, detail=f"Ricarica massima per il bonus selezionato: €{max_dep:.2f}")
+            else:
                 bonus_amount = round(amount * bp / 100 + bf, 2)
-    if psql:
-        cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (%s,%s,%s,%s,%s)", (u_id, user['username'], amount, bonus_id, bonus_amount))
-    else:
-        cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (?,?,?,?,?)", (u_id, user['username'], amount, bonus_id, bonus_amount))
+    try:
+        if psql:
+            cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (%s,%s,%s,%s,%s)", (u_id, user['username'], amount, bonus_id, bonus_amount))
+        else:
+            cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (?,?,?,?,?)", (u_id, user['username'], amount, bonus_id, bonus_amount))
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail="Errore nel salvataggio. Assicurati che il database sia aggiornato (colonne bonus).")
     conn.commit(); conn.close()
     return {"message": "Richiesta di ricarica inviata. In attesa di approvazione.", "bonus_amount": bonus_amount}
 
@@ -1662,32 +1673,48 @@ async def resolve_deposit(did: int, data: dict = Body(...)):
         conn.close()
         raise HTTPException(status_code=404, detail="Richiesta non trovata")
     if psql:
-        r = {"id":row[0],"user_id":row[1],"username":row[2],"amount":row[3],"bonus_id":row[4],"bonus_amount":row[5],"status":row[6]}
+        r = {
+            "id": row[0],
+            "user_id": row[1],
+            "username": row[2],
+            "amount": row[3],
+            "bonus_id": row[4] if len(row) > 4 else None,
+            "bonus_amount": row[5] if len(row) > 5 else 0,
+            "status": row[6] if len(row) > 6 else (row[4] if len(row) == 5 else 'pending')
+        }
+        # adjust for schema variations without bonus columns
+        if len(row) == 5: # id, user_id, username, amount, status
+            r["status"] = row[4]
+            r["bonus_id"] = None
+            r["bonus_amount"] = 0
     else:
         r = dict(row)
-    if r['status'] != 'pending':
+    if r.get('status') != 'pending':
         conn.close()
         raise HTTPException(status_code=400, detail="Già elaborata")
     if status == 'approved':
-        total = float(r['amount']) + float(r['bonus_amount'] or 0)
+        amt = float(r.get('amount') or 0)
+        b_amt = float(r.get('bonus_amount') or 0)
+        total = amt + b_amt
         # Get balance before
-        cursor.execute("SELECT balance FROM users WHERE id = %s" if psql else "SELECT balance FROM users WHERE id = ?", (r['user_id'],))
+        cursor.execute("SELECT balance FROM users WHERE id = %s" if psql else "SELECT balance FROM users WHERE id = ?", (r.get('user_id'),))
         bal_row = cursor.fetchone()
         bal_before = float(bal_row[0] if psql else bal_row['balance'])
-        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if psql else "UPDATE users SET balance = balance + ? WHERE id = ?", (total, r['user_id']))
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if psql else "UPDATE users SET balance = balance + ? WHERE id = ?", (total, r.get('user_id')))
         bal_after = bal_before + total
         # Log ricarica in transactions
-        reason = f"Ricarica approvata €{float(r['amount']):.2f}"
-        if float(r['bonus_amount'] or 0) > 0:
-            reason += f" + bonus €{float(r['bonus_amount']):.2f}"
-        t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if psql else               "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-        cursor.execute(t_q, (r['user_id'], 'deposit', total, bal_before, bal_after, None, reason))
+        reason = f"Ricarica approvata €{amt:.2f}"
+        if b_amt > 0:
+            reason += f" + bonus €{b_amt:.2f}"
+        t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if psql else \
+              "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+        cursor.execute(t_q, (r.get('user_id'), 'deposit', total, bal_before, bal_after, None, reason))
         # Mark bonus as used if applicable
-        if r['bonus_id']:
+        if r.get('bonus_id'):
             if psql:
-                cursor.execute("INSERT INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (%s,%s,%s,'applied') ON CONFLICT DO NOTHING", (r['user_id'], r['bonus_id'], r['bonus_amount']))
+                cursor.execute("INSERT INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (%s,%s,%s,'applied') ON CONFLICT DO NOTHING", (r.get('user_id'), r.get('bonus_id'), r.get('bonus_amount')))
             else:
-                cursor.execute("INSERT OR IGNORE INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (?,?,?,'applied')", (r['user_id'], r['bonus_id'], r['bonus_amount']))
+                cursor.execute("INSERT OR IGNORE INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (?,?,?,'applied')", (r.get('user_id'), r.get('bonus_id'), r.get('bonus_amount')))
     cursor.execute("UPDATE deposit_requests SET status = %s WHERE id = %s" if psql else "UPDATE deposit_requests SET status = ? WHERE id = ?", (status, did))
     conn.commit(); conn.close()
     return {"message": f"Ricarica {status}"}
