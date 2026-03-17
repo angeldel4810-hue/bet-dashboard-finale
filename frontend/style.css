@@ -610,6 +610,69 @@ table tr:hover td {
     #logout-btn {
         display: none !important;
     }
+
+    /* ── CRASH GAME MOBILE ── */
+    .crash-container {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1rem !important;
+    }
+
+    .crash-main {
+        height: 260px !important;
+        border-radius: 12px !important;
+        width: 100% !important;
+    }
+
+    #crash-multiplier {
+        font-size: 3.5rem !important;
+    }
+
+    .crash-sidebar {
+        width: 100% !important;
+        padding: 1rem !important;
+    }
+
+    #crash-history {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    /* ── VIRTUAL FOOTBALL MOBILE ── */
+    .virtual-layout {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1rem !important;
+    }
+
+    .virtual-sidebar {
+        display: none !important;
+    }
+
+    #virtual-standings-mobile-wrap {
+        display: block !important;
+    }
+
+    /* Match card mobile: squadre e quote più compatte */
+    #virtual-matches-container .match-card,
+    #virtual-matches-container > div {
+        padding: 0.75rem !important;
+    }
+
+    /* Live scoreboard mobile */
+    #virtual-live-matches {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Timer e header virtual più compatti */
+    #virtual-header {
+        font-size: 1.1rem !important;
+    }
+
+    #virtual-timer {
+        font-size: 1.2rem !important;
+    }
 }
 
 /* Stile Dropdown Schedina (Desktop) */
@@ -624,6 +687,47 @@ table tr:hover td {
     padding: 1.5rem;
     box-shadow: 0 15px 50px rgba(0, 0, 0, 0.7);
     z-index: 1000;
+}
+
+/* ── CRASH LANDSCAPE su mobile ── */
+@media (max-width: 900px) and (orientation: landscape) {
+    .crash-container {
+        display: grid !important;
+        grid-template-columns: 1fr 260px !important;
+        gap: 1rem !important;
+        height: calc(100vh - 120px);
+    }
+
+    .crash-main {
+        height: 100% !important;
+        min-height: 200px !important;
+    }
+
+    .crash-sidebar {
+        overflow-y: auto;
+        height: 100%;
+    }
+
+    #crash-multiplier {
+        font-size: 3rem !important;
+    }
+}
+
+/* ── VIRTUAL FOOTBALL LANDSCAPE mobile ── */
+@media (max-width: 900px) and (orientation: landscape) {
+    .virtual-layout {
+        display: grid !important;
+        grid-template-columns: 1fr 220px !important;
+        gap: 1rem !important;
+    }
+
+    .virtual-sidebar {
+        display: block !important;
+    }
+
+    #virtual-standings-mobile-wrap {
+        display: none !important;
+    }
 }
 
 .mobile-nav {
