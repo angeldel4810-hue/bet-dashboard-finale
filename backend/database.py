@@ -164,6 +164,15 @@ def init_db():
             cursor.execute("ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS assigned_to_user_id INTEGER DEFAULT NULL")
         except Exception:
             pass
+        try:
+            cursor.execute("""CREATE TABLE IF NOT EXISTS deposit_requests (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), username TEXT, amount REAL, bonus_id INTEGER DEFAULT NULL, bonus_amount REAL DEFAULT 0, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())""")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS bonus_id INTEGER DEFAULT NULL")
+            cursor.execute("ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS bonus_amount REAL DEFAULT 0")
+        except Exception:
+            pass
         # Safe migration: create tables if they don't exist (for existing Render DBs)
         try:
             cursor.execute("""CREATE TABLE IF NOT EXISTS withdrawal_requests (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), username TEXT, amount REAL, iban TEXT, holder_name TEXT, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())""")
@@ -221,6 +230,15 @@ def init_db():
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_house_edge', '15');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_pay_mode', 'auto');
         """)
+        try:
+            cursor.execute("ALTER TABLE deposit_requests ADD COLUMN bonus_id INTEGER")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE deposit_requests ADD COLUMN bonus_amount REAL DEFAULT 0")
+        except Exception:
+            pass
+
         import bcrypt as _bcrypt
         admin_hash = _bcrypt.hashpw('admin123'.encode(), _bcrypt.gensalt()).decode()
         cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role, balance, status) VALUES (?, ?, ?, ?, ?)", ('admin', admin_hash, 'admin', 1000.0, 'active'))
@@ -345,6 +363,15 @@ def init_db():
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_house_edge', '15');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_pay_mode', 'auto');
         """)
+        try:
+            cursor.execute("ALTER TABLE deposit_requests ADD COLUMN bonus_id INTEGER")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE deposit_requests ADD COLUMN bonus_amount REAL DEFAULT 0")
+        except Exception:
+            pass
+
         import bcrypt as _bcrypt
         admin_hash = _bcrypt.hashpw('admin123'.encode(), _bcrypt.gensalt()).decode()
         cursor.execute("INSERT OR REPLACE INTO users (username, password_hash, role, balance, status) VALUES (?, ?, ?, ?, ?)", ('admin', admin_hash, 'admin', 1000.0, 'active'))
