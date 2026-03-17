@@ -351,14 +351,18 @@ def simulate_markets(event: Dict[str, Any]):
                     ]
                 })
 
-            # 3. RISULTATO 1° TEMPO (Semplificato)
+            # 3. RISULTATO 1° TEMPO (stimato con fattore di scala realistico)
             if 'h2h_1st_half' not in m_keys:
+                # Il 1° tempo ha probabilità più equilibrate verso il pareggio
+                ph1 = max(1.05, round(h_price * 1.35, 2))
+                px1 = max(1.40, round(x_price * 0.72, 2))
+                pa1 = max(1.05, round(a_price * 1.35, 2))
                 m_list.append({
                     "key": "h2h_1st_half",
                     "outcomes": [
-                        {"name": event['home_team'], "price": round(h_price * 1.5, 2)},
-                        {"name": "Pareggio", "price": round(x_price * 0.7, 2) if x_price > 2 else 1.8},
-                        {"name": event['away_team'], "price": round(a_price * 1.5, 2)}
+                        {"name": event['home_team'], "price": ph1},
+                        {"name": "Pareggio", "price": px1},
+                        {"name": event['away_team'], "price": pa1}
                     ]
                 })
 
@@ -396,21 +400,46 @@ def simulate_markets(event: Dict[str, Any]):
                 totals['outcomes'].append({"name": f"Over {line}", "price": o_price, "point": line})
                 totals['outcomes'].append({"name": f"Under {line}", "price": u_price, "point": line})
 
-    # 6. PIÙ RISULTATI ESATTI
-    if 'correct_score' not in m_keys:
-        m_list.append({
-            "key": "correct_score",
-            "outcomes": [
-                {"name": "1-0", "price": 7.0}, {"name": "2-0", "price": 9.0},
-                {"name": "2-1", "price": 8.5}, {"name": "3-0", "price": 15.0},
-                {"name": "3-1", "price": 13.0}, {"name": "3-2", "price": 23.0},
-                {"name": "0-0", "price": 10.0}, {"name": "1-1", "price": 6.5},
-                {"name": "2-2", "price": 14.0}, {"name": "0-1", "price": 8.5},
-                {"name": "0-2", "price": 11.0}, {"name": "1-2", "price": 9.5},
-                {"name": "0-3", "price": 19.0}, {"name": "1-3", "price": 17.0},
-                {"name": "2-3", "price": 26.0}, {"name": "Altro", "price": 15.0}
-            ]
-        })
+    # 6. PIÙ RISULTATI ESATTI — calcolati dinamicamente dalle quote 1X2
+    if 'correct_score' not in m_keys and h2h:
+        h_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['home_team']), None)
+        a_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['away_team']), None)
+        x_price = next((o['price'] for o in h2h['outcomes'] if o['name'] in ['Draw', 'Pareggio', 'X']), None)
+        if h_price and a_price and x_price:
+            import math
+            # Stima expected goals dalla probabilità 1X2
+            ph = 1/h_price; px_p = 1/x_price; pa = 1/a_price
+            tot = ph + px_p + pa
+            ph /= tot; px_p /= tot; pa /= tot
+            # Ricaviamo lambda home e away con approssimazione
+            # ph ≈ P(home vince) con distribuzione Poisson
+            # Usiamo formula inversa approssimata
+            lh = max(0.5, min(3.5, -math.log(max(0.01, px_p + pa)) * 1.1 + 0.3))
+            la = max(0.3, min(2.5, -math.log(max(0.01, px_p + ph)) * 0.9 + 0.1))
+
+            def pois(lam, k):
+                return (lam**k * math.exp(-lam)) / math.factorial(min(k, 10))
+
+            scores = ["1-0","2-0","2-1","3-0","3-1","3-2",
+                      "0-0","1-1","2-2",
+                      "0-1","0-2","1-2","0-3","1-3","2-3","Altro"]
+            exact_probs = {}
+            total_named = 0
+            for s in scores[:-1]:
+                hg, ag = int(s[0]), int(s[2])
+                p = pois(lh, hg) * pois(la, ag)
+                exact_probs[s] = p
+                total_named += p
+            exact_probs["Altro"] = max(0.02, 1.0 - total_named)
+
+            MARGIN = 0.85  # 15% margine bookmaker
+            cs_outcomes = []
+            for s in scores:
+                p = exact_probs.get(s, 0.02)
+                q = round(min(99.0, max(1.05, (1.0 / max(0.001, p)) * MARGIN)), 2)
+                cs_outcomes.append({"name": s if s != "Altro" else "Altro", "price": q})
+
+            m_list.append({"key": "correct_score", "outcomes": cs_outcomes})
 
     # 7. COMBO 1X2 + GG/NG
     if 'combo_1x2_btts' not in m_keys and h2h:
