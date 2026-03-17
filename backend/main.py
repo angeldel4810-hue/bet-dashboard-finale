@@ -1430,16 +1430,17 @@ async def get_bonuses(user = Depends(get_current_user)):
     u_id = u_row[0] if is_pg else u_row['id']
 
     # Bonus globali (assigned_to_user_id IS NULL) + bonus specifici per questo utente
+    named_cols = "id, title, description, min_deposit, max_deposit, bonus_percent, bonus_fixed, active, assigned_to_user_id"
     if is_pg:
-        cursor.execute("SELECT * FROM bonuses WHERE active = TRUE AND (assigned_to_user_id IS NULL OR assigned_to_user_id = %s) ORDER BY assigned_to_user_id DESC NULLS LAST, id DESC", (u_id,))
+        cursor.execute(f"SELECT {named_cols} FROM bonuses WHERE active = TRUE AND (assigned_to_user_id IS NULL OR assigned_to_user_id = %s) ORDER BY assigned_to_user_id DESC NULLS LAST, id DESC", (u_id,))
     else:
-        cursor.execute("SELECT * FROM bonuses WHERE active = 1 AND (assigned_to_user_id IS NULL OR assigned_to_user_id = ?) ORDER BY CASE WHEN assigned_to_user_id IS NOT NULL THEN 0 ELSE 1 END, id DESC", (u_id,))
+        cursor.execute(f"SELECT {named_cols} FROM bonuses WHERE active = 1 AND (assigned_to_user_id IS NULL OR assigned_to_user_id = ?) ORDER BY CASE WHEN assigned_to_user_id IS NOT NULL THEN 0 ELSE 1 END, id DESC", (u_id,))
     rows = cursor.fetchall()
 
     result = []
     for r in rows:
         if is_pg:
-            b = {"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"bonus_percent":r[4],"bonus_fixed":r[5],"assigned_to_user_id":r[7]}
+            b = {"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"max_deposit":r[4],"bonus_percent":r[5],"bonus_fixed":r[6],"active":r[7],"assigned_to_user_id":r[8]}
         else:
             b = dict(r)
         cursor.execute("SELECT id FROM user_bonuses WHERE user_id = %s AND bonus_id = %s" if is_pg else "SELECT id FROM user_bonuses WHERE user_id = ? AND bonus_id = ?", (u_id, b['id']))
@@ -1465,12 +1466,17 @@ async def apply_bonus(data: dict, user = Depends(get_current_user)):
     u_id = u_row[0] if is_pg else u_row['id']
     balance = float(u_row[1] if is_pg else u_row['balance'])
 
-    cursor.execute("SELECT * FROM bonuses WHERE id = %s" if is_pg else "SELECT * FROM bonuses WHERE id = ?", (bonus_id,))
+    bq = "SELECT id, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = %s" if is_pg else \
+         "SELECT id, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = ?"
+    cursor.execute(bq, (bonus_id,))
     b_row = cursor.fetchone()
     if not b_row:
         conn.close(); raise HTTPException(status_code=404, detail="Bonus non trovato")
 
-    bonus = {"id":b_row[0],"min_deposit":b_row[3],"bonus_percent":b_row[4],"bonus_fixed":b_row[5]} if is_pg else dict(b_row)
+    if is_pg:
+        bonus = {"id":b_row[0],"min_deposit":b_row[1],"max_deposit":b_row[2],"bonus_percent":b_row[3],"bonus_fixed":b_row[4]}
+    else:
+        bonus = dict(b_row)
 
     if deposit_amount < bonus['min_deposit']:
         conn.close(); raise HTTPException(status_code=400, detail=f"Ricarica minima per questo bonus: €{bonus['min_deposit']:.2f}")
@@ -1503,14 +1509,12 @@ async def admin_get_bonuses():
     cursor = conn.cursor()
     is_pg = hasattr(conn, 'get_dsn_parameters')
     # Join con users per avere lo username dell'assegnatario
-    if is_pg:
-        cursor.execute("""SELECT b.*, u.username as assigned_username FROM bonuses b LEFT JOIN users u ON b.assigned_to_user_id = u.id ORDER BY b.id DESC""")
-    else:
-        cursor.execute("""SELECT b.*, u.username as assigned_username FROM bonuses b LEFT JOIN users u ON b.assigned_to_user_id = u.id ORDER BY b.id DESC""")
+    q = """SELECT b.id, b.title, b.description, b.min_deposit, b.max_deposit, b.bonus_percent, b.bonus_fixed, b.active, b.assigned_to_user_id, u.username as assigned_username FROM bonuses b LEFT JOIN users u ON b.assigned_to_user_id = u.id ORDER BY b.id DESC"""
+    cursor.execute(q)
     rows = cursor.fetchall()
     conn.close()
     if is_pg:
-        return [{"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"bonus_percent":r[4],"bonus_fixed":r[5],"active":r[6],"assigned_to_user_id":r[7],"assigned_username":r[8]} for r in rows]
+        return [{"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"max_deposit":r[4],"bonus_percent":r[5],"bonus_fixed":r[6],"active":r[7],"assigned_to_user_id":r[8],"assigned_username":r[9]} for r in rows]
     return [dict(r) for r in rows]
 
 @app.post("/api/admin/bonuses", dependencies=[Depends(check_admin)])
@@ -1612,14 +1616,20 @@ async def request_deposit(data: dict = Body(...), user = Depends(get_current_use
     # Calculate bonus amount if applicable
     bonus_amount = 0.0
     if bonus_id:
-        cursor.execute("SELECT * FROM bonuses WHERE id = %s AND active = TRUE" if psql else "SELECT * FROM bonuses WHERE id = ? AND active = 1", (bonus_id,))
+        q = "SELECT id, title, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = %s AND active = TRUE" if psql else              "SELECT id, title, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = ? AND active = 1"
+        cursor.execute(q, (bonus_id,))
         b = cursor.fetchone()
         if b:
-            b = dict(b) if not psql else {"id":b[0],"title":b[1],"description":b[2],"min_deposit":b[3],"max_deposit":b[4],"bonus_percent":b[5],"bonus_fixed":b[6],"active":b[7],"assigned_to_user_id":b[8]}
+            if psql:
+                b = {"id":b[0],"title":b[1],"min_deposit":b[2],"max_deposit":b[3],"bonus_percent":b[4],"bonus_fixed":b[5]}
+            else:
+                b = dict(b)
             min_dep = float(b.get('min_deposit') or 0)
             max_dep = float(b.get('max_deposit') or 0)
+            bp = float(b.get('bonus_percent') or 0)
+            bf = float(b.get('bonus_fixed') or 0)
             if amount >= min_dep and (max_dep == 0 or amount <= max_dep):
-                bonus_amount = round(amount * float(b.get('bonus_percent') or 0) / 100 + float(b.get('bonus_fixed') or 0), 2)
+                bonus_amount = round(amount * bp / 100 + bf, 2)
     if psql:
         cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (%s,%s,%s,%s,%s)", (u_id, user['username'], amount, bonus_id, bonus_amount))
     else:
