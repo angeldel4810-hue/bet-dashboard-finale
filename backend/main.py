@@ -268,6 +268,16 @@ async def get_settings(user = Depends(get_current_user)):
 
 @app.post("/api/settings", dependencies=[Depends(check_admin)])
 async def update_settings(settings: Dict[str, str] = Body(...)):
+    # Validazione overround: max 30% per evitare quote sballate
+    if 'overround' in settings:
+        try:
+            ov = float(settings['overround'])
+            if ov > 30:
+                settings['overround'] = '30'
+            elif ov < 0:
+                settings['overround'] = '0'
+        except (ValueError, TypeError):
+            settings['overround'] = '5'
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
@@ -402,21 +412,22 @@ async def fetch_odds(user = Depends(get_current_user)):
                 o = dict(r)
                 
             markets = []
+            safe_ov = min(overround, 30.0)
             h2h_outcomes = [
-                {"name": o['home_team'], "price": round(o['price_home'] / (1 + overround/100), 2)},
-                {"name": "Pareggio", "price": round(o['price_draw'] / (1 + overround/100), 2)} if o['price_draw'] else None,
-                {"name": o['away_team'], "price": round(o['price_away'] / (1 + overround/100), 2)}
+                {"name": o['home_team'], "price": round(o['price_home'] / (1 + safe_ov/100), 2)},
+                {"name": "Pareggio", "price": round(o['price_draw'] / (1 + safe_ov/100), 2)} if o['price_draw'] else None,
+                {"name": o['away_team'], "price": round(o['price_away'] / (1 + safe_ov/100), 2)}
             ]
             markets.append({"key": "h2h", "outcomes": [x for x in h2h_outcomes if x]})
             if o['price_over'] and o['price_under']:
                 markets.append({"key": "totals", "outcomes": [
-                    {"name": "Over 2.5", "price": round(o['price_over'] / (1 + overround/100), 2)},
-                    {"name": "Under 2.5", "price": round(o['price_under'] / (1 + overround/100), 2)}
+                    {"name": "Over 2.5", "price": round(o['price_over'] / (1 + safe_ov/100), 2)},
+                    {"name": "Under 2.5", "price": round(o['price_under'] / (1 + safe_ov/100), 2)}
                 ]})
             if o['price_goal'] and o['price_nogoal']:
                  markets.append({"key": "btts", "outcomes": [
-                    {"name": "Goal", "price": round(o['price_goal'] / (1 + overround/100), 2)},
-                    {"name": "No Goal", "price": round(o['price_nogoal'] / (1 + overround/100), 2)}
+                    {"name": "Goal", "price": round(o['price_goal'] / (1 + safe_ov/100), 2)},
+                    {"name": "No Goal", "price": round(o['price_nogoal'] / (1 + safe_ov/100), 2)}
                 ]})
             # Filtra partite già iniziate o che iniziano entro 1 minuto
             try:
@@ -489,7 +500,9 @@ async def fetch_odds(user = Depends(get_current_user)):
                             if m_key in ['double_chance', 'draw_no_bet']: continue
                             for outcome in market.get('outcomes', []):
                                 if isinstance(outcome.get('price'), (int, float)):
-                                    new_price = round(outcome['price'] / (1 + overround/100), 2)
+                                    # Overround corretto: max 30% per evitare quote assurde
+                                    safe_ov = min(overround, 30.0)
+                                    new_price = round(outcome['price'] / (1 + safe_ov/100), 2)
                                     outcome['price'] = max(new_price, 1.05)
                 if event_time > now + timedelta(minutes=1):
                     all_odds.append(event)
