@@ -726,7 +726,7 @@ async def admin_adjust_balance(data: Dict[str, Any] = Body(...), admin = Depends
                  VALUES (%s, %s, %s::numeric, %s::numeric, %s::numeric, %s, %s)""" if is_postgres else \
                  """INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) 
                  VALUES (?, ?, ?, ?, ?, ?, ?)"""
-    cursor.execute(t_query, (user_id, 'admin_adjustment', float(new_balance - old_balance), float(old_balance), float(new_balance), admin_id or 0, reason))
+    cursor.execute(t_query, (user_id, 'admin_adjustment', float(new_balance - old_balance), float(old_balance), float(new_balance), admin_id if admin_id else None, reason))
 
     conn.commit()
     conn.close()
@@ -1604,7 +1604,7 @@ async def request_withdrawal(data: dict, user = Depends(get_current_user)):
     # Log in transactions
     t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s::numeric,%s::numeric,%s::numeric,%s,%s)" if is_postgres else \
           "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-    cursor.execute(t_q, (u_id, 'withdrawal_requested', float(-amount), float(balance), float(balance - amount), 0, f"Richiesta prelievo €{amount:.2f} - IBAN {iban[:10]}..."))
+    cursor.execute(t_q, (u_id, 'withdrawal_requested', float(-amount), float(balance), float(balance - amount), None, f"Richiesta prelievo €{amount:.2f} - IBAN {iban[:10]}..."))
 
     # Salva richiesta prelievo
     if is_postgres:
@@ -1738,7 +1738,7 @@ async def resolve_deposit(did: int, data: dict = Body(...)):
             reason = f"Ricarica approvata €{amt:.2f}" + (f" + bonus €{b_amt:.2f}" if b_amt > 0 else "")
             t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s::numeric,%s::numeric,%s::numeric,%s,%s)" if psql else \
                   "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-            cursor.execute(t_q, (u_id, 'deposit', float(total), float(bal_before), float(bal_after), 0, reason))
+            cursor.execute(t_q, (u_id, 'deposit', float(total), float(bal_before), float(bal_after), None, reason))
             
             # Record bonus use
             if r.get('bonus_id'):
@@ -1818,7 +1818,7 @@ async def resolve_withdrawal(wid: int, data: dict = Body(...)):
 
         t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s::numeric,%s::numeric,%s::numeric,%s,%s)" if is_postgres else \
               "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
-        cursor.execute(t_q, (uid, f'withdrawal_{status}', t_amount, float(bal_before), float(bal_after), 0, reason))
+        cursor.execute(t_q, (uid, f'withdrawal_{status}', t_amount, float(bal_before), float(bal_after), None, reason))
 
         cursor.execute("UPDATE withdrawal_requests SET status = %s WHERE id = %s" if is_postgres else "UPDATE withdrawal_requests SET status = ? WHERE id = ?", (status, wid))
         conn.commit()

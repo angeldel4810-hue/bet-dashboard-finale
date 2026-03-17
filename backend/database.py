@@ -140,7 +140,7 @@ def init_db():
         cursor.execute("""CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT DEFAULT 'user', balance REAL DEFAULT 0, status TEXT DEFAULT 'active')""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS bets (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), amount REAL NOT NULL, total_odds REAL NOT NULL, potential_win REAL NOT NULL, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS bet_selections (id SERIAL PRIMARY KEY, bet_id INTEGER REFERENCES bets(id), event_id TEXT, market TEXT, selection TEXT, odds REAL, home_team TEXT, away_team TEXT, status TEXT DEFAULT 'pending')""")
-        cursor.execute("""CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), type TEXT, amount NUMERIC, balance_before NUMERIC, balance_after NUMERIC, admin_id INTEGER DEFAULT 0, reason TEXT, timestamp TIMESTAMP DEFAULT NOW())""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), type TEXT, amount NUMERIC, balance_before NUMERIC, balance_after NUMERIC, admin_id INTEGER DEFAULT NULL, reason TEXT, timestamp TIMESTAMP DEFAULT NOW())""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS manual_odds (id SERIAL PRIMARY KEY, sport_title TEXT, home_team TEXT, away_team TEXT, commence_time TEXT, price_home REAL, price_draw REAL, price_away REAL, price_over REAL, price_under REAL, price_goal REAL, price_nogoal REAL)""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS crash_bets (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), amount REAL, cashout_multiplier REAL, payout REAL, status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW())""")
@@ -155,8 +155,11 @@ def init_db():
         cursor.execute("""CREATE TABLE IF NOT EXISTS virtual_standings (id SERIAL PRIMARY KEY, season_id INTEGER REFERENCES virtual_seasons(id), team_id INTEGER REFERENCES virtual_teams(id), points INTEGER DEFAULT 0, played INTEGER DEFAULT 0, won INTEGER DEFAULT 0, drawn INTEGER DEFAULT 0, lost INTEGER DEFAULT 0, goals_for INTEGER DEFAULT 0, goals_against INTEGER DEFAULT 0, UNIQUE(season_id, team_id))""")
 
         # ── CRITICAL MIGRATIONS (fix retroattivo per DB esistenti su Render) ──
+        # Rimuove foreign key su admin_id: causa errore perché 0/NULL non è in users
+        cursor.execute("""DO $$ BEGIN ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_admin_id_fkey; EXCEPTION WHEN others THEN NULL; END $$""")
+        # Rimuove NOT NULL e imposta DEFAULT NULL su admin_id
         cursor.execute("""DO $$ BEGIN ALTER TABLE transactions ALTER COLUMN admin_id DROP NOT NULL; EXCEPTION WHEN others THEN NULL; END $$""")
-        cursor.execute("""DO $$ BEGIN ALTER TABLE transactions ALTER COLUMN admin_id SET DEFAULT 0; EXCEPTION WHEN others THEN NULL; END $$""")
+        cursor.execute("""DO $$ BEGIN ALTER TABLE transactions ALTER COLUMN admin_id SET DEFAULT NULL; EXCEPTION WHEN others THEN NULL; END $$""")
         cursor.execute("""DO $$ BEGIN ALTER TABLE transactions ALTER COLUMN amount TYPE NUMERIC USING amount::NUMERIC; EXCEPTION WHEN others THEN NULL; END $$""")
         cursor.execute("""DO $$ BEGIN ALTER TABLE transactions ALTER COLUMN balance_before TYPE NUMERIC USING balance_before::NUMERIC; EXCEPTION WHEN others THEN NULL; END $$""")
         cursor.execute("""DO $$ BEGIN ALTER TABLE transactions ALTER COLUMN balance_after TYPE NUMERIC USING balance_after::NUMERIC; EXCEPTION WHEN others THEN NULL; END $$""")
