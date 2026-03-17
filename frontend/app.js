@@ -66,7 +66,17 @@ window.api = {
                 auth.logout();
                 return null;
             }
-            const data = await response.json();
+            let data;
+            try {
+                data = await response.json();
+            } catch(e) {
+                if (!response.ok) {
+                    alert(`Errore server (${response.status})`);
+                    return null;
+                }
+                return {}; // empty success
+            }
+
             if (!response.ok) {
                 const msg = data?.detail || `Errore ${response.status}`;
                 alert(`Errore: ${msg}`);
@@ -75,6 +85,7 @@ window.api = {
             return data;
         } catch (e) {
             console.error('API Error:', e);
+            alert(`Errore di connessione o del server. Controlla la console.`);
             return null;
         }
     }
@@ -1319,21 +1330,33 @@ window.admin = {
                 <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:0.6rem;">Totale accredito se approvata: <b style="color:var(--success);">€${(parseFloat(d.amount||0)+parseFloat(d.bonus_amount||0)).toFixed(2)}</b></div>
                 ${d.status === 'pending' ? `
                     <div style="display:flex;gap:8px;">
-                        <button onclick="admin.resolveDeposit(${d.id},'approved')" style="background:var(--success);width:auto;padding:5px 16px;font-size:0.82rem;">✅ Approva</button>
-                        <button onclick="admin.resolveDeposit(${d.id},'rejected')" style="background:var(--danger);width:auto;padding:5px 16px;font-size:0.82rem;">❌ Rifiuta</button>
+                        <button onclick="admin.resolveDeposit(event, ${d.id},'approved')" style="background:var(--success);width:auto;padding:5px 16px;font-size:0.82rem;">✅ Approva</button>
+                        <button onclick="admin.resolveDeposit(event, ${d.id},'rejected')" style="background:var(--danger);width:auto;padding:5px 16px;font-size:0.82rem;">❌ Rifiuta</button>
                     </div>` : ''}
             </div>
         `).join('');
     },
 
-    async resolveDeposit(did, status) {
+    async resolveDeposit(e, did, status) {
+        const btn = e.target;
+        const originalText = btn.innerText;
         const label = status === 'approved' ? 'approvare' : 'rifiutare';
         if (!confirm(`Sei sicuro di voler ${label} questa ricarica?`)) return;
+        
+        btn.disabled = true;
+        btn.innerText = 'Elaborazione...';
+        
         const res = await api.request(`/admin/deposits/${did}/resolve`, {
             method: 'POST',
             body: JSON.stringify({ status })
         });
-        if (res) this.loadDeposits();
+        
+        if (res) {
+            this.loadDeposits();
+        } else {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
     },
 
     async loadWithdrawals() {
@@ -1365,21 +1388,33 @@ window.admin = {
                 <div style="font-size:0.82rem; color:var(--text-secondary); margin-bottom:0.6rem;">Intestatario: ${w.holder_name}</div>
                 ${w.status === 'pending' ? `
                     <div style="display:flex; gap:8px;">
-                        <button onclick="admin.resolveWithdrawal(${w.id},'approved')" style="background:var(--success);width:auto;padding:5px 16px;font-size:0.82rem;">✅ Approva</button>
-                        <button onclick="admin.resolveWithdrawal(${w.id},'rejected')" style="background:var(--danger);width:auto;padding:5px 16px;font-size:0.82rem;">❌ Rifiuta</button>
+                        <button onclick="admin.resolveWithdrawal(event, ${w.id},'approved')" style="background:var(--success);width:auto;padding:5px 16px;font-size:0.82rem;">✅ Approva</button>
+                        <button onclick="admin.resolveWithdrawal(event, ${w.id},'rejected')" style="background:var(--danger);width:auto;padding:5px 16px;font-size:0.82rem;">❌ Rifiuta</button>
                     </div>` : ''}
             </div>
         `).join('');
     },
 
-    async resolveWithdrawal(wid, status) {
+    async resolveWithdrawal(e, wid, status) {
+        const btn = e.target;
+        const originalText = btn.innerText;
         const label = status === 'approved' ? 'approvare' : 'rifiutare';
         if (!confirm(`Sei sicuro di voler ${label} questo prelievo?`)) return;
+        
+        btn.disabled = true;
+        btn.innerText = 'Elaborazione...';
+
         const res = await api.request(`/admin/withdrawals/${wid}/resolve`, {
             method: 'POST',
             body: JSON.stringify({ status })
         });
-        if (res) this.loadWithdrawals();
+        
+        if (res) {
+            this.loadWithdrawals();
+        } else {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
     },
 
     async loadAdminBonuses() {
