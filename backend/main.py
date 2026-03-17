@@ -72,10 +72,29 @@ def _force_migrate_new_tables():
                     created_at TIMESTAMP DEFAULT NOW()
                 )
             """)
-            # Add column if missing (safe migration)
+            # Add deposit_requests table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS deposit_requests (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    username TEXT,
+                    amount REAL,
+                    bonus_id INTEGER DEFAULT NULL,
+                    bonus_amount REAL DEFAULT 0,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            # Safe column additions
             cursor.execute("""
                 DO $$ BEGIN
                     ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS assigned_to_user_id INTEGER DEFAULT NULL;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$
+            """)
+            cursor.execute("""
+                DO $$ BEGIN
+                    ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS max_deposit REAL DEFAULT 0;
                 EXCEPTION WHEN duplicate_column THEN NULL;
                 END $$
             """)
@@ -100,6 +119,13 @@ def _force_migrate_new_tables():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER, bonus_id INTEGER,
                     applied_amount REAL, status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS deposit_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER, username TEXT, amount REAL,
+                    bonus_id INTEGER DEFAULT NULL, bonus_amount REAL DEFAULT 0,
+                    status TEXT DEFAULT 'pending',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
@@ -1492,15 +1518,15 @@ async def admin_create_bonus(data: dict = Body(...)):
     conn = get_db()
     cursor = conn.cursor()
     is_pg = hasattr(conn, 'get_dsn_parameters')
-    assigned_to = data.get('assigned_to_user_id')  # None = globale, int = specifico utente
+    assigned_to = data.get('assigned_to_user_id')
     if assigned_to is not None:
         assigned_to = int(assigned_to)
     if is_pg:
-        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, bonus_percent, bonus_fixed, assigned_to_user_id) VALUES (%s,%s,%s,%s,%s,%s)",
-            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0)), assigned_to))
+        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, max_deposit, bonus_percent, bonus_fixed, assigned_to_user_id) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), float(data.get('max_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0)), assigned_to))
     else:
-        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, bonus_percent, bonus_fixed, assigned_to_user_id) VALUES (?,?,?,?,?,?)",
-            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0)), assigned_to))
+        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, max_deposit, bonus_percent, bonus_fixed, assigned_to_user_id) VALUES (?,?,?,?,?,?,?)",
+            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), float(data.get('max_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0)), assigned_to))
     conn.commit(); conn.close()
     return {"message": "Bonus creato"}
 
@@ -1545,6 +1571,11 @@ async def request_withdrawal(data: dict, user = Depends(get_current_user)):
     # Detrai immediatamente il saldo
     cursor.execute("UPDATE users SET balance = balance - %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance - ? WHERE id = ?", (amount, u_id))
 
+    # Log in transactions
+    t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if is_postgres else \
+          "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+    cursor.execute(t_q, (u_id, 'withdrawal_requested', -amount, balance, balance - amount, None, f"Richiesta prelievo €{amount:.2f} - IBAN {iban[:10]}..."))
+
     # Salva richiesta prelievo
     if is_postgres:
         cursor.execute(
@@ -1560,6 +1591,96 @@ async def request_withdrawal(data: dict, user = Depends(get_current_user)):
     conn.commit()
     conn.close()
     return {"message": "Richiesta prelievo inviata.", "new_balance": round(balance - amount, 2)}
+
+
+# ─── DEPOSIT REQUESTS ──────────────────────────────────────────────────────────
+
+@app.post("/api/deposit/request")
+async def request_deposit(data: dict = Body(...), user = Depends(get_current_user)):
+    """User submits a deposit request (pending approval by admin)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = hasattr(conn, 'get_dsn_parameters')
+    cursor.execute("SELECT id FROM users WHERE username = %s" if psql else "SELECT id FROM users WHERE username = ?", (user['username'],))
+    row = cursor.fetchone()
+    u_id = row[0] if psql else row['id']
+    amount = float(data.get('amount', 0))
+    bonus_id = data.get('bonus_id')  # optional
+    if amount <= 0:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Importo non valido")
+    # Calculate bonus amount if applicable
+    bonus_amount = 0.0
+    if bonus_id:
+        cursor.execute("SELECT * FROM bonuses WHERE id = %s AND active = TRUE" if psql else "SELECT * FROM bonuses WHERE id = ? AND active = 1", (bonus_id,))
+        b = cursor.fetchone()
+        if b:
+            b = dict(b) if not psql else {"id":b[0],"title":b[1],"description":b[2],"min_deposit":b[3],"max_deposit":b[4],"bonus_percent":b[5],"bonus_fixed":b[6],"active":b[7],"assigned_to_user_id":b[8]}
+            min_dep = float(b.get('min_deposit') or 0)
+            max_dep = float(b.get('max_deposit') or 0)
+            if amount >= min_dep and (max_dep == 0 or amount <= max_dep):
+                bonus_amount = round(amount * float(b.get('bonus_percent') or 0) / 100 + float(b.get('bonus_fixed') or 0), 2)
+    if psql:
+        cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (%s,%s,%s,%s,%s)", (u_id, user['username'], amount, bonus_id, bonus_amount))
+    else:
+        cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (?,?,?,?,?)", (u_id, user['username'], amount, bonus_id, bonus_amount))
+    conn.commit(); conn.close()
+    return {"message": "Richiesta di ricarica inviata. In attesa di approvazione.", "bonus_amount": bonus_amount}
+
+@app.get("/api/admin/deposits", dependencies=[Depends(check_admin)])
+async def list_deposits():
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = hasattr(conn, 'get_dsn_parameters')
+    cursor.execute("SELECT * FROM deposit_requests ORDER BY created_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    if psql:
+        return [{"id":r[0],"user_id":r[1],"username":r[2],"amount":r[3],"bonus_id":r[4],"bonus_amount":r[5],"status":r[6],"created_at":str(r[7])} for r in rows]
+    return [dict(r) for r in rows]
+
+@app.post("/api/admin/deposits/{did}/resolve", dependencies=[Depends(check_admin)])
+async def resolve_deposit(did: int, data: dict = Body(...)):
+    """Approve or reject a deposit. If approved: credit amount + bonus. If rejected: nothing."""
+    status = data.get("status")  # 'approved' or 'rejected'
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = hasattr(conn, 'get_dsn_parameters')
+    cursor.execute("SELECT * FROM deposit_requests WHERE id = %s" if psql else "SELECT * FROM deposit_requests WHERE id = ?", (did,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Richiesta non trovata")
+    if psql:
+        r = {"id":row[0],"user_id":row[1],"username":row[2],"amount":row[3],"bonus_id":row[4],"bonus_amount":row[5],"status":row[6]}
+    else:
+        r = dict(row)
+    if r['status'] != 'pending':
+        conn.close()
+        raise HTTPException(status_code=400, detail="Già elaborata")
+    if status == 'approved':
+        total = float(r['amount']) + float(r['bonus_amount'] or 0)
+        # Get balance before
+        cursor.execute("SELECT balance FROM users WHERE id = %s" if psql else "SELECT balance FROM users WHERE id = ?", (r['user_id'],))
+        bal_row = cursor.fetchone()
+        bal_before = float(bal_row[0] if psql else bal_row['balance'])
+        cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if psql else "UPDATE users SET balance = balance + ? WHERE id = ?", (total, r['user_id']))
+        bal_after = bal_before + total
+        # Log ricarica in transactions
+        reason = f"Ricarica approvata €{float(r['amount']):.2f}"
+        if float(r['bonus_amount'] or 0) > 0:
+            reason += f" + bonus €{float(r['bonus_amount']):.2f}"
+        t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if psql else               "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+        cursor.execute(t_q, (r['user_id'], 'deposit', total, bal_before, bal_after, None, reason))
+        # Mark bonus as used if applicable
+        if r['bonus_id']:
+            if psql:
+                cursor.execute("INSERT INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (%s,%s,%s,'applied') ON CONFLICT DO NOTHING", (r['user_id'], r['bonus_id'], r['bonus_amount']))
+            else:
+                cursor.execute("INSERT OR IGNORE INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (?,?,?,'applied')", (r['user_id'], r['bonus_id'], r['bonus_amount']))
+    cursor.execute("UPDATE deposit_requests SET status = %s WHERE id = %s" if psql else "UPDATE deposit_requests SET status = ? WHERE id = ?", (status, did))
+    conn.commit(); conn.close()
+    return {"message": f"Ricarica {status}"}
 
 @app.get("/api/admin/withdrawals", dependencies=[Depends(check_admin)])
 async def list_withdrawals():
@@ -1594,9 +1715,24 @@ async def resolve_withdrawal(wid: int, data: dict = Body(...)):
         conn.close()
         raise HTTPException(status_code=400, detail="Già elaborata")
 
-    # Se rifiutata, reintegra il saldo
+    # Get current balance for logging
+    cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (uid,))
+    bal_row = cursor.fetchone()
+    bal_before = float(bal_row[0] if is_postgres else bal_row['balance'])
+
     if status == 'rejected':
+        # Reintegra il saldo
         cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (amount, uid))
+        bal_after = bal_before + amount
+        reason = f"Prelievo €{amount:.2f} rifiutato - saldo reintegrato"
+    else:
+        # Approvato: saldo già detratto al momento della richiesta
+        bal_after = bal_before
+        reason = f"Prelievo €{amount:.2f} approvato"
+
+    # Log in transactions
+    t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s,%s,%s,%s,%s)" if is_postgres else           "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+    cursor.execute(t_q, (uid, f'withdrawal_{status}', -amount if status == 'approved' else 0, bal_before, bal_after, None, reason))
 
     cursor.execute("UPDATE withdrawal_requests SET status = %s WHERE id = %s" if is_postgres else "UPDATE withdrawal_requests SET status = ? WHERE id = ?", (status, wid))
     conn.commit()
