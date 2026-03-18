@@ -227,11 +227,24 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
                     if m_key not in virtual_markets:
                         virtual_markets[m_key] = market
                     else:
-                        # Se il mercato già esiste (es. totals), aggiungiamo eventuali outcome mancanti (es. altri Over)
-                        existing_outcomes = {o['name']: o for o in virtual_markets[m_key]['outcomes']}
-                        for outcome in market.get('outcomes', []):
-                            if outcome['name'] not in existing_outcomes:
-                                virtual_markets[m_key]['outcomes'].append(outcome)
+                        # Per totals: aggiungiamo solo outcome se la linea (point) è già presente
+                        # per ENTRAMBI Over e Under, evitando il mix di linee diverse
+                        if m_key == 'totals':
+                            existing_points = {}
+                            for o in virtual_markets[m_key]['outcomes']:
+                                pt = o.get('point')
+                                if pt is not None:
+                                    side = 'over' if 'Over' in str(o.get('name','')) else 'under'
+                                    existing_points.setdefault(pt, set()).add(side)
+                            for outcome in market.get('outcomes', []):
+                                pt = outcome.get('point')
+                                if pt is not None and outcome['name'] not in {o['name'] for o in virtual_markets[m_key]['outcomes']}:
+                                    virtual_markets[m_key]['outcomes'].append(outcome)
+                        else:
+                            existing_outcomes = {o['name']: o for o in virtual_markets[m_key]['outcomes']}
+                            for outcome in market.get('outcomes', []):
+                                if outcome['name'] not in existing_outcomes:
+                                    virtual_markets[m_key]['outcomes'].append(outcome)
 
             # Sostituiamo i bookmaker con il nostro virtuale consolidato
             event['bookmakers'] = [{
@@ -253,8 +266,12 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
                             if name == 'Yes': outcome['name'] = 'Goal'
                             if name == 'No': outcome['name'] = 'No Goal'
                         
-                        # Totals (Over/Under)
+                        # Totals (Over/Under) — assicura che point sia float
                         if market['key'] == 'totals' and 'point' in outcome:
+                            try:
+                                outcome['point'] = float(outcome['point'])
+                            except (ValueError, TypeError):
+                                pass
                             point = outcome['point']
                             if 'Over' in name: outcome['name'] = f"Over {point}"
                             if 'Under' in name: outcome['name'] = f"Under {point}"
@@ -265,7 +282,7 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
                             elif name == 'Away/Draw' or name == 'Draw/Away': outcome['name'] = 'X2'
                             elif name == 'Home/Away' or name == 'Away/Home': outcome['name'] = '12'
                             
-                        # Handicap (Assicuriamoci che il nome sia leggibile)
+                        # Handicap
                         if market['key'] in ['handicaps', 'alternate_totals', 'spreads'] and 'point' in outcome:
                             p = outcome['point']
                             prefix = "+" if p > 0 else ""
@@ -273,9 +290,34 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
                             elif 'Under' in name: outcome['name'] = f"Under {p}"
                             else: outcome['name'] = f"{name} ({prefix}{p})"
                             
-                        # Betfair Lay - Rimosso su richiesta utente
+                        # Betfair Lay - Rimosso
                         if market['key'] == 'h2h_lay':
-                            continue # Salta questo mercato
+                            continue
+
+            # Pulizia totals: rimuove linee incomplete (senza sia Over che Under)
+            for bookie in event.get('bookmakers', []):
+                for market in bookie.get('markets', []):
+                    if market['key'] == 'totals':
+                        # Raggruppa per punto
+                        by_point = {}
+                        for o in market['outcomes']:
+                            pt = o.get('point')
+                            if pt is None:
+                                # Prova a estrarre il punto dal nome
+                                try:
+                                    pt = float(str(o['name']).split()[-1])
+                                    o['point'] = pt
+                                except (ValueError, IndexError):
+                                    continue
+                            by_point.setdefault(float(pt), []).append(o)
+                        # Tieni solo linee con sia Over che Under
+                        clean = []
+                        for pt, outcomes in by_point.items():
+                            has_over = any('Over' in str(o['name']) for o in outcomes)
+                            has_under = any('Under' in str(o['name']) for o in outcomes)
+                            if has_over and has_under:
+                                clean.extend(outcomes)
+                        market['outcomes'] = clean
         
         # SIMULA MERCATI MANCANTI (per piani API limitati)
         for event in data:
@@ -329,14 +371,22 @@ def apply_overround(odds_data: List[Dict[str, Any]], overround_percent: float) -
 def simulate_markets(event: Dict[str, Any]):
     """
     Simula mercati avanzati (Double Chance, BTTS, etc) partendo dai dati base.
-    Utile se il piano API è limitato.
+    I mercati simulati vengono marcati con _simulated=True per evitare
+    che main.py applichi un secondo overround sopra.
     """
     if not event.get('bookmakers'): return
     m_list = event['bookmakers'][0].get('markets', [])
     m_keys = {m['key'] for m in m_list}
+
+    def add_market(key, outcomes):
+        """Aggiunge un mercato simulato marcandolo come tale."""
+        m_list.append({"key": key, "outcomes": outcomes, "_simulated": True})
+    m_keys = {m['key'] for m in m_list}
     
     h2h = next((m for m in m_list if m['key'] == 'h2h'), None)
     totals = next((m for m in m_list if m['key'] == 'totals'), None)
+
+    import math
 
     # Dati base per calcio
     if h2h:
@@ -345,121 +395,94 @@ def simulate_markets(event: Dict[str, Any]):
         x_price = next((o['price'] for o in h2h['outcomes'] if o['name'] in ['Draw', 'Pareggio', 'X']), None)
         
         if h_price and x_price and a_price:
+            prob_h = 1/h_price; prob_x = 1/x_price; prob_a = 1/a_price
+            sum_p = prob_h + prob_x + prob_a
+            ph = prob_h/sum_p; px = prob_x/sum_p; pa = prob_a/sum_p
+
             # 1. DOUBLE CHANCE
             if 'double_chance' not in m_keys:
-                prob_h = 1/h_price; prob_x = 1/x_price; prob_a = 1/a_price
-                sum_p = prob_h + prob_x + prob_a
-                # Normalizziamo
-                ph = prob_h/sum_p; px = prob_x/sum_p; pa = prob_a/sum_p
-                
-                m_list.append({
-                    "key": "double_chance",
-                    "outcomes": [
-                        {"name": "1X", "price": round(0.96 / (ph + px), 2)},
-                        {"name": "X2", "price": round(0.96 / (pa + px), 2)},
-                        {"name": "12", "price": round(0.96 / (ph + pa), 2)}
-                    ]
-                })
+                add_market("double_chance", [
+                    {"name": "1X", "price": round(0.91 / (ph + px), 2)},
+                    {"name": "X2", "price": round(0.91 / (pa + px), 2)},
+                    {"name": "12", "price": round(0.91 / (ph + pa), 2)}
+                ])
 
             # 2. DRAW NO BET
             if 'draw_no_bet' not in m_keys:
-                m_list.append({
-                    "key": "draw_no_bet",
-                    "outcomes": [
-                        {"name": event['home_team'], "price": round(h_price * (1 - (1/x_price)) * 0.98, 2) if x_price > 1 else 1.05},
-                        {"name": event['away_team'], "price": round(a_price * (1 - (1/x_price)) * 0.98, 2) if x_price > 1 else 1.05}
-                    ]
-                })
+                add_market("draw_no_bet", [
+                    {"name": event['home_team'], "price": max(1.05, round(1.0 / (ph / (ph + pa) * 1.10), 2))},
+                    {"name": event['away_team'], "price": max(1.05, round(1.0 / (pa / (ph + pa) * 1.10), 2))}
+                ])
 
-            # 3. RISULTATO 1° TEMPO (stimato con fattore di scala realistico)
+            # 3. RISULTATO 1° TEMPO
             if 'h2h_1st_half' not in m_keys:
-                # Il 1° tempo ha probabilità più equilibrate verso il pareggio
+                # Il 1° tempo è più equilibrato verso il pareggio
                 ph1 = max(1.05, round(h_price * 1.35, 2))
                 px1 = max(1.40, round(x_price * 0.72, 2))
                 pa1 = max(1.05, round(a_price * 1.35, 2))
-                m_list.append({
-                    "key": "h2h_1st_half",
-                    "outcomes": [
-                        {"name": event['home_team'], "price": ph1},
-                        {"name": "Pareggio", "price": px1},
-                        {"name": event['away_team'], "price": pa1}
-                    ]
-                })
+                add_market("h2h_1st_half", [
+                    {"name": event['home_team'], "price": ph1},
+                    {"name": "Pareggio", "price": px1},
+                    {"name": event['away_team'], "price": pa1}
+                ])
 
-    # 4. BTTS (Goal / No Goal)
+    # 4. BTTS (Goal / No Goal) — formula calibrata su dati reali
     if 'btts' not in m_keys:
         o25 = 1.9
         if totals:
             o25_match = next((o['price'] for o in totals['outcomes'] if o.get('point') == 2.5 and 'Over' in o['name']), 1.9)
             o25 = float(o25_match)
-        # Formula calibrata sui valori reali di mercato
         prob_over = 1.0 / max(1.01, o25)
         prob_gg_fair = min(0.72, max(0.32, prob_over * 0.72 + 0.13))
         prob_ng_fair = 1.0 - prob_gg_fair
-        margin = 1.06
-        goal_price = max(1.30, round(1.0 / (prob_gg_fair * margin), 2))
-        nogoal_price = max(1.30, round(1.0 / (prob_ng_fair * margin), 2))
-        m_list.append({
-            "key": "btts",
-            "outcomes": [
-                {"name": "Goal", "price": goal_price},
-                {"name": "No Goal", "price": nogoal_price}
-            ]
-        })
+        MARGIN = 1.10
+        add_market("btts", [
+            {"name": "Goal",    "price": max(1.30, round(1.0 / (prob_gg_fair * MARGIN), 2))},
+            {"name": "No Goal", "price": max(1.30, round(1.0 / (prob_ng_fair * MARGIN), 2))}
+        ])
 
-    # 5. PIÙ OVER/UNDER (LINEE AGGIUNTIVE) — calcolate dinamicamente da Over 2.5
+    # 5. OVER/UNDER LINEE AGGIUNTIVE (1.5, 3.5, 4.5) — Poisson da Over 2.5
     if totals:
         existing_lines = {o.get('point') for o in totals['outcomes']}
         o25_price = next((o['price'] for o in totals['outcomes'] if o.get('point') == 2.5 and 'Over' in o['name']), 1.9)
         o25_price = float(o25_price)
         prob_o25 = 1.0 / max(1.01, o25_price)
-        # Trova lambda Poisson tramite ricerca binaria (formula inversa P(X>2.5))
-        import math
+        # Lambda via ricerca binaria su P(X>2.5) Poisson
         def _p_over25(lam):
             return 1 - math.exp(-lam) * (1 + lam + lam**2/2)
-        lo, hi = 0.5, 8.0
+        lo2, hi2 = 0.5, 8.0
         for _ in range(40):
-            mid = (lo + hi) / 2
-            if _p_over25(mid) < prob_o25: lo = mid
-            else: hi = mid
-        lam = mid
+            mid2 = (lo2 + hi2) / 2
+            if _p_over25(mid2) < prob_o25: lo2 = mid2
+            else: hi2 = mid2
+        lam = mid2
         def prob_over_line(lam, line):
             k_max = int(line)
             p_under = sum((lam**k * math.exp(-lam)) / math.factorial(k) for k in range(k_max + 1))
             return max(0.02, min(0.98, 1.0 - p_under))
-        margin = 1.06
+        MARGIN = 1.10
         for line in [1.5, 3.5, 4.5]:
             if line not in existing_lines:
                 p_over = prob_over_line(lam, line)
                 p_under = 1.0 - p_over
-                o_price = max(1.05, round(1.0 / (p_over * margin), 2))
-                u_price = max(1.05, round(1.0 / (p_under * margin), 2))
-                totals['outcomes'].append({"name": f"Over {line}", "price": o_price, "point": line})
-                totals['outcomes'].append({"name": f"Under {line}", "price": u_price, "point": line})
+                # Aggiungo direttamente a totals['outcomes'] (non come mercato separato)
+                totals['outcomes'].append({"name": f"Over {line}",  "price": max(1.05, round(1.0/(p_over*MARGIN),  2)), "point": line, "_simulated": True})
+                totals['outcomes'].append({"name": f"Under {line}", "price": max(1.05, round(1.0/(p_under*MARGIN), 2)), "point": line, "_simulated": True})
 
-    # 6. PIÙ RISULTATI ESATTI — calcolati dinamicamente dalle quote 1X2
+    # 6. RISULTATO ESATTO — Poisson da quote 1X2
     if 'correct_score' not in m_keys and h2h:
         h_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['home_team']), None)
         a_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['away_team']), None)
         x_price = next((o['price'] for o in h2h['outcomes'] if o['name'] in ['Draw', 'Pareggio', 'X']), None)
         if h_price and a_price and x_price:
-            import math
-            # Stima expected goals dalla probabilità 1X2
-            ph = 1/h_price; px_p = 1/x_price; pa = 1/a_price
-            tot = ph + px_p + pa
-            ph /= tot; px_p /= tot; pa /= tot
-            # Ricaviamo lambda home e away con approssimazione
-            # ph ≈ P(home vince) con distribuzione Poisson
-            # Usiamo formula inversa approssimata
-            lh = max(0.5, min(3.5, -math.log(max(0.01, px_p + pa)) * 1.1 + 0.3))
-            la = max(0.3, min(2.5, -math.log(max(0.01, px_p + ph)) * 0.9 + 0.1))
-
+            ph2 = 1/h_price; px2 = 1/x_price; pa2 = 1/a_price
+            tot2 = ph2 + px2 + pa2
+            ph2 /= tot2; px2 /= tot2; pa2 /= tot2
+            lh = max(0.5, min(3.5, -math.log(max(0.01, px2 + pa2)) * 1.1 + 0.3))
+            la = max(0.3, min(2.5, -math.log(max(0.01, px2 + ph2)) * 0.9 + 0.1))
             def pois(lam, k):
                 return (lam**k * math.exp(-lam)) / math.factorial(min(k, 10))
-
-            scores = ["1-0","2-0","2-1","3-0","3-1","3-2",
-                      "0-0","1-1","2-2",
-                      "0-1","0-2","1-2","0-3","1-3","2-3","Altro"]
+            scores = ["1-0","2-0","2-1","3-0","3-1","3-2","0-0","1-1","2-2","0-1","0-2","1-2","0-3","1-3","2-3","Altro"]
             exact_probs = {}
             total_named = 0
             for s in scores[:-1]:
@@ -468,66 +491,56 @@ def simulate_markets(event: Dict[str, Any]):
                 exact_probs[s] = p
                 total_named += p
             exact_probs["Altro"] = max(0.02, 1.0 - total_named)
-
-            MARGIN = 0.85  # 15% margine bookmaker
+            MARGIN = 1.10
             cs_outcomes = []
             for s in scores:
                 p = exact_probs.get(s, 0.02)
-                q = round(min(99.0, max(1.05, (1.0 / max(0.001, p)) * MARGIN)), 2)
-                cs_outcomes.append({"name": s if s != "Altro" else "Altro", "price": q})
-
-            m_list.append({"key": "correct_score", "outcomes": cs_outcomes})
+                q = round(min(99.0, max(1.05, 1.0 / max(0.001, p) / MARGIN * (1/MARGIN) * MARGIN), 2), 2)
+                cs_outcomes.append({"name": s, "price": round(min(99.0, max(1.05, 1.0/(max(0.001,p)*MARGIN))), 2)})
+            add_market("correct_score", cs_outcomes)
 
     # 7. COMBO 1X2 + GG/NG
     if 'combo_1x2_btts' not in m_keys and h2h:
         h_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['home_team']), None)
         a_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['away_team']), None)
         x_price = next((o['price'] for o in h2h['outcomes'] if o['name'] in ['Draw', 'Pareggio', 'X']), None)
-        # Prendi GG/NG dal mercato btts (già simulato sopra)
         btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
         gg_price = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'), None) if btts_m else None
         ng_price = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None) if btts_m else None
         if h_price and x_price and a_price and gg_price and ng_price:
-            MARGIN = 0.90  # margine bookmaker
+            MARGIN = 1.10
             combo_btts = []
             for res_name, res_price in [("1", h_price), ("X", x_price), ("2", a_price)]:
                 for btts_name, btts_price in [("GG", gg_price), ("NG", ng_price)]:
-                    combo_price = round(res_price * btts_price * MARGIN, 2)
-                    combo_price = max(1.05, combo_price)
+                    combo_price = max(1.05, round(res_price * btts_price / MARGIN, 2))
                     combo_btts.append({"name": f"{res_name}+{btts_name}", "price": combo_price})
-            m_list.append({"key": "combo_1x2_btts", "outcomes": combo_btts})
+            add_market("combo_1x2_btts", combo_btts)
 
-    # 8. COMBO 1X2 + OVER/UNDER (tutte le soglie disponibili)
+    # 8. COMBO 1X2 + OVER/UNDER
     if 'combo_1x2_ou' not in m_keys and h2h and totals:
         h_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['home_team']), None)
         a_price = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['away_team']), None)
         x_price = next((o['price'] for o in h2h['outcomes'] if o['name'] in ['Draw', 'Pareggio', 'X']), None)
         if h_price and x_price and a_price:
-            MARGIN = 0.90
+            MARGIN = 1.10
             combo_ou = []
-            # Raggruppa outcomes per punto (es. 1.5, 2.5, 3.5, 4.5)
             lines = {}
             for o in totals['outcomes']:
                 pt = o.get('point')
                 if pt is not None:
-                    if pt not in lines:
-                        lines[pt] = {}
-                    if 'Over' in o['name']:
-                        lines[pt]['over'] = o['price']
-                    elif 'Under' in o['name']:
-                        lines[pt]['under'] = o['price']
+                    if pt not in lines: lines[pt] = {}
+                    if 'Over' in o['name']:  lines[pt]['over']  = o['price']
+                    elif 'Under' in o['name']: lines[pt]['under'] = o['price']
             for pt in sorted(lines.keys()):
                 over_p  = lines[pt].get('over')
                 under_p = lines[pt].get('under')
                 for res_name, res_price in [("1", h_price), ("X", x_price), ("2", a_price)]:
                     if over_p:
-                        cp = round(res_price * over_p * MARGIN, 2)
-                        combo_ou.append({"name": f"{res_name}+Over {pt}", "price": max(1.05, cp), "point": pt})
+                        combo_ou.append({"name": f"{res_name}+Over {pt}",  "price": max(1.05, round(res_price * over_p  / MARGIN, 2)), "point": pt})
                     if under_p:
-                        cp = round(res_price * under_p * MARGIN, 2)
-                        combo_ou.append({"name": f"{res_name}+Under {pt}", "price": max(1.05, cp), "point": pt})
+                        combo_ou.append({"name": f"{res_name}+Under {pt}", "price": max(1.05, round(res_price * under_p / MARGIN, 2)), "point": pt})
             if combo_ou:
-                m_list.append({"key": "combo_1x2_ou", "outcomes": combo_ou})
+                add_market("combo_1x2_ou", combo_ou)
 
 def get_sports(api_key: str): return []
 

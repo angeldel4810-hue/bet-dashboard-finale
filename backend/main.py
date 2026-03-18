@@ -523,6 +523,7 @@ async def fetch_odds(user = Depends(get_current_user)):
                         for market in bookmaker.get('markets', []):
                             m_key = market.get('key')
                             if m_key in ['double_chance', 'draw_no_bet']: continue
+                            if market.get('_simulated'): continue  # già con margine, non riapplicare
                             outcomes = market.get('outcomes', [])
                             prices = [o.get('price') for o in outcomes if isinstance(o.get('price'), (int, float))]
                             if len(prices) < 2:
