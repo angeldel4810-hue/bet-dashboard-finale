@@ -1592,6 +1592,7 @@ window.bets = {
             alert('Hai già una selezione per questa partita!');
             return;
         }
+        if (!odds || odds < 1.01) return; // quota non valida, non aggiungere
         state.slip.push({ eventId, event, market, selection, odds });
         ui.updateSlipUI();
         dashboard.renderOdds();
@@ -1605,7 +1606,7 @@ window.bets = {
         const amount = parseFloat(document.getElementById('slip-amount').value);
         if (!amount || amount <= 0) return alert('Inserisci un importo valido');
         if (amount < 0.20) { // Minimum bet amount
-            alert('L\'importo minimo della scommessa è €1.00');
+            alert('L\'importo minimo della scommessa è €0.20');
             return;
         }
         if (amount > state.balance) return alert('Saldo insufficiente!');
