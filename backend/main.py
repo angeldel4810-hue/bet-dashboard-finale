@@ -412,47 +412,42 @@ async def fetch_odds(user = Depends(get_current_user)):
                 o = dict(r)
                 
             markets = []
-            safe_ov = min(overround, 30.0)
-            target_margin = 1 + safe_ov / 100
+            MARGIN = 1.02  # 2% fisso — uguale al resto del sistema
 
-            def apply_margin(prices_dict):
-                """Rimuove il margine originale e applica il nostro in modo corretto."""
-                vals = [(k, v) for k, v in prices_dict.items() if v]
-                if len(vals) < 2:
-                    return {k: round(v / target_margin, 2) if v else None for k, v in prices_dict.items()}
-                raw_probs = [1.0 / v for _, v in vals]
-                total = sum(raw_probs)
-                fair = [p / total for p in raw_probs]
-                result = {}
-                idx = 0
-                for k, v in prices_dict.items():
-                    if v:
-                        result[k] = max(1.05, round(1.0 / (fair[idx] * target_margin), 2))
-                        idx += 1
+            def _apply_m(prices_list):
+                """Normalizza e applica 2% di margine."""
+                valid = [p for p in prices_list if p]
+                if len(valid) < 2:
+                    return [max(1.05, round(p / MARGIN, 2)) if p else None for p in prices_list]
+                raw = [1.0/p for p in valid]
+                tot = sum(raw)
+                fair = [p/tot for p in raw]
+                result = []; idx = 0
+                for p in prices_list:
+                    if p:
+                        result.append(max(1.05, round(1.0/(fair[idx]*MARGIN), 2))); idx += 1
                     else:
-                        result[k] = None
+                        result.append(None)
                 return result
 
-            h2h_prices = apply_margin({
-                'home': o['price_home'], 'draw': o['price_draw'], 'away': o['price_away']
-            })
+            h_p, d_p, a_p = _apply_m([o['price_home'], o['price_draw'], o['price_away']])
             h2h_outcomes = [
-                {"name": o['home_team'], "price": h2h_prices['home']},
-                {"name": "Pareggio", "price": h2h_prices['draw']} if h2h_prices['draw'] else None,
-                {"name": o['away_team'], "price": h2h_prices['away']}
+                {"name": o['home_team'], "price": h_p},
+                {"name": "Pareggio", "price": d_p} if d_p else None,
+                {"name": o['away_team'], "price": a_p}
             ]
             markets.append({"key": "h2h", "outcomes": [x for x in h2h_outcomes if x]})
             if o['price_over'] and o['price_under']:
-                ou_prices = apply_margin({'over': o['price_over'], 'under': o['price_under']})
+                ov_p, un_p = _apply_m([o['price_over'], o['price_under']])
                 markets.append({"key": "totals", "outcomes": [
-                    {"name": "Over 2.5", "price": ou_prices['over']},
-                    {"name": "Under 2.5", "price": ou_prices['under']}
+                    {"name": "Over 2.5",  "price": ov_p, "point": 2.5},
+                    {"name": "Under 2.5", "price": un_p, "point": 2.5}
                 ]})
             if o['price_goal'] and o['price_nogoal']:
-                gg_prices = apply_margin({'goal': o['price_goal'], 'nogoal': o['price_nogoal']})
+                gg_p, ng_p = _apply_m([o['price_goal'], o['price_nogoal']])
                 markets.append({"key": "btts", "outcomes": [
-                    {"name": "Goal", "price": gg_prices['goal']},
-                    {"name": "No Goal", "price": gg_prices['nogoal']}
+                    {"name": "Goal",    "price": gg_p},
+                    {"name": "No Goal", "price": ng_p}
                 ]})
             # Filtra partite già iniziate o che iniziano entro 1 minuto
             try:
@@ -518,30 +513,7 @@ async def fetch_odds(user = Depends(get_current_user)):
             if not ts: continue
             try:
                 event_time = datetime.fromisoformat(ts)
-                if overround > 0:
-                    for bookmaker in event.get('bookmakers', []):
-                        for market in bookmaker.get('markets', []):
-                            m_key = market.get('key')
-                            if m_key in ['double_chance', 'draw_no_bet']: continue
-                            if market.get('_simulated'): continue  # già con margine, non riapplicare
-                            outcomes = market.get('outcomes', [])
-                            prices = [o.get('price') for o in outcomes if isinstance(o.get('price'), (int, float))]
-                            if len(prices) < 2:
-                                continue
-                            # Formula corretta: rimuove margine bookmaker originale, applica il nostro
-                            safe_ov = min(overround, 30.0)
-                            target_margin = 1 + safe_ov / 100
-                            raw_probs = [1.0 / p for p in prices]
-                            total = sum(raw_probs)
-                            if total <= 0:
-                                continue
-                            fair_probs = [p / total for p in raw_probs]
-                            idx = 0
-                            for o in outcomes:
-                                if isinstance(o.get('price'), (int, float)):
-                                    new_price = round(1.0 / (fair_probs[idx] * target_margin), 2)
-                                    o['price'] = max(1.05, new_price)
-                                    idx += 1
+                # Il margine 2% è già applicato dentro odds_api.py — nessun overround qui
                 if event_time > now + timedelta(minutes=1):
                     all_odds.append(event)
                     seen_ids.add(event_id)
