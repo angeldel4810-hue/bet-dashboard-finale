@@ -10,7 +10,7 @@ cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "ca
 cache = Cache(cache_dir)
 
 FOOTBALL_API_BASE_URL = "https://v3.football.api-sports.io"
-HOUSE_EDGE = 1.02  # 2% vantaggio del banco — applicato a tutti i mercati
+HOUSE_EDGE = 1.07  # 7% vantaggio del banco — applicato a tutti i mercati
 
 # ─── UTILITY ────────────────────────────────────────────────────────────────
 
@@ -108,7 +108,7 @@ def _simulate_markets(event: Dict[str, Any]):
             prob_o25 = 1.0 / float(o25_q)
             lam = _lambda_from_over25(prob_o25)
 
-    M = HOUSE_EDGE  # 2%
+    M = HOUSE_EDGE  # 7%
 
     # 1. DOUBLE CHANCE
     if 'double_chance' not in m_keys and ph is not None:

@@ -412,7 +412,7 @@ async def fetch_odds(user = Depends(get_current_user)):
                 o = dict(r)
                 
             markets = []
-            MARGIN = 1.02  # 2% fisso — uguale al resto del sistema
+            MARGIN = 1.07  # 7% fisso — uguale al resto del sistema
 
             def _apply_m(prices_list):
                 """Normalizza e applica 2% di margine."""
@@ -504,16 +504,31 @@ async def fetch_odds(user = Depends(get_current_user)):
 
     results = await asyncio.gather(*(fetch_sport_odds(s) for s in sports_list))
     
+    # Parole chiave NON calcistiche — esclude questi sport
+    NON_FOOTBALL_KEYWORDS = [
+        'basketball', 'tennis', 'volleyball', 'baseball', 'hockey',
+        'rugby', 'mma', 'boxing', 'cricket', 'golf', 'nfl', 'nba',
+        'nhl', 'mlb', 'handball', 'pallavolo', 'basket',
+        'american football', 'aussie rules', 'gaelic', 'waterpolo',
+        'esports', 'darts', 'snooker', 'cycling', 'formula',
+    ]
+
+    def _is_football(event: dict) -> bool:
+        sport = (event.get('sport_title') or event.get('sport_key') or '').lower()
+        return not any(kw in sport for kw in NON_FOOTBALL_KEYWORDS)
+
     for odds_chunk in results:
         if not odds_chunk: continue
         for event in odds_chunk:
+            if not _is_football(event):
+                continue
             event_id = event['id']
             if event_id in seen_ids: continue
             ts = event.get('commence_time', '').replace('Z', '+00:00')
             if not ts: continue
             try:
                 event_time = datetime.fromisoformat(ts)
-                # Il margine 2% è già applicato dentro odds_api.py — nessun overround qui
+                # Il margine 7% è già applicato dentro odds_api.py — nessun overround qui
                 if event_time > now + timedelta(minutes=1):
                     all_odds.append(event)
                     seen_ids.add(event_id)
