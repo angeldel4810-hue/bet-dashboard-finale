@@ -297,13 +297,33 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
         return []
 
 def apply_overround(odds_data: List[Dict[str, Any]], overround_percent: float) -> List[Dict[str, Any]]:
-    factor = 1 + (overround_percent / 100)
+    """
+    Applica il margine della casa in modo corretto:
+    1. Rimuove il margine gia incluso dal bookmaker originale (normalizza le probabilita)
+    2. Applica il margine desiderato
+    Evita il doppio overround che abbassava le quote sotto i valori di mercato.
+    """
+    target_margin = 1 + (overround_percent / 100)
     for event in odds_data:
         for bookmaker in event.get('bookmakers', []):
             for market in bookmaker.get('markets', []):
-                for outcome in market.get('outcomes', []):
-                    if isinstance(outcome.get('price'), (int, float)):
-                        outcome['price'] = round(outcome['price'] / factor, 2)
+                outcomes = market.get('outcomes', [])
+                prices = [o.get('price') for o in outcomes if isinstance(o.get('price'), (int, float))]
+                if len(prices) < 2:
+                    continue
+                # Step 1: probabilità implicite normalizzate (rimuove margine bookmaker)
+                raw_probs = [1.0 / p for p in prices]
+                total = sum(raw_probs)
+                if total <= 0:
+                    continue
+                fair_probs = [p / total for p in raw_probs]
+                # Step 2: applica il nostro margine
+                idx = 0
+                for o in outcomes:
+                    if isinstance(o.get('price'), (int, float)):
+                        new_price = round(1.0 / (fair_probs[idx] * target_margin), 2)
+                        o['price'] = max(1.05, new_price)
+                        idx += 1
     return odds_data
 
 def simulate_markets(event: Dict[str, Any]):
@@ -368,35 +388,52 @@ def simulate_markets(event: Dict[str, Any]):
 
     # 4. BTTS (Goal / No Goal)
     if 'btts' not in m_keys:
-        # Stima basata sull'Over 2.5
         o25 = 1.9
         if totals:
             o25_match = next((o['price'] for o in totals['outcomes'] if o.get('point') == 2.5 and 'Over' in o['name']), 1.9)
             o25 = float(o25_match)
-        
-        goal_price = 1.6 + (0.3 * (2.5 / o25)) if o25 > 1 else 1.8
-        goal_price = max(1.4, min(2.4, goal_price))
-        
+        # Formula calibrata sui valori reali di mercato
+        prob_over = 1.0 / max(1.01, o25)
+        prob_gg_fair = min(0.72, max(0.32, prob_over * 0.72 + 0.13))
+        prob_ng_fair = 1.0 - prob_gg_fair
+        margin = 1.06
+        goal_price = max(1.30, round(1.0 / (prob_gg_fair * margin), 2))
+        nogoal_price = max(1.30, round(1.0 / (prob_ng_fair * margin), 2))
         m_list.append({
             "key": "btts",
             "outcomes": [
-                {"name": "Goal", "price": round(goal_price, 2)},
-                {"name": "No Goal", "price": round(1 / ((1/goal_price) * 1.05), 2)}
+                {"name": "Goal", "price": goal_price},
+                {"name": "No Goal", "price": nogoal_price}
             ]
         })
 
-    # 5. PIÙ OVER/UNDER (LINEE AGGIUNTIVE)
+    # 5. PIÙ OVER/UNDER (LINEE AGGIUNTIVE) — calcolate dinamicamente da Over 2.5
     if totals:
         existing_lines = {o.get('point') for o in totals['outcomes']}
+        o25_price = next((o['price'] for o in totals['outcomes'] if o.get('point') == 2.5 and 'Over' in o['name']), 1.9)
+        o25_price = float(o25_price)
+        prob_o25 = 1.0 / max(1.01, o25_price)
+        # Trova lambda Poisson tramite ricerca binaria (formula inversa P(X>2.5))
+        import math
+        def _p_over25(lam):
+            return 1 - math.exp(-lam) * (1 + lam + lam**2/2)
+        lo, hi = 0.5, 8.0
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            if _p_over25(mid) < prob_o25: lo = mid
+            else: hi = mid
+        lam = mid
+        def prob_over_line(lam, line):
+            k_max = int(line)
+            p_under = sum((lam**k * math.exp(-lam)) / math.factorial(k) for k in range(k_max + 1))
+            return max(0.02, min(0.98, 1.0 - p_under))
+        margin = 1.06
         for line in [1.5, 3.5, 4.5]:
             if line not in existing_lines:
-                # Stima grossolana per simulazione
-                if line < 2.5: 
-                    o_price = 1.25; u_price = 3.5
-                else:
-                    o_price = 3.5 if line == 3.5 else 6.0
-                    u_price = 1.25 if line == 3.5 else 1.10
-                
+                p_over = prob_over_line(lam, line)
+                p_under = 1.0 - p_over
+                o_price = max(1.05, round(1.0 / (p_over * margin), 2))
+                u_price = max(1.05, round(1.0 / (p_under * margin), 2))
                 totals['outcomes'].append({"name": f"Over {line}", "price": o_price, "point": line})
                 totals['outcomes'].append({"name": f"Under {line}", "price": u_price, "point": line})
 
