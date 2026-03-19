@@ -667,10 +667,10 @@ async def get_user_detail(user_id: int):
             else:
                 bet['selections'] = [dict(sr) for sr in s_rows]
 
-            # Escludi scommesse casino (nessuna selection o event_id casino_*)
+            # Escludi scommesse casino (nessuna selection o event_id casino_*) — raccolte separatamente
             sels = bet['selections']
             if not sels or any(str(s['event_id']).startswith('casino_') for s in sels):
-                continue
+                continue  # skip: le casino vengono restituite in casino_bets
 
             for sel in bet['selections']:
                 if str(sel['event_id']).startswith('v_'):
@@ -687,7 +687,75 @@ async def get_user_detail(user_id: int):
         
         user_data['bets'] = bets
 
-        # Transactions
+        # Casino bets (blackjack, baccarat, sette e mezzo — da tabella bets)
+        casino_bets = []
+        try:
+            casino_query = (
+                "SELECT b.id, b.amount, b.potential_win, b.status, b.created_at, bs.selection, bs.event_id "
+                "FROM bets b JOIN bet_selections bs ON bs.bet_id = b.id "
+                "WHERE b.user_id = %s AND bs.event_id LIKE 'casino_%%' ORDER BY b.created_at DESC LIMIT 100"
+                if is_postgres else
+                "SELECT b.id, b.amount, b.potential_win, b.status, b.created_at, bs.selection, bs.event_id "
+                "FROM bets b JOIN bet_selections bs ON bs.bet_id = b.id "
+                "WHERE b.user_id = ? AND bs.event_id LIKE 'casino_%' ORDER BY b.created_at DESC LIMIT 100"
+            )
+            cursor.execute(casino_query, (user_id,))
+            casino_rows = cursor.fetchall()
+            for cr in casino_rows:
+                if is_postgres:
+                    casino_bets.append({
+                        "id": cr[0], "amount": cr[1], "payout": cr[2],
+                        "status": cr[3], "created_at": str(cr[4]),
+                        "game": cr[5], "event_id": cr[6]
+                    })
+                else:
+                    row = dict(cr)
+                    casino_bets.append({
+                        "id": row["id"], "amount": row["amount"], "payout": row["potential_win"],
+                        "status": row["status"], "created_at": row["created_at"],
+                        "game": row["selection"], "event_id": row["event_id"]
+                    })
+        except Exception as ce:
+            print(f"Error fetching casino bets: {ce}")
+
+        # Crash bets (tabella separata crash_bets)
+        try:
+            crash_query = (
+                "SELECT id, amount, COALESCE(payout, 0) as payout, cashout_multiplier, status, created_at "
+                "FROM crash_bets WHERE user_id = %s ORDER BY created_at DESC LIMIT 100"
+                if is_postgres else
+                "SELECT id, amount, COALESCE(payout, 0) as payout, cashout_multiplier, status, created_at "
+                "FROM crash_bets WHERE user_id = ? ORDER BY created_at DESC LIMIT 100"
+            )
+            cursor.execute(crash_query, (user_id,))
+            crash_rows = cursor.fetchall()
+            for cr in crash_rows:
+                if is_postgres:
+                    mult = cr[3]
+                    label = f"Crash {('x' + str(round(mult, 2))) if mult else ''}"
+                    casino_bets.append({
+                        "id": f"crash_{cr[0]}", "amount": cr[1], "payout": cr[2],
+                        "status": cr[4], "created_at": str(cr[5]),
+                        "game": label, "event_id": "casino_crash"
+                    })
+                else:
+                    row = dict(cr)
+                    mult = row.get("cashout_multiplier")
+                    label = f"Crash {('x' + str(round(mult, 2))) if mult else ''}"
+                    casino_bets.append({
+                        "id": f"crash_{row['id']}", "amount": row["amount"], "payout": row["payout"],
+                        "status": row["status"], "created_at": row["created_at"],
+                        "game": label, "event_id": "casino_crash"
+                    })
+        except Exception as cre:
+            print(f"Error fetching crash bets: {cre}")
+
+        # Ordina tutto per data decrescente
+        try:
+            casino_bets.sort(key=lambda x: x["created_at"], reverse=True)
+        except Exception:
+            pass
+        user_data['casino_bets'] = casino_bets
         try:
             cursor.execute("SELECT * FROM transactions WHERE user_id = %s ORDER BY timestamp DESC" if is_postgres else "SELECT * FROM transactions WHERE user_id = ? ORDER BY timestamp DESC", (user_id,))
             t_rows = cursor.fetchall()
