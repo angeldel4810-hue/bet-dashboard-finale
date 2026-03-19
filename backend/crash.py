@@ -134,6 +134,11 @@ class CrashEngine:
             q = "INSERT INTO crash_rounds (crash_point) VALUES (%s)" if is_pg \
                 else "INSERT INTO crash_rounds (crash_point) VALUES (?)"
             cursor.execute(q, (self.current_multiplier,))
+
+            # Marca come 'lost' tutte le puntate ancora pending (non hanno fatto cashout)
+            lose_q = "UPDATE crash_bets SET status = 'lost', payout = 0 WHERE status = 'pending'" 
+            cursor.execute(lose_q)
+
             conn.commit()
             conn.close()
         except Exception as e:
