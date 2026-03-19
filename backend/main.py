@@ -752,7 +752,7 @@ async def get_user_detail(user_id: int):
 
         # Ordina tutto per data decrescente
         try:
-            casino_bets.sort(key=lambda x: x["created_at"], reverse=True)
+            casino_bets.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
         except Exception:
             pass
         user_data['casino_bets'] = casino_bets
