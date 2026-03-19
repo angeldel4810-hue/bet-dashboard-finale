@@ -1048,15 +1048,19 @@ window.admin = {
 
         // Populate bets
         const betsContainer = document.getElementById('detail-bets-container');
-        if (detail.bets.length === 0) {
-            betsContainer.innerHTML = '<p>Nessuna scommessa.</p>';
+        if (!detail.bets || detail.bets.length === 0) {
+            betsContainer.innerHTML = '<p style="color:var(--text-secondary); text-align:center; padding:1rem;">Nessuna scommessa sportiva.</p>';
         } else {
-            betsContainer.innerHTML = detail.bets.map(b => `
+            betsContainer.innerHTML = detail.bets.map(b => {
+                const betDate = b.created_at ? new Date(b.created_at) : null;
+                const betTimeStr = betDate ? betDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + ' — ' + betDate.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+                return `
                 <div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:8px; margin-bottom:1rem; border-left: 4px solid ${b.status === 'won' ? 'var(--success)' : b.status === 'lost' ? 'var(--danger)' : b.status === 'cancelled' ? 'var(--text-secondary)' : 'var(--accent)'}">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
-                         <span>€${b.amount.toFixed(2)} -> €${b.potential_win.toFixed(2)}</span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
+                         <span>€${Number(b.amount).toFixed(2)} → €${Number(b.potential_win).toFixed(2)}</span>
+                         ${betTimeStr ? `<span style="color:var(--text-secondary); font-size:0.75rem;">🕐 ${betTimeStr}</span>` : ''}
                     </div>
-                    ${b.selections.map(s => {
+                    ${(b.selections || []).map(s => {
                         let scoreBadge = '';
                         if (s.v_score !== undefined) {
                             let textOpts = {'scheduled': 'In Arrivo', 'live': 'Live', 'finished': 'Terminata'};
@@ -1064,8 +1068,8 @@ window.admin = {
                             scoreBadge = `<span style="background:${bg}; color:#000; padding:2px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem; margin-left:10px;">Risultato: ${s.v_score} (${textOpts[s.v_status] || s.v_status})</span>`;
                         }
                         return `
-                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8; display:flex; align-items:center;">
-                            • ${s.home_team} vs ${s.away_team}: <b style="margin-left:5px;">${s.selection}</b> <span style="margin-left:5px;">@${s.odds.toFixed(2)}</span> ${scoreBadge}
+                        <div style="font-size:0.85rem; margin-bottom:3px; opacity:0.8; display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+                            • ${s.home_team} vs ${s.away_team}: <b>${s.selection}</b> <span>@${Number(s.odds).toFixed(2)}</span> ${scoreBadge}
                         </div>
                     `}).join('')}
                     <div style="margin-top:0.8rem; display:flex; gap:10px;">
@@ -1076,7 +1080,7 @@ window.admin = {
                         ` : `<span style="text-transform:uppercase; font-weight:bold;">${b.status}</span>`}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         // Populate transactions
@@ -1115,39 +1119,49 @@ window.admin = {
     },
     _renderCasinoBets(bets) {
         const container = document.getElementById('detail-casino-container');
+        if (!container) return;
         if (!bets || bets.length === 0) {
             container.innerHTML = '<p style="color:var(--text-secondary); text-align:center; padding:1rem;">Nessuna giocata casino.</p>';
             return;
         }
         const gameIcons = {
-            'Blackjack': '🃏', 'Baccarat': '🎴', 'Crash': '💥', 'Sette e Mezzo': '7️⃣'
+            'Blackjack': '🃏', 'Baccarat': '🎴', 'Sette e Mezzo': '7️⃣'
         };
         container.innerHTML = bets.map(b => {
-            const date = new Date(b.created_at);
-            const timeStr = date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-            const dateStr = date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+            let timeStr = '--:--', dateStr = '--/--/--';
+            try {
+                const date = new Date(b.created_at);
+                if (!isNaN(date)) {
+                    timeStr = date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+                    dateStr = date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                }
+            } catch(e) {}
             const isWin = b.status === 'won';
             const isLoss = b.status === 'lost';
-            const netChange = b.status === 'won' ? (b.payout - b.amount) : (b.status === 'lost' ? -b.amount : 0);
-            const icon = gameIcons[b.game] || '🎰';
+            const amount = Number(b.amount) || 0;
+            const payout = Number(b.payout) || 0;
+            const netChange = isWin ? (payout - amount) : (isLoss ? -amount : 0);
+            // Crash icon: check event_id or game name
+            const isCrash = (b.event_id === 'casino_crash' || (b.game && b.game.toLowerCase().startsWith('crash')));
+            const icon = isCrash ? '💥' : (gameIcons[b.game] || '🎰');
             const borderColor = isWin ? 'var(--success)' : isLoss ? 'var(--danger)' : 'var(--text-secondary)';
             return `
                 <div style="display:flex; align-items:center; gap:12px; padding:10px 8px; border-bottom:1px solid rgba(255,255,255,0.06); border-left:3px solid ${borderColor}; margin-bottom:4px;">
                     <div style="font-size:1.4rem; min-width:28px; text-align:center;">${icon}</div>
                     <div style="flex:1; min-width:0;">
-                        <div style="display:flex; align-items:baseline; gap:8px;">
-                            <span style="font-weight:bold; color:var(--text-primary);">${b.game}</span>
+                        <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
+                            <span style="font-weight:bold; color:var(--text-primary);">${b.game || 'Casino'}</span>
                             <span style="color:var(--text-secondary); font-size:0.75rem;">🕐 ${timeStr} — ${dateStr}</span>
                         </div>
-                        <div style="display:flex; gap:16px; margin-top:4px; font-size:0.8rem;">
-                            <span>Puntata: <b style="color:var(--text-primary);">€${Number(b.amount).toFixed(2)}</b></span>
-                            <span>Ritorno: <b style="color:${isWin ? 'var(--success)' : 'var(--text-secondary)'};">€${Number(b.payout).toFixed(2)}</b></span>
+                        <div style="display:flex; gap:16px; margin-top:4px; font-size:0.8rem; flex-wrap:wrap;">
+                            <span>Puntata: <b style="color:var(--text-primary);">€${amount.toFixed(2)}</b></span>
+                            <span>Ritorno: <b style="color:${isWin ? 'var(--success)' : 'var(--text-secondary)'};">€${payout.toFixed(2)}</b></span>
                             <span style="color:${netChange >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight:bold;">
                                 ${netChange >= 0 ? '+' : ''}€${netChange.toFixed(2)}
                             </span>
                         </div>
                     </div>
-                    <div style="text-align:right; font-size:0.75rem; font-weight:bold; text-transform:uppercase; color:${borderColor};">${b.status}</div>
+                    <div style="text-align:right; font-size:0.75rem; font-weight:bold; text-transform:uppercase; color:${borderColor}; min-width:40px;">${b.status || ''}</div>
                 </div>
             `;
         }).join('');
