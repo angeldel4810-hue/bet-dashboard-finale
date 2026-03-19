@@ -30,9 +30,149 @@ app.add_middleware(
 )
 
 # Initialize DB on startup
+def _force_migrate_new_tables():
+    """Ensures new tables exist on already-deployed Render instances."""
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = hasattr(conn, 'get_dsn_parameters')
+    try:
+        if psql:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    username TEXT,
+                    amount REAL,
+                    iban TEXT,
+                    holder_name TEXT,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS bonuses (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    min_deposit REAL DEFAULT 0,
+                    bonus_percent INTEGER DEFAULT 0,
+                    bonus_fixed REAL DEFAULT 0,
+                    active BOOLEAN DEFAULT TRUE,
+                    assigned_to_user_id INTEGER DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_bonuses (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    bonus_id INTEGER,
+                    applied_amount REAL,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            # Add deposit_requests table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS deposit_requests (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    username TEXT,
+                    amount REAL,
+                    bonus_id INTEGER DEFAULT NULL,
+                    bonus_amount REAL DEFAULT 0,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            # Safe column additions
+            cursor.execute("""
+                DO $$ BEGIN
+                    ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS assigned_to_user_id INTEGER DEFAULT NULL;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$
+            """)
+            cursor.execute("""
+                DO $$ BEGIN
+                    ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS max_deposit REAL DEFAULT 0;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$
+            """)
+            # CRITICAL FIX: rimuovi NOT NULL da admin_id in transactions
+            cursor.execute("""
+                DO $$ BEGIN
+                    ALTER TABLE transactions ALTER COLUMN admin_id DROP NOT NULL;
+                EXCEPTION WHEN others THEN NULL;
+                END $$
+            """)
+            # CRITICAL FIX: converti colonne amount in NUMERIC per evitare type mismatch
+            cursor.execute("""
+                DO $$ BEGIN
+                    ALTER TABLE transactions ALTER COLUMN amount TYPE NUMERIC USING amount::NUMERIC;
+                EXCEPTION WHEN others THEN NULL;
+                END $$
+            """)
+            cursor.execute("""
+                DO $$ BEGIN
+                    ALTER TABLE transactions ALTER COLUMN balance_before TYPE NUMERIC USING balance_before::NUMERIC;
+                EXCEPTION WHEN others THEN NULL;
+                END $$
+            """)
+            cursor.execute("""
+                DO $$ BEGIN
+                    ALTER TABLE transactions ALTER COLUMN balance_after TYPE NUMERIC USING balance_after::NUMERIC;
+                EXCEPTION WHEN others THEN NULL;
+                END $$
+            """)
+        else:
+            cursor.executescript("""
+                CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER, username TEXT, amount REAL,
+                    iban TEXT, holder_name TEXT,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS bonuses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL, description TEXT,
+                    min_deposit REAL DEFAULT 0, bonus_percent INTEGER DEFAULT 0,
+                    bonus_fixed REAL DEFAULT 0, active INTEGER DEFAULT 1,
+                    assigned_to_user_id INTEGER DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS user_bonuses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER, bonus_id INTEGER,
+                    applied_amount REAL, status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS deposit_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER, username TEXT, amount REAL,
+                    bonus_id INTEGER DEFAULT NULL, bonus_amount REAL DEFAULT 0,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+        conn.commit()
+        print("[MIGRATION] New tables ensured OK")
+    except Exception as e:
+        print(f"[MIGRATION] Error: {e}")
+        try: conn.rollback()
+        except: pass
+    finally:
+        conn.close()
+
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    # Force migration for new tables on existing Render deployments
+    try:
+        _force_migrate_new_tables()
+    except Exception as e:
+        print(f"[MIGRATION] Warning: {e}")
     # Avvia il loop del Crash Game in background
     asyncio.create_task(crash_engine.start_loop())
     # Avvia il loop del Calcio Virtuale in background
@@ -128,6 +268,16 @@ async def get_settings(user = Depends(get_current_user)):
 
 @app.post("/api/settings", dependencies=[Depends(check_admin)])
 async def update_settings(settings: Dict[str, str] = Body(...)):
+    # Validazione overround: max 30% per evitare quote sballate
+    if 'overround' in settings:
+        try:
+            ov = float(settings['overround'])
+            if ov > 30:
+                settings['overround'] = '30'
+            elif ov < 0:
+                settings['overround'] = '0'
+        except (ValueError, TypeError):
+            settings['overround'] = '5'
     conn = get_db()
     cursor = conn.cursor()
     is_postgres = hasattr(conn, 'get_dsn_parameters')
@@ -262,21 +412,42 @@ async def fetch_odds(user = Depends(get_current_user)):
                 o = dict(r)
                 
             markets = []
+            MARGIN = 1.07  # 7% fisso — uguale al resto del sistema
+
+            def _apply_m(prices_list):
+                """Normalizza e applica 2% di margine."""
+                valid = [p for p in prices_list if p]
+                if len(valid) < 2:
+                    return [max(1.05, round(p / MARGIN, 2)) if p else None for p in prices_list]
+                raw = [1.0/p for p in valid]
+                tot = sum(raw)
+                fair = [p/tot for p in raw]
+                result = []; idx = 0
+                for p in prices_list:
+                    if p:
+                        result.append(max(1.05, round(1.0/(fair[idx]*MARGIN), 2))); idx += 1
+                    else:
+                        result.append(None)
+                return result
+
+            h_p, d_p, a_p = _apply_m([o['price_home'], o['price_draw'], o['price_away']])
             h2h_outcomes = [
-                {"name": o['home_team'], "price": round(o['price_home'] / (1 + overround/100), 2)},
-                {"name": "Pareggio", "price": round(o['price_draw'] / (1 + overround/100), 2)} if o['price_draw'] else None,
-                {"name": o['away_team'], "price": round(o['price_away'] / (1 + overround/100), 2)}
+                {"name": o['home_team'], "price": h_p},
+                {"name": "Pareggio", "price": d_p} if d_p else None,
+                {"name": o['away_team'], "price": a_p}
             ]
             markets.append({"key": "h2h", "outcomes": [x for x in h2h_outcomes if x]})
             if o['price_over'] and o['price_under']:
+                ov_p, un_p = _apply_m([o['price_over'], o['price_under']])
                 markets.append({"key": "totals", "outcomes": [
-                    {"name": "Over 2.5", "price": round(o['price_over'] / (1 + overround/100), 2)},
-                    {"name": "Under 2.5", "price": round(o['price_under'] / (1 + overround/100), 2)}
+                    {"name": "Over 2.5",  "price": ov_p, "point": 2.5},
+                    {"name": "Under 2.5", "price": un_p, "point": 2.5}
                 ]})
             if o['price_goal'] and o['price_nogoal']:
-                 markets.append({"key": "btts", "outcomes": [
-                    {"name": "Goal", "price": round(o['price_goal'] / (1 + overround/100), 2)},
-                    {"name": "No Goal", "price": round(o['price_nogoal'] / (1 + overround/100), 2)}
+                gg_p, ng_p = _apply_m([o['price_goal'], o['price_nogoal']])
+                markets.append({"key": "btts", "outcomes": [
+                    {"name": "Goal",    "price": gg_p},
+                    {"name": "No Goal", "price": ng_p}
                 ]})
             # Filtra partite già iniziate o che iniziano entro 1 minuto
             try:
@@ -333,24 +504,31 @@ async def fetch_odds(user = Depends(get_current_user)):
 
     results = await asyncio.gather(*(fetch_sport_odds(s) for s in sports_list))
     
+    # Parole chiave NON calcistiche — esclude questi sport
+    NON_FOOTBALL_KEYWORDS = [
+        'basketball', 'tennis', 'volleyball', 'baseball', 'hockey',
+        'rugby', 'mma', 'boxing', 'cricket', 'golf', 'nfl', 'nba',
+        'nhl', 'mlb', 'handball', 'pallavolo', 'basket',
+        'american football', 'aussie rules', 'gaelic', 'waterpolo',
+        'esports', 'darts', 'snooker', 'cycling', 'formula',
+    ]
+
+    def _is_football(event: dict) -> bool:
+        sport = (event.get('sport_title') or event.get('sport_key') or '').lower()
+        return not any(kw in sport for kw in NON_FOOTBALL_KEYWORDS)
+
     for odds_chunk in results:
         if not odds_chunk: continue
         for event in odds_chunk:
+            if not _is_football(event):
+                continue
             event_id = event['id']
             if event_id in seen_ids: continue
             ts = event.get('commence_time', '').replace('Z', '+00:00')
             if not ts: continue
             try:
                 event_time = datetime.fromisoformat(ts)
-                if overround > 0:
-                    for bookmaker in event.get('bookmakers', []):
-                        for market in bookmaker.get('markets', []):
-                            m_key = market.get('key')
-                            if m_key in ['double_chance', 'draw_no_bet']: continue
-                            for outcome in market.get('outcomes', []):
-                                if isinstance(outcome.get('price'), (int, float)):
-                                    new_price = round(outcome['price'] / (1 + overround/100), 2)
-                                    outcome['price'] = max(new_price, 1.05)
+                # Il margine 7% è già applicato dentro odds_api.py — nessun overround qui
                 if event_time > now + timedelta(minutes=1):
                     all_odds.append(event)
                     seen_ids.add(event_id)
@@ -400,7 +578,8 @@ async def get_balance(user = Depends(get_current_user)):
     cursor.execute(query, (user['username'],))
     row = cursor.fetchone()
     conn.close()
-    return {"balance": row[0] if is_postgres and row else (row['balance'] if row else 0)}
+    bal = row[0] if is_postgres and row else (row['balance'] if row else 0)
+    return {"balance": bal, "username": user['username']}
 
 @app.get("/api/admin/users", dependencies=[Depends(check_admin)])
 async def list_users():
@@ -487,7 +666,12 @@ async def get_user_detail(user_id: int):
                 bet['selections'] = [{"id": s[0], "bet_id": s[1], "event_id": s[2], "market": s[3], "selection": s[4], "odds": s[5], "home_team": s[6], "away_team": s[7]} for s in s_rows]
             else:
                 bet['selections'] = [dict(sr) for sr in s_rows]
-                
+
+            # Escludi scommesse casino (nessuna selection o event_id casino_*) — raccolte separatamente
+            sels = bet['selections']
+            if not sels or any(str(s['event_id']).startswith('casino_') for s in sels):
+                continue  # skip: le casino vengono restituite in casino_bets
+
             for sel in bet['selections']:
                 if str(sel['event_id']).startswith('v_'):
                     v_id = str(sel['event_id']).replace('v_', '')
@@ -503,7 +687,75 @@ async def get_user_detail(user_id: int):
         
         user_data['bets'] = bets
 
-        # Transactions
+        # Casino bets (blackjack, baccarat, sette e mezzo — da tabella bets)
+        casino_bets = []
+        try:
+            casino_query = (
+                "SELECT b.id, b.amount, b.potential_win, b.status, b.created_at, bs.selection, bs.event_id "
+                "FROM bets b JOIN bet_selections bs ON bs.bet_id = b.id "
+                "WHERE b.user_id = %s AND bs.event_id LIKE 'casino_%%' ORDER BY b.created_at DESC LIMIT 100"
+                if is_postgres else
+                "SELECT b.id, b.amount, b.potential_win, b.status, b.created_at, bs.selection, bs.event_id "
+                "FROM bets b JOIN bet_selections bs ON bs.bet_id = b.id "
+                "WHERE b.user_id = ? AND bs.event_id LIKE 'casino_%' ORDER BY b.created_at DESC LIMIT 100"
+            )
+            cursor.execute(casino_query, (user_id,))
+            casino_rows = cursor.fetchall()
+            for cr in casino_rows:
+                if is_postgres:
+                    casino_bets.append({
+                        "id": cr[0], "amount": cr[1], "payout": cr[2],
+                        "status": cr[3], "created_at": str(cr[4]),
+                        "game": cr[5], "event_id": cr[6]
+                    })
+                else:
+                    row = dict(cr)
+                    casino_bets.append({
+                        "id": row["id"], "amount": row["amount"], "payout": row["potential_win"],
+                        "status": row["status"], "created_at": row["created_at"],
+                        "game": row["selection"], "event_id": row["event_id"]
+                    })
+        except Exception as ce:
+            print(f"Error fetching casino bets: {ce}")
+
+        # Crash bets (tabella separata crash_bets)
+        try:
+            crash_query = (
+                "SELECT id, amount, COALESCE(payout, 0) as payout, cashout_multiplier, status, created_at "
+                "FROM crash_bets WHERE user_id = %s ORDER BY created_at DESC LIMIT 100"
+                if is_postgres else
+                "SELECT id, amount, COALESCE(payout, 0) as payout, cashout_multiplier, status, created_at "
+                "FROM crash_bets WHERE user_id = ? ORDER BY created_at DESC LIMIT 100"
+            )
+            cursor.execute(crash_query, (user_id,))
+            crash_rows = cursor.fetchall()
+            for cr in crash_rows:
+                if is_postgres:
+                    mult = cr[3]
+                    label = f"Crash {('x' + str(round(mult, 2))) if mult else ''}"
+                    casino_bets.append({
+                        "id": f"crash_{cr[0]}", "amount": cr[1], "payout": cr[2],
+                        "status": cr[4], "created_at": str(cr[5]),
+                        "game": label, "event_id": "casino_crash"
+                    })
+                else:
+                    row = dict(cr)
+                    mult = row.get("cashout_multiplier")
+                    label = f"Crash {('x' + str(round(mult, 2))) if mult else ''}"
+                    casino_bets.append({
+                        "id": f"crash_{row['id']}", "amount": row["amount"], "payout": row["payout"],
+                        "status": row["status"], "created_at": row["created_at"],
+                        "game": label, "event_id": "casino_crash"
+                    })
+        except Exception as cre:
+            print(f"Error fetching crash bets: {cre}")
+
+        # Ordina tutto per data decrescente
+        try:
+            casino_bets.sort(key=lambda x: x["created_at"], reverse=True)
+        except Exception:
+            pass
+        user_data['casino_bets'] = casino_bets
         try:
             cursor.execute("SELECT * FROM transactions WHERE user_id = %s ORDER BY timestamp DESC" if is_postgres else "SELECT * FROM transactions WHERE user_id = ? ORDER BY timestamp DESC", (user_id,))
             t_rows = cursor.fetchall()
@@ -577,10 +829,10 @@ async def admin_adjust_balance(data: Dict[str, Any] = Body(...), admin = Depends
     
     # Log transaction
     t_query = """INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) 
-                 VALUES (%s, %s, %s, %s, %s, %s, %s)""" if is_postgres else \
+                 VALUES (%s, %s, %s::numeric, %s::numeric, %s::numeric, %s, %s)""" if is_postgres else \
                  """INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) 
-                 VALUES (?, ?, ?, ?, ?, ?, ? )"""
-    cursor.execute(t_query, (user_id, 'admin_adjustment', new_balance - old_balance, old_balance, new_balance, admin_id, reason))
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"""
+    cursor.execute(t_query, (user_id, 'admin_adjustment', float(new_balance - old_balance), float(old_balance), float(new_balance), admin_id if admin_id else None, reason))
 
     conn.commit()
     conn.close()
@@ -1296,6 +1548,398 @@ async def play_baccarat(bets: Dict[str, float] = Body(...), user = Depends(get_c
         try: conn.close()
         except: pass
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
+# --- Bonus ---
+
+@app.get("/api/bonuses")
+async def get_bonuses(user = Depends(get_current_user)):
+    """Ritorna i bonus attivi visibili all'utente: globali + quelli assegnati a lui."""
+    conn = get_db()
+    cursor = conn.cursor()
+    is_pg = hasattr(conn, 'get_dsn_parameters')
+    cursor.execute("SELECT id FROM users WHERE username = %s" if is_pg else "SELECT id FROM users WHERE username = ?", (user['username'],))
+    u_row = cursor.fetchone()
+    u_id = u_row[0] if is_pg else u_row['id']
+
+    # Bonus globali (assigned_to_user_id IS NULL) + bonus specifici per questo utente
+    named_cols = "id, title, description, min_deposit, max_deposit, bonus_percent, bonus_fixed, active, assigned_to_user_id"
+    if is_pg:
+        cursor.execute(f"SELECT {named_cols} FROM bonuses WHERE active = TRUE AND (assigned_to_user_id IS NULL OR assigned_to_user_id = %s) ORDER BY assigned_to_user_id DESC NULLS LAST, id DESC", (u_id,))
+    else:
+        cursor.execute(f"SELECT {named_cols} FROM bonuses WHERE active = 1 AND (assigned_to_user_id IS NULL OR assigned_to_user_id = ?) ORDER BY CASE WHEN assigned_to_user_id IS NOT NULL THEN 0 ELSE 1 END, id DESC", (u_id,))
+    rows = cursor.fetchall()
+
+    result = []
+    for r in rows:
+        if is_pg:
+            b = {"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"max_deposit":r[4],"bonus_percent":r[5],"bonus_fixed":r[6],"active":r[7],"assigned_to_user_id":r[8]}
+        else:
+            b = dict(r)
+        cursor.execute("SELECT id FROM user_bonuses WHERE user_id = %s AND bonus_id = %s" if is_pg else "SELECT id FROM user_bonuses WHERE user_id = ? AND bonus_id = ?", (u_id, b['id']))
+        b['already_used'] = cursor.fetchone() is not None
+        b['is_personal'] = b.get('assigned_to_user_id') is not None
+        result.append(b)
+
+    conn.close()
+    return result
+
+@app.post("/api/bonuses/apply")
+async def apply_bonus(data: dict, user = Depends(get_current_user)):
+    """Applica un bonus al saldo dell'utente dopo una ricarica."""
+    bonus_id = int(data.get("bonus_id", 0))
+    deposit_amount = float(data.get("deposit_amount", 0))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    is_pg = hasattr(conn, 'get_dsn_parameters')
+
+    cursor.execute("SELECT id, balance FROM users WHERE username = %s" if is_pg else "SELECT id, balance FROM users WHERE username = ?", (user['username'],))
+    u_row = cursor.fetchone()
+    u_id = u_row[0] if is_pg else u_row['id']
+    balance = float(u_row[1] if is_pg else u_row['balance'])
+
+    bq = "SELECT id, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = %s" if is_pg else \
+         "SELECT id, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = ?"
+    cursor.execute(bq, (bonus_id,))
+    b_row = cursor.fetchone()
+    if not b_row:
+        conn.close(); raise HTTPException(status_code=404, detail="Bonus non trovato")
+
+    if is_pg:
+        bonus = {"id":b_row[0],"min_deposit":b_row[1],"max_deposit":b_row[2],"bonus_percent":b_row[3],"bonus_fixed":b_row[4]}
+    else:
+        bonus = dict(b_row)
+
+    if deposit_amount < bonus['min_deposit']:
+        conn.close(); raise HTTPException(status_code=400, detail=f"Ricarica minima per questo bonus: €{bonus['min_deposit']:.2f}")
+
+    # Verifica non già usato
+    cursor.execute("SELECT id FROM user_bonuses WHERE user_id = %s AND bonus_id = %s" if is_pg else "SELECT id FROM user_bonuses WHERE user_id = ? AND bonus_id = ?", (u_id, bonus_id))
+    if cursor.fetchone():
+        conn.close(); raise HTTPException(status_code=400, detail="Hai già usato questo bonus")
+
+    # Calcola importo bonus
+    bonus_amount = round(deposit_amount * bonus['bonus_percent'] / 100 + bonus['bonus_fixed'], 2)
+
+    # Accredita
+    cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_pg else "UPDATE users SET balance = balance + ? WHERE id = ?", (bonus_amount, u_id))
+
+    # Registra utilizzo
+    if is_pg:
+        cursor.execute("INSERT INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (%s, %s, %s, 'applied')", (u_id, bonus_id, bonus_amount))
+    else:
+        cursor.execute("INSERT INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (?, ?, ?, 'applied')", (u_id, bonus_id, bonus_amount))
+
+    conn.commit()
+    new_balance = balance + bonus_amount
+    conn.close()
+    return {"message": f"Bonus di €{bonus_amount:.2f} accreditato!", "new_balance": round(new_balance, 2), "bonus_amount": bonus_amount}
+
+@app.get("/api/admin/bonuses", dependencies=[Depends(check_admin)])
+async def admin_get_bonuses():
+    conn = get_db()
+    cursor = conn.cursor()
+    is_pg = hasattr(conn, 'get_dsn_parameters')
+    # Join con users per avere lo username dell'assegnatario
+    q = """SELECT b.id, b.title, b.description, b.min_deposit, b.max_deposit, b.bonus_percent, b.bonus_fixed, b.active, b.assigned_to_user_id, u.username as assigned_username FROM bonuses b LEFT JOIN users u ON b.assigned_to_user_id = u.id ORDER BY b.id DESC"""
+    cursor.execute(q)
+    rows = cursor.fetchall()
+    conn.close()
+    if is_pg:
+        return [{"id":r[0],"title":r[1],"description":r[2],"min_deposit":r[3],"max_deposit":r[4],"bonus_percent":r[5],"bonus_fixed":r[6],"active":r[7],"assigned_to_user_id":r[8],"assigned_username":r[9]} for r in rows]
+    return [dict(r) for r in rows]
+
+@app.post("/api/admin/bonuses", dependencies=[Depends(check_admin)])
+async def admin_create_bonus(data: dict = Body(...)):
+    conn = get_db()
+    cursor = conn.cursor()
+    is_pg = hasattr(conn, 'get_dsn_parameters')
+    assigned_to = data.get('assigned_to_user_id')
+    if assigned_to is not None:
+        assigned_to = int(assigned_to)
+    if is_pg:
+        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, max_deposit, bonus_percent, bonus_fixed, assigned_to_user_id) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), float(data.get('max_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0)), assigned_to))
+    else:
+        cursor.execute("INSERT INTO bonuses (title, description, min_deposit, max_deposit, bonus_percent, bonus_fixed, assigned_to_user_id) VALUES (?,?,?,?,?,?,?)",
+            (data['title'], data.get('description',''), float(data.get('min_deposit',0)), float(data.get('max_deposit',0)), int(data.get('bonus_percent',0)), float(data.get('bonus_fixed',0)), assigned_to))
+    conn.commit(); conn.close()
+    return {"message": "Bonus creato"}
+
+@app.delete("/api/admin/bonuses/{bid}", dependencies=[Depends(check_admin)])
+async def admin_delete_bonus(bid: int):
+    conn = get_db()
+    cursor = conn.cursor()
+    is_pg = hasattr(conn, 'get_dsn_parameters')
+    if is_pg:
+        cursor.execute("UPDATE bonuses SET active = FALSE WHERE id = %s", (bid,))
+    else:
+        cursor.execute("UPDATE bonuses SET active = 0 WHERE id = ?", (bid,))
+    conn.commit(); conn.close()
+    return {"message": "Bonus disattivato"}
+
+# --- Prelievi ---
+
+@app.post("/api/withdrawal/request")
+async def request_withdrawal(data: dict, user = Depends(get_current_user)):
+    iban = (data.get("iban") or "").strip()
+    name = (data.get("name") or "").strip()
+    amount = float(data.get("amount") or 0)
+
+    if not iban or not name:
+        raise HTTPException(status_code=400, detail="IBAN e nome obbligatori")
+    if amount < 5:
+        raise HTTPException(status_code=400, detail="Importo minimo prelievo €5.00")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+
+    cursor.execute("SELECT id, balance FROM users WHERE username = %s" if is_postgres else "SELECT id, balance FROM users WHERE username = ?", (user['username'],))
+    row = cursor.fetchone()
+    u_id = row[0] if is_postgres else row['id']
+    balance = float(row[1] if is_postgres else row['balance'])
+
+    if balance < amount:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Saldo insufficiente")
+
+    # Detrai immediatamente il saldo
+    cursor.execute("UPDATE users SET balance = balance - %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance - ? WHERE id = ?", (amount, u_id))
+
+    # Log in transactions
+    t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s::numeric,%s::numeric,%s::numeric,%s,%s)" if is_postgres else \
+          "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+    cursor.execute(t_q, (u_id, 'withdrawal_requested', float(-amount), float(balance), float(balance - amount), None, f"Richiesta prelievo €{amount:.2f} - IBAN {iban[:10]}..."))
+
+    # Salva richiesta prelievo
+    if is_postgres:
+        cursor.execute(
+            "INSERT INTO withdrawal_requests (user_id, username, amount, iban, holder_name, status, created_at) VALUES (%s, %s, %s, %s, %s, 'pending', NOW())",
+            (u_id, user['username'], amount, iban, name)
+        )
+    else:
+        cursor.execute(
+            "INSERT INTO withdrawal_requests (user_id, username, amount, iban, holder_name, status) VALUES (?, ?, ?, ?, ?, 'pending')",
+            (u_id, user['username'], amount, iban, name)
+        )
+
+    conn.commit()
+    conn.close()
+    return {"message": "Richiesta prelievo inviata.", "new_balance": round(balance - amount, 2)}
+
+
+# ─── DEPOSIT REQUESTS ──────────────────────────────────────────────────────────
+
+@app.post("/api/deposit/request")
+async def request_deposit(data: dict = Body(...), user = Depends(get_current_user)):
+    """User submits a deposit request (pending approval by admin)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = hasattr(conn, 'get_dsn_parameters')
+    cursor.execute("SELECT id FROM users WHERE username = %s" if psql else "SELECT id FROM users WHERE username = ?", (user['username'],))
+    row = cursor.fetchone()
+    u_id = row[0] if psql else row['id']
+    amount = float(data.get('amount', 0))
+    bonus_id = data.get('bonus_id')  # optional
+    if amount <= 0:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Importo non valido")
+    # Calculate bonus amount if applicable
+    bonus_amount = 0.0
+    if bonus_id:
+        q = "SELECT id, title, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = %s AND active = TRUE" if psql else \
+            "SELECT id, title, min_deposit, max_deposit, bonus_percent, bonus_fixed FROM bonuses WHERE id = ? AND active = 1"
+        cursor.execute(q, (bonus_id,))
+        b = cursor.fetchone()
+        if b:
+            if psql:
+                b = {"id":b[0],"title":b[1],"min_deposit":b[2],"max_deposit":b[3],"bonus_percent":b[4],"bonus_fixed":b[5]}
+            else:
+                b = dict(b)
+            min_dep = float(b.get('min_deposit') or 0)
+            max_dep = float(b.get('max_deposit') or 0)
+            bp = float(b.get('bonus_percent') or 0)
+            bf = float(b.get('bonus_fixed') or 0)
+            if amount < min_dep:
+                conn.close()
+                raise HTTPException(status_code=400, detail=f"Ricarica minima per il bonus selezionato: €{min_dep:.2f}")
+            elif max_dep > 0 and amount > max_dep:
+                conn.close()
+                raise HTTPException(status_code=400, detail=f"Ricarica massima per il bonus selezionato: €{max_dep:.2f}")
+            else:
+                bonus_amount = round(amount * bp / 100 + bf, 2)
+    try:
+        if psql:
+            cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (%s,%s,%s,%s,%s)", (u_id, user['username'], amount, bonus_id, bonus_amount))
+        else:
+            cursor.execute("INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (?,?,?,?,?)", (u_id, user['username'], amount, bonus_id, bonus_amount))
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail="Errore nel salvataggio. Assicurati che il database sia aggiornato (colonne bonus).")
+    conn.commit(); conn.close()
+    return {"message": "Richiesta di ricarica inviata. In attesa di approvazione.", "bonus_amount": bonus_amount}
+
+@app.get("/api/admin/deposits", dependencies=[Depends(check_admin)])
+async def list_deposits():
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = hasattr(conn, 'get_dsn_parameters')
+    cursor.execute("SELECT * FROM deposit_requests ORDER BY created_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    if psql:
+        return [{"id":r[0],"user_id":r[1],"username":r[2],"amount":r[3],"bonus_id":r[4],"bonus_amount":r[5],"status":r[6],"created_at":str(r[7])} for r in rows]
+    return [dict(r) for r in rows]
+
+@app.post("/api/admin/deposits/{did}/resolve", dependencies=[Depends(check_admin)])
+async def resolve_deposit(did: int, data: dict = Body(...)):
+    """Approve or reject a deposit. If approved: credit amount + bonus. If rejected: nothing."""
+    status = data.get("status")  # 'approved' or 'rejected'
+    conn = get_db()
+    cursor = conn.cursor()
+    psql = hasattr(conn, 'get_dsn_parameters')
+    try:
+        # Explicit data selection
+        if psql:
+            cursor.execute("SELECT id, user_id, amount, status, bonus_id, bonus_amount FROM deposit_requests WHERE id = %s", (did,))
+        else:
+            cursor.execute("SELECT id, user_id, amount, status, bonus_id, bonus_amount FROM deposit_requests WHERE id = ?", (did,))
+            
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Richiesta non trovata")
+        
+        if psql:
+            r = {"id":row[0],"user_id":row[1],"amount":float(row[2]),"status":row[3],"bonus_id":row[4],"bonus_amount":float(row[5] or 0)}
+        else:
+            r = dict(row)
+            
+        if r.get('status') != 'pending':
+            raise HTTPException(status_code=400, detail="Già elaborata")
+            
+        if status == 'approved':
+            amt = float(r.get('amount') or 0)
+            b_amt = float(r.get('bonus_amount') or 0)
+            total = amt + b_amt
+            u_id = r.get('user_id')
+            
+            # Credit balance with explicit cast for Postgres compatibility
+            cursor.execute("SELECT balance FROM users WHERE id = %s" if psql else "SELECT balance FROM users WHERE id = ?", (u_id,))
+            bal_row = cursor.fetchone()
+            if not bal_row:
+                raise HTTPException(status_code=404, detail="Utente non trovato")
+                
+            bal_before = float(bal_row[0] if psql else bal_row['balance'])
+            
+            # Use explicit cast to float/numeric for Postgres
+            if psql:
+                cursor.execute("UPDATE users SET balance = CAST(balance AS NUMERIC) + %s WHERE id = %s", (total, u_id))
+            else:
+                cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (total, u_id))
+                
+            bal_after = bal_before + total
+            
+            # Log transaction
+            reason = f"Ricarica approvata €{amt:.2f}" + (f" + bonus €{b_amt:.2f}" if b_amt > 0 else "")
+            t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s::numeric,%s::numeric,%s::numeric,%s,%s)" if psql else \
+                  "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+            cursor.execute(t_q, (u_id, 'deposit', float(total), float(bal_before), float(bal_after), None, reason))
+            
+            # Record bonus use
+            if r.get('bonus_id'):
+                if psql:
+                    cursor.execute("INSERT INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (%s,%s,%s,'applied') ON CONFLICT DO NOTHING", (u_id, r['bonus_id'], r['bonus_amount']))
+                else:
+                    cursor.execute("INSERT OR IGNORE INTO user_bonuses (user_id, bonus_id, applied_amount, status) VALUES (?,?,?,'applied')", (u_id, r['bonus_id'], r['bonus_amount']))
+        
+        # Update status
+        cursor.execute("UPDATE deposit_requests SET status = %s WHERE id = %s" if psql else "UPDATE deposit_requests SET status = ? WHERE id = ?", (status, did))
+        conn.commit()
+        return {"message": f"Ricarica {status}", "status": status}
+    finally:
+        conn.close()
+
+@app.get("/api/admin/withdrawals", dependencies=[Depends(check_admin)])
+async def list_withdrawals():
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    cursor.execute("SELECT * FROM withdrawal_requests ORDER BY created_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    if is_postgres:
+        return [{"id":r[0],"user_id":r[1],"username":r[2],"amount":r[3],"iban":r[4],"holder_name":r[5],"status":r[6],"created_at":str(r[7])} for r in rows]
+    return [dict(r) for r in rows]
+
+@app.post("/api/admin/withdrawals/{wid}/resolve", dependencies=[Depends(check_admin)])
+async def resolve_withdrawal(wid: int, data: dict = Body(...)):
+    status = data.get("status")  # 'approved' or 'rejected'
+    if status not in ('approved', 'rejected'):
+        raise HTTPException(status_code=400, detail="Status non valido")
+    conn = get_db()
+    cursor = conn.cursor()
+    is_postgres = hasattr(conn, 'get_dsn_parameters')
+    try:
+        # Explicit select for safety
+        if is_postgres:
+            cursor.execute("SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = %s", (wid,))
+        else:
+            cursor.execute("SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = ?", (wid,))
+
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Richiesta non trovata")
+
+        if is_postgres:
+            r = {"id": row[0], "user_id": row[1], "amount": float(row[2] or 0), "status": row[3]}
+        else:
+            r = dict(row)
+
+        if r.get('status') != 'pending':
+            raise HTTPException(status_code=400, detail="Già elaborata")
+
+        uid = int(r.get('user_id'))
+        amount = float(r.get('amount') or 0)
+
+        # Get current balance
+        cursor.execute("SELECT balance FROM users WHERE id = %s" if is_postgres else "SELECT balance FROM users WHERE id = ?", (uid,))
+        bal_row = cursor.fetchone()
+        if not bal_row:
+            raise HTTPException(status_code=404, detail="Utente non trovato")
+        bal_before = float(bal_row[0] if is_postgres else bal_row['balance'])
+
+        if status == 'rejected':
+            if is_postgres:
+                cursor.execute("UPDATE users SET balance = CAST(balance AS NUMERIC) + CAST(%s AS NUMERIC) WHERE id = %s", (amount, uid))
+            else:
+                cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, uid))
+            bal_after = round(bal_before + amount, 2)
+            reason = f"Prelievo €{amount:.2f} rifiutato - saldo reintegrato"
+            t_amount = float(0)
+        else:
+            bal_after = round(bal_before, 2)
+            reason = f"Prelievo €{amount:.2f} approvato"
+            t_amount = float(-amount)
+
+        t_q = "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s,%s,%s::numeric,%s::numeric,%s::numeric,%s,%s)" if is_postgres else \
+              "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?,?,?,?,?,?,?)"
+        cursor.execute(t_q, (uid, f'withdrawal_{status}', t_amount, float(bal_before), float(bal_after), None, reason))
+
+        cursor.execute("UPDATE withdrawal_requests SET status = %s WHERE id = %s" if is_postgres else "UPDATE withdrawal_requests SET status = ? WHERE id = ?", (status, wid))
+        conn.commit()
+        return {"message": f"Prelievo {status}", "status": status}
+    except HTTPException:
+        try: conn.rollback()
+        except: pass
+        raise
+    except Exception as e:
+        print(f"[WITHDRAWAL RESOLVE ERROR] wid={wid} status={status} error={e}", flush=True)
+        try: conn.rollback()
+        except: pass
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+    finally:
+        conn.close()
 
 # VIRTUAL FOOTBALL ROUTER
 app.include_router(virtual_router, prefix="/api/virtual", tags=["Virtual Football"])
