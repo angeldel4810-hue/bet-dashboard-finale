@@ -1114,8 +1114,8 @@ window.admin = {
         document.getElementById('admin-user-detail').classList.remove('hidden');
 
         // Render casino bets
-        this._casinoBets = detail.casino_bets || [];
-        this._renderCasinoBets(this._casinoBets);
+        window.admin._casinoBets = detail.casino_bets || [];
+        window.admin._renderCasinoBets(window.admin._casinoBets);
     },
     _renderCasinoBets(bets) {
         const container = document.getElementById('detail-casino-container');
@@ -1173,11 +1173,9 @@ window.admin = {
         const activeBtn = document.getElementById(`casino-filter-${type}`);
         if (activeBtn) activeBtn.style.background = 'var(--accent)';
 
-        let filtered = this._casinoBets || [];
-        if (type !== 'all') {
-            filtered = filtered.filter(b => b.game.toLowerCase().includes(type));
-        }
-        this._renderCasinoBets(filtered);
+        const allBets = window.admin._casinoBets || [];
+        const filtered = type === 'all' ? allBets : allBets.filter(b => (b.game || '').toLowerCase().includes(type));
+        window.admin._renderCasinoBets(filtered);
     },
     _casinoBets: [],
     closeUserDetail() {
