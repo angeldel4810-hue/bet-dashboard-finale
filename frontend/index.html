@@ -830,10 +830,26 @@
                             </div>
                         </div>
 
+                        <!-- Casino bets section -->
+                        <div class="login-card" style="margin: 0 0 20px 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
+                            <h3 style="margin-bottom: 1rem;">🎰 Storico Giochi Casino</h3>
+                            <!-- Filtro gioco -->
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:1rem;">
+                                <button onclick="admin.filterCasino('all')" id="casino-filter-all" class="casino-filter-btn active-filter" style="width:auto; padding:4px 12px; font-size:0.8rem; background:var(--accent);">Tutti</button>
+                                <button onclick="admin.filterCasino('blackjack')" id="casino-filter-blackjack" class="casino-filter-btn" style="width:auto; padding:4px 12px; font-size:0.8rem; background:rgba(255,255,255,0.1);">🃏 Blackjack</button>
+                                <button onclick="admin.filterCasino('baccarat')" id="casino-filter-baccarat" class="casino-filter-btn" style="width:auto; padding:4px 12px; font-size:0.8rem; background:rgba(255,255,255,0.1);">🎴 Baccarat</button>
+                                <button onclick="admin.filterCasino('crash')" id="casino-filter-crash" class="casino-filter-btn" style="width:auto; padding:4px 12px; font-size:0.8rem; background:rgba(255,255,255,0.1);">💥 Crash</button>
+                                <button onclick="admin.filterCasino('sette')" id="casino-filter-sette" class="casino-filter-btn" style="width:auto; padding:4px 12px; font-size:0.8rem; background:rgba(255,255,255,0.1);">7️⃣ Sette e Mezzo</button>
+                            </div>
+                            <div id="detail-casino-container" style="max-height: 350px; overflow-y: auto; font-size: 0.85rem;">
+                                <!-- Casino bets injected here -->
+                            </div>
+                        </div>
+
                         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                             <div class="login-card"
                                 style="flex: 2; min-width: 400px; margin: 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
-                                <h3>Scommesse Utente</h3>
+                                <h3>Scommesse Sportive</h3>
                                 <div id="detail-bets-container" style="max-height: 400px; overflow-y: auto;">
                                     <!-- User bets injected here -->
                                 </div>

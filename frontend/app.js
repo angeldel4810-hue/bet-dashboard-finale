@@ -1108,7 +1108,64 @@ window.admin = {
 
         document.getElementById('user-table-body').closest('div.admin-section').classList.add('hidden');
         document.getElementById('admin-user-detail').classList.remove('hidden');
+
+        // Render casino bets
+        this._casinoBets = detail.casino_bets || [];
+        this._renderCasinoBets(this._casinoBets);
     },
+    _renderCasinoBets(bets) {
+        const container = document.getElementById('detail-casino-container');
+        if (!bets || bets.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-secondary); text-align:center; padding:1rem;">Nessuna giocata casino.</p>';
+            return;
+        }
+        const gameIcons = {
+            'Blackjack': '🃏', 'Baccarat': '🎴', 'Crash': '💥', 'Sette e Mezzo': '7️⃣'
+        };
+        container.innerHTML = bets.map(b => {
+            const date = new Date(b.created_at);
+            const timeStr = date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+            const isWin = b.status === 'won';
+            const isLoss = b.status === 'lost';
+            const netChange = b.status === 'won' ? (b.payout - b.amount) : (b.status === 'lost' ? -b.amount : 0);
+            const icon = gameIcons[b.game] || '🎰';
+            const borderColor = isWin ? 'var(--success)' : isLoss ? 'var(--danger)' : 'var(--text-secondary)';
+            return `
+                <div style="display:flex; align-items:center; gap:12px; padding:10px 8px; border-bottom:1px solid rgba(255,255,255,0.06); border-left:3px solid ${borderColor}; margin-bottom:4px;">
+                    <div style="font-size:1.4rem; min-width:28px; text-align:center;">${icon}</div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="display:flex; align-items:baseline; gap:8px;">
+                            <span style="font-weight:bold; color:var(--text-primary);">${b.game}</span>
+                            <span style="color:var(--text-secondary); font-size:0.75rem;">🕐 ${timeStr} — ${dateStr}</span>
+                        </div>
+                        <div style="display:flex; gap:16px; margin-top:4px; font-size:0.8rem;">
+                            <span>Puntata: <b style="color:var(--text-primary);">€${Number(b.amount).toFixed(2)}</b></span>
+                            <span>Ritorno: <b style="color:${isWin ? 'var(--success)' : 'var(--text-secondary)'};">€${Number(b.payout).toFixed(2)}</b></span>
+                            <span style="color:${netChange >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight:bold;">
+                                ${netChange >= 0 ? '+' : ''}€${netChange.toFixed(2)}
+                            </span>
+                        </div>
+                    </div>
+                    <div style="text-align:right; font-size:0.75rem; font-weight:bold; text-transform:uppercase; color:${borderColor};">${b.status}</div>
+                </div>
+            `;
+        }).join('');
+    },
+    filterCasino(type) {
+        document.querySelectorAll('.casino-filter-btn').forEach(btn => {
+            btn.style.background = 'rgba(255,255,255,0.1)';
+        });
+        const activeBtn = document.getElementById(`casino-filter-${type}`);
+        if (activeBtn) activeBtn.style.background = 'var(--accent)';
+
+        let filtered = this._casinoBets || [];
+        if (type !== 'all') {
+            filtered = filtered.filter(b => b.game.toLowerCase().includes(type));
+        }
+        this._renderCasinoBets(filtered);
+    },
+    _casinoBets: [],
     closeUserDetail() {
         document.getElementById('admin-user-detail').classList.add('hidden');
         document.getElementById('user-table-body').closest('div.admin-section').classList.remove('hidden');
