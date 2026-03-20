@@ -644,8 +644,15 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
     if not sport:
         sport = 'soccer'
 
-    markets = "h2h,totals,btts,double_chance,draw_no_bet,h2h_1st_half,correct_score"
-    cache_key = f"odds_toa_v13_{sport}_{regions}"
+    # Mercati diversi per tennis (solo h2h) vs calcio
+    sport_lower = sport.lower()
+    is_tennis = any(kw in sport_lower for kw in ['tennis','atp','wta','itf','challenger'])
+    if is_tennis:
+        markets = "h2h"  # Tennis: solo vincitore partita dall'API, il resto viene simulato
+    else:
+        markets = "h2h,totals,btts,double_chance,draw_no_bet,h2h_1st_half,correct_score"
+
+    cache_key = f"odds_toa_v14_{sport}_{regions}"
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -661,10 +668,10 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
 
     try:
         r = requests.get(url, params=params, timeout=12)
-        if r.status_code == 422:
+        if r.status_code == 422 and not is_tennis:
             params["markets"] = "h2h,totals,btts"
             r = requests.get(url, params=params, timeout=12)
-        if r.status_code == 422:
+        if r.status_code == 422 and not is_tennis:
             params["markets"] = "h2h,totals"
             r = requests.get(url, params=params, timeout=12)
         r.raise_for_status()
