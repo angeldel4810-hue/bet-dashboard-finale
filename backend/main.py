@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 import uvicorn
 from typing import List, Dict, Any
 from backend.database import get_db, init_db
@@ -1903,55 +1903,61 @@ async def request_deposit(data: dict = Body(...), user = Depends(get_current_use
 @app.get("/api/pay")
 async def pay_redirect(amount: float, token: str, bonus_id: int = None):
     """
-    Endpoint GET usato dal frontend per aprire il pagamento SumUp.
-    Safari iOS: window.open('/api/pay?...', '_blank') è 100% affidabile
-    perché è una navigazione diretta, non un redirect JS dopo await.
-    Il backend registra la richiesta e fa redirect 302 a SumUp.
+    Endpoint GET: registra la ricarica e fa redirect 302 a SumUp.
+    Il frontend chiama window.open('/api/pay?...') in modo sincrono —
+    soluzione definitiva per Safari iOS (nessun redirect JS dopo await).
     """
     PAY_URL = "https://pay.sumup.com/b2c/QEAW96U8"
-    conn = get_db()
-    cursor = conn.cursor()
-    psql = hasattr(conn, 'get_dsn_parameters')
+    conn = None
     try:
-        # Verifica token utente
-        from backend.auth import decode_token
-        payload = decode_token(token)
-        if not payload:
-            conn.close()
-            return RedirectResponse(url=PAY_URL)  # redirect comunque anche se token scaduto
+        import jwt as _jwt
+        SECRET_KEY = "simusbet_secret_very_secure_123"
+        payload = _jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         username = payload.get('sub')
+        if not username:
+            return RedirectResponse(url=PAY_URL, status_code=302)
+
+        conn = get_db()
+        cursor = conn.cursor()
+        psql = hasattr(conn, 'get_dsn_parameters')
+
         cursor.execute(
             "SELECT id FROM users WHERE username = %s" if psql else "SELECT id FROM users WHERE username = ?",
             (username,)
         )
         row = cursor.fetchone()
-        if row:
-            u_id = row[0] if psql else row['id']
-            bonus_amount = 0.0
-            if bonus_id:
-                q = "SELECT bonus_percent, bonus_fixed, min_deposit FROM bonuses WHERE id = %s AND active = TRUE" if psql                     else "SELECT bonus_percent, bonus_fixed, min_deposit FROM bonuses WHERE id = ? AND active = 1"
-                cursor.execute(q, (bonus_id,))
-                b = cursor.fetchone()
-                if b:
-                    bp = float(b[0] if psql else b['bonus_percent'] or 0)
-                    bf = float(b[1] if psql else b['bonus_fixed'] or 0)
-                    bonus_amount = round(amount * bp / 100 + bf, 2)
-            if psql:
-                cursor.execute(
-                    "INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (%s,%s,%s,%s,%s)",
-                    (u_id, username, amount, bonus_id, bonus_amount)
-                )
-            else:
-                cursor.execute(
-                    "INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (?,?,?,?,?)",
-                    (u_id, username, amount, bonus_id, bonus_amount)
-                )
-            conn.commit()
+        if not row:
+            return RedirectResponse(url=PAY_URL, status_code=302)
+
+        u_id = row[0] if psql else row['id']
+        bonus_amount = 0.0
+
+        if bonus_id:
+            q = "SELECT bonus_percent, bonus_fixed FROM bonuses WHERE id = %s AND active = TRUE" if psql                 else "SELECT bonus_percent, bonus_fixed FROM bonuses WHERE id = ? AND active = 1"
+            cursor.execute(q, (bonus_id,))
+            b = cursor.fetchone()
+            if b:
+                bp = float((b[0] if psql else b['bonus_percent']) or 0)
+                bf = float((b[1] if psql else b['bonus_fixed']) or 0)
+                bonus_amount = round(amount * bp / 100 + bf, 2)
+
+        if psql:
+            cursor.execute(
+                "INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (%s,%s,%s,%s,%s)",
+                (u_id, username, float(amount), bonus_id, bonus_amount)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO deposit_requests (user_id, username, amount, bonus_id, bonus_amount) VALUES (?,?,?,?,?)",
+                (u_id, username, float(amount), bonus_id, bonus_amount)
+            )
+        conn.commit()
     except Exception as e:
-        print(f"[PAY_REDIRECT] errore (non bloccante): {e}")
+        print(f"[PAY_REDIRECT] {e}")
     finally:
-        try: conn.close()
-        except: pass
+        if conn:
+            try: conn.close()
+            except: pass
     return RedirectResponse(url=PAY_URL, status_code=302)
 
 @app.get("/api/admin/deposits", dependencies=[Depends(check_admin)])
