@@ -2869,6 +2869,23 @@ window.matchDetail = {
         document.getElementById('md-away').innerText = event.away_team;
         document.getElementById('md-date').innerText = `${dateStr} — ${timeStr}`;
 
+        // Ricostruisci tab bar via JS (garantisce layout cross-browser)
+        const tabBar = document.getElementById('md-tab-bar');
+        if (tabBar) {
+            const tabs = [
+                {key:'principali', label:'Principali'},
+                {key:'tempi',      label:'Tempi'},
+                {key:'handicap',   label:'Handicap'},
+                {key:'combo',      label:'Combo'},
+                {key:'multigol',   label:'Multigol'},
+                {key:'tutto',      label:'Tutto'},
+            ];
+            tabBar.innerHTML = tabs.map(t => `
+                <button class="md-tab-btn" data-tab="${t.key}" onclick="matchDetail.switchTab('${t.key}')"
+                    style="display:inline-block;white-space:nowrap;padding:8px 18px;border-radius:20px;border:none;cursor:pointer;font-size:0.82rem;font-weight:${t.key==='principali'?'700':'500'};background:${t.key==='principali'?'var(--accent)':'rgba(255,255,255,0.08)'};color:${t.key==='principali'?'#0a0a1a':'var(--text-secondary)'};flex:0 0 auto;min-width:max-content;transition:all 0.2s;">${t.label}</button>
+            `).join('');
+        }
+
         // Mostra schermata
         oddsSection.classList.add('hidden');
         section.classList.remove('hidden');
@@ -2892,7 +2909,7 @@ window.matchDetail = {
         // Aggiorna stile bottoni tab
         document.querySelectorAll('.md-tab-btn').forEach(btn => {
             const isActive = btn.dataset.tab === tab;
-            btn.style.background = isActive ? 'var(--accent)' : 'rgba(255,255,255,0.07)';
+            btn.style.background = isActive ? 'var(--accent)' : 'rgba(255,255,255,0.08)';
             btn.style.color = isActive ? '#0a0a1a' : 'var(--text-secondary)';
             btn.style.fontWeight = isActive ? '700' : '500';
         });
