@@ -2710,85 +2710,35 @@ window.profile = {
 
         const PAY_URL = 'https://pay.sumup.com/b2c/QEAW96U8';
 
-        // Rileva mobile/iPhone — su mobile il popup esterno non è affidabile
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-        // STRATEGIA:
-        // Desktop: apre una nuova tab subito (prima dell'await) poi la naviga
-        // Mobile/iPhone: invia la richiesta in background, poi reindirizza la pagina corrente
-        //   Il backend ha già salvato la richiesta → tornare indietro non è un problema
-
-        let payWin = null;
-
-        if (!isMobile) {
-            // Desktop: apri tab subito prima dell'await (Safari desktop supporta questo)
-            payWin = window.open('about:blank', '_blank');
-            if (payWin) {
-                payWin.document.write(
-                    '<html><head><title>Pagamento in corso...</title>' +
-                    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-                    '<style>body{font-family:sans-serif;display:flex;flex-direction:column;' +
-                    'align-items:center;justify-content:center;height:100vh;margin:0;' +
-                    'background:#0d1117;color:#fff;gap:12px;}' +
-                    'p{margin:0;}' +
-                    '</style></head>' +
-                    '<body><p style="font-size:1.3rem">⏳ Reindirizzamento...</p>' +
-                    '<p style="color:#aaa;font-size:0.85rem">Non chiudere questa finestra</p>' +
-                    '</body></html>'
-                );
-                payWin.document.close();
-            }
-        }
-
-        // Invia richiesta al backend
+        // Invia la richiesta al backend
         const res = await api.request('/deposit/request', {
             method: 'POST',
             body: JSON.stringify({ amount, bonus_id: this._selectedBonusId || null })
         });
 
-        if (!res) {
-            if (payWin && !payWin.closed) payWin.close();
-            return;
-        }
+        if (!res) return;
 
-        // Reset UI prima del redirect
+        // Reset UI
         if (amountEl) amountEl.value = '';
         this._selectedBonusId = null;
         this.closeDeposit();
 
-        const bonusMsg = parseFloat(res.bonus_amount||0) > 0
+        const bonusMsg = parseFloat(res.bonus_amount || 0) > 0
             ? '\n🎁 Bonus di €' + parseFloat(res.bonus_amount).toFixed(2) + ' verrà accreditato dopo approvazione.'
             : '';
 
-        if (isMobile) {
-            // Mobile: mostra messaggio poi reindirizza nella stessa pagina
-            // L'utente premer "back" tornerà al sito con il saldo aggiornato
-            alert('✅ ' + res.message + bonusMsg + '\n\nVerrai reindirizzato al pagamento.');
-            window.location.href = PAY_URL;
-        } else {
-            // Desktop: naviga la tab già aperta
-            if (payWin && !payWin.closed) {
-                try {
-                    payWin.location.href = PAY_URL;
-                } catch(e) {
-                    // Fallback Safari desktop
-                    payWin.document.open();
-                    payWin.document.write(
-                        '<html><head>' +
-                        '<meta http-equiv="refresh" content="0;url=' + PAY_URL + '">' +
-                        '</head><body style="background:#0d1117;color:#fff;display:flex;' +
-                        'align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">' +
-                        '<p>Reindirizzamento...</p>' +
-                        '</body></html>'
-                    );
-                    payWin.document.close();
-                }
-            } else {
-                // Tab chiusa: usa stessa pagina come mobile
-                window.location.href = PAY_URL;
-            }
-            alert('✅ ' + res.message + bonusMsg);
-        }
+        // Mostra conferma e apri il pagamento
+        // Usiamo un link <a> con click() — funziona su tutti i browser incluso Safari iOS
+        // perché avviene in risposta diretta a un'azione utente (il click sul bottone)
+        alert('✅ ' + res.message + bonusMsg + '\n\nPremi OK per andare al pagamento.');
+
+        const a = document.createElement('a');
+        a.href = PAY_URL;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => document.body.removeChild(a), 300);
     },
 
     async applyBonus(bonusId, amount) {
