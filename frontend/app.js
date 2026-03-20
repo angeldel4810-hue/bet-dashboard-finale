@@ -142,6 +142,21 @@ window.ui = {
     closeModal() {
         document.getElementById('modal-user').classList.add('hidden');
     },
+
+    showToast(msg, duration = 3500) {
+        const t = document.createElement('div');
+        t.textContent = msg;
+        t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);'
+            + 'background:rgba(20,30,48,0.97);color:#fff;padding:12px 22px;border-radius:12px;'
+            + 'font-size:0.9rem;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.5);'
+            + 'border:1px solid rgba(99,179,237,0.3);max-width:90vw;text-align:center;'
+            + 'transition:opacity 0.3s;pointer-events:none;';
+        document.body.appendChild(t);
+        setTimeout(() => {
+            t.style.opacity = '0';
+            setTimeout(() => { if (t.parentNode) t.parentNode.removeChild(t); }, 350);
+        }, duration);
+    },
     toggleExtra(id) {
         const el = document.getElementById(`extra-${id}`);
         if (el) el.classList.toggle('hidden');
@@ -2708,44 +2723,33 @@ window.profile = {
             return;
         }
 
-        const PAY_URL = 'https://pay.sumup.com/b2c/QEAW96U8';
+        // ── SOLUZIONE DEFINITIVA SAFARI iOS ─────────────────────────────────
+        // Il problema con window.open + await: Safari blocca qualsiasi
+        // navigazione JS su una finestra aperta dopo un'operazione asincrona.
+        //
+        // Soluzione: window.open('/api/pay?...', '_blank') — URL diretto al server.
+        // Il backend registra la ricarica E fa redirect 302 a SumUp in un colpo solo.
+        // È una navigazione pura: niente JS dopo l'open, niente await, niente blocchi.
+        // Funziona identicamente su Safari iOS, Chrome, Firefox, tutti i browser.
+        const token   = state.token || localStorage.getItem('token') || '';
+        const bonusId = this._selectedBonusId ? ('&bonus_id=' + this._selectedBonusId) : '';
+        const payUrl  = `/api/pay?amount=${encodeURIComponent(amount)}&token=${encodeURIComponent(token)}${bonusId}`;
 
-        // Safari iOS: window.open DEVE essere chiamato in modo sincrono
-        // dentro il gestore dell'evento utente (click sul bottone).
-        // Apriamo direttamente il PAY_URL — questo è il metodo più affidabile
-        // su tutti i browser. La finestra si apre subito, poi in background
-        // mandiamo la richiesta al backend per registrare la ricarica.
-        const payWin = window.open(PAY_URL, '_blank');
+        const payWin = window.open(payUrl, '_blank');
 
-        // Invia la richiesta al backend in background (non blocca il pagamento)
-        const res = await api.request('/deposit/request', {
-            method: 'POST',
-            body: JSON.stringify({ amount, bonus_id: this._selectedBonusId || null })
-        });
+        // Fallback: se Safari ha bloccato il popup, apri nella stessa scheda
+        if (!payWin || payWin.closed) {
+            window.location.href = payUrl;
+            return;
+        }
 
         // Reset UI
         if (amountEl) amountEl.value = '';
         this._selectedBonusId = null;
         this.closeDeposit();
 
-        if (!res) {
-            // Backend fallito ma la finestra è già aperta — avvisa l'utente
-            alert('⚠️ Problema di connessione. La ricarica verrà registrata manualmente.');
-            return;
-        }
-
-        // Se Safari ha bloccato il popup (payWin === null), apri nella stessa scheda
-        if (!payWin) {
-            window.location.href = PAY_URL;
-            return;
-        }
-
-        const bonusMsg = parseFloat(res.bonus_amount || 0) > 0
-            ? '\n🎁 Bonus di €' + parseFloat(res.bonus_amount).toFixed(2) + ' verrà accreditato dopo approvazione.'
-            : '';
-        alert('✅ ' + res.message + bonusMsg);
+        alert('✅ Ricarica registrata. Completa il pagamento nella finestra aperta.\n\nIl saldo verrà aggiornato dopo approvazione dell\'admin.');
     },
-
     async applyBonus(bonusId, amount) {
         const bonus = this._bonuses.find(b => b.id === bonusId);
         if (!bonus) return;
