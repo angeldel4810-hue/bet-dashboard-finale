@@ -2860,16 +2860,20 @@ window.matchDetail = {
     },
 
     _tabs: {
-        'principali': ['h2h', 'totals', 'btts', 'double_chance', 'draw_no_bet', 'correct_score'],
-        'tempi':      ['h2h_1st_half', 'h2h_2nd_half', 'totals_1st_half', 'totals_2nd_half'],
-        'handicap':   ['spreads', 'alternate_spreads', 'alternate_totals'],
-        'combo':      ['combo_1x2_btts','combo_1x2_ou','combo_dc_btts','combo_dc_ou','combo_dnb_btts','combo_dnb_ou','combo_1x2_btts_ou','combo_ht_btts','combo_ht_ou','combo_ou_btts','odd_even'],
-        'multigol':   ['multigol','multigol_home','multigol_away','total_goals_exact','combo_1x2_multigol','combo_dc_multigol','combo_multigol_btts','combo_ou_btts','combo_1x2_total_goals'],
-        'tutto':      null, // null = tutti i mercati
+        // Tab calcio
+        'principali': ['h2h', 'totals', 'btts', 'double_chance', 'draw_no_bet', 'correct_score', 'odd_even'],
+        'tempi':      ['h2h_1st_half', 'combo_ht_btts', 'combo_ht_ou'],
+        'handicap':   ['draw_no_bet', 'combo_dnb_btts', 'combo_dnb_ou'],
+        'combo':      ['combo_1x2_btts','combo_1x2_ou','combo_dc_btts','combo_dc_ou','combo_dnb_btts','combo_dnb_ou','combo_1x2_btts_ou','combo_ht_btts','combo_ht_ou','combo_ou_btts'],
+        'multigol':   ['multigol','multigol_home','multigol_away','total_goals_exact','combo_1x2_multigol','combo_dc_multigol','combo_multigol_btts','combo_1x2_total_goals'],
+        'tutto':      null,
+        // Tab tennis
+        'tennis_principali': ['h2h', 'set_spreads', 'set_totals', 'h2h_1st_half'],
+        'tennis_tutto':       null,
     },
 
     open(event) {
-        this._activeTab = 'principali';
+        // _activeTab viene impostato sotto dopo il rilevamento tennis
         const section = document.getElementById('section-match-detail');
         const oddsSection = document.getElementById('section-odds');
         if (!section || !oddsSection) return;
@@ -2886,12 +2890,19 @@ window.matchDetail = {
 
         // Reset stato dropdown per la nuova partita
         this._dropdownState = {};
-        this._activeTab = 'principali';
+
+        // Rileva se è tennis
+        const isTennis = ['tennis','atp','wta','itf','challenger']
+            .some(kw => (event.sport_title || '').toLowerCase().includes(kw));
+        this._activeTab = isTennis ? 'tennis_principali' : 'principali';
 
         // Ricostruisci tab bar via JS (garantisce layout cross-browser)
         const tabBar = document.getElementById('md-tab-bar');
         if (tabBar) {
-            const tabs = [
+            const tabs = isTennis ? [
+                {key:'tennis_principali', label:'Principali'},
+                {key:'tennis_tutto',      label:'Tutto'},
+            ] : [
                 {key:'principali', label:'Principali'},
                 {key:'tempi',      label:'Tempi'},
                 {key:'handicap',   label:'Handicap'},
