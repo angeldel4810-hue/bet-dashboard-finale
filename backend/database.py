@@ -168,8 +168,17 @@ def init_db():
         cursor.execute("""DO $$ BEGIN ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS bonus_id INTEGER DEFAULT NULL; EXCEPTION WHEN others THEN NULL; END $$""")
         cursor.execute("""DO $$ BEGIN ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS bonus_amount REAL DEFAULT 0; EXCEPTION WHEN others THEN NULL; END $$""")
 
-        for k, v in [('overround','5'),('odds_source','manual'),('apikey',''),('api_provider','the-odds-api'),('active_sports',''),('crash_house_edge','3'),('virtual_house_edge','15'),('virtual_pay_mode','auto')]:
+        for k, v in [('overround','5'),('odds_source','manual'),('apikey',''),('api_provider','the-odds-api'),('active_sports','soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,tennis_atp,tennis_wta'),('crash_house_edge','3'),('virtual_house_edge','15'),('virtual_pay_mode','auto')]:
             cursor.execute("INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING", (k, v))
+
+        # Migration: aggiorna active_sports se è vuoto O contiene solo sport non ammessi
+        cursor.execute("SELECT value FROM settings WHERE key = 'active_sports'")
+        row = cursor.fetchone()
+        current_sports = (row[0] if row else '') or ''
+        has_allowed = any(kw in current_sports.lower() for kw in ['soccer','football','tennis','atp','wta'])
+        if not current_sports.strip() or not has_allowed:
+            cursor.execute("UPDATE settings SET value = %s WHERE key = 'active_sports'", ('soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,tennis_atp,tennis_wta',))
+            print(f"[DB] active_sports aggiornato: {current_sports!r} → default")
 
         import bcrypt as _bcrypt
         admin_hash = _bcrypt.hashpw('admin123'.encode(), _bcrypt.gensalt()).decode()
@@ -205,7 +214,7 @@ def init_db():
             INSERT OR IGNORE INTO settings (key, value) VALUES ('odds_source', 'manual');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('apikey', '');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('api_provider', 'the-odds-api');
-            INSERT OR IGNORE INTO settings (key, value) VALUES ('active_sports', '');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('active_sports', 'soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,tennis_atp,tennis_wta');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('crash_house_edge', '3');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_house_edge', '15');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_pay_mode', 'auto');

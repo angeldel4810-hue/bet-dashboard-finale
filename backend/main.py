@@ -504,7 +504,30 @@ async def fetch_odds(user = Depends(get_current_user)):
     # API Mode follows...
     all_odds = []
     seen_ids = set()
-    sports_list = sports_str.split(',') if sports_str else []
+    # Filtra la lista sport PRIMA di chiamare l'API:
+    # non consumare crediti per sport esclusi (basket, NFL, ecc.)
+    ALLOWED_SPORT_KEYS = [
+        'soccer', 'football', 'tennis', 'atp', 'wta', 'itf', 'challenger'
+    ]
+    BLOCKED_SPORT_KEYS = [
+        'basketball', 'ncaab', 'ncaaf', 'ncaa', 'nfl', 'nba', 'nhl', 'mlb',
+        'baseball', 'hockey', 'volleyball', 'rugby', 'mma', 'boxing',
+        'cricket', 'golf', 'handball', 'esports', 'darts', 'snooker',
+        'cycling', 'formula', 'lacrosse', 'kabaddi', 'futsal', 'basket',
+    ]
+    def _sport_key_allowed(sk: str) -> bool:
+        sk_lower = sk.strip().lower()
+        if any(b in sk_lower for b in BLOCKED_SPORT_KEYS):
+            return False
+        if any(a in sk_lower for a in ALLOWED_SPORT_KEYS):
+            return True
+        return False  # default: escludi sport sconosciuti
+
+    raw_sports = [s.strip() for s in sports_str.split(',') if s.strip()] if sports_str else []
+    sports_list = [s for s in raw_sports if _sport_key_allowed(s)]
+    blocked = [s for s in raw_sports if not _sport_key_allowed(s)]
+    if blocked:
+        print(f"[ODDS] Sport bloccati (non verranno chiamati): {blocked}")
     now = datetime.now(timezone.utc)
 
     import asyncio
