@@ -844,11 +844,14 @@ window.dashboard = {
         const btn = (key, label, icon='') => {
             const isActive = active === key;
             return `<button onclick="dashboard.setLeagueFilter('${key}')" style="
-                white-space:nowrap; padding:6px 14px; border-radius:20px; border:none; cursor:pointer;
+                width:auto!important; display:inline-block!important; white-space:nowrap!important;
+                padding:6px 14px; border-radius:20px; border:none; cursor:pointer;
                 font-size:0.78rem; font-weight:${isActive?'700':'500'};
                 background:${isActive?'var(--accent)':'rgba(255,255,255,0.07)'};
+                background-image:none!important;
                 color:${isActive?'#0a0a1a':'var(--text-secondary)'};
-                transition:all 0.2s; flex-shrink:0;
+                transition:all 0.2s; flex-shrink:0; text-transform:none; letter-spacing:normal;
+                box-shadow:none;
             ">${icon}${label}</button>`;
         };
 
@@ -2882,7 +2885,7 @@ window.matchDetail = {
             ];
             tabBar.innerHTML = tabs.map(t => `
                 <button class="md-tab-btn" data-tab="${t.key}" onclick="matchDetail.switchTab('${t.key}')"
-                    style="display:inline-block;white-space:nowrap;padding:8px 18px;border-radius:20px;border:none;cursor:pointer;font-size:0.82rem;font-weight:${t.key==='principali'?'700':'500'};background:${t.key==='principali'?'var(--accent)':'rgba(255,255,255,0.08)'};color:${t.key==='principali'?'#0a0a1a':'var(--text-secondary)'};flex:0 0 auto;min-width:max-content;transition:all 0.2s;">${t.label}</button>
+                    style="width:auto!important;display:inline-block!important;white-space:nowrap!important;padding:8px 18px;border-radius:20px;border:none;cursor:pointer;font-size:0.82rem;font-weight:${t.key==='principali'?'700':'500'};background:${t.key==='principali'?'var(--accent)':'rgba(255,255,255,0.08)'};color:${t.key==='principali'?'#0a0a1a':'var(--text-secondary)'};flex:0 0 auto;min-width:max-content;transition:all 0.2s;text-transform:none;letter-spacing:normal;box-shadow:none;background-image:none;">${t.label}</button>
             `).join('');
         }
 

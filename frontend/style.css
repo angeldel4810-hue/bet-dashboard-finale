@@ -815,3 +815,60 @@ table tr:hover td {
     -webkit-overflow-scrolling: touch;
     overflow-y: auto;
 }
+
+/* ── Tab bar schermata dettaglio partita ── */
+#md-tab-bar::-webkit-scrollbar { display: none; }
+#md-tab-bar { -ms-overflow-style: none; }
+.md-tab-btn { display: inline-block !important; flex: 0 0 auto !important; white-space: nowrap !important; }
+
+/* ── Tab dettaglio partita — override width:100% globale ── */
+.md-tab-btn {
+    width: auto !important;
+    display: inline-block !important;
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    min-width: unset !important;
+    padding: 8px 18px !important;
+    border-radius: 20px !important;
+    font-size: 0.82rem !important;
+    background: rgba(255,255,255,0.08) !important;
+    color: var(--text-secondary) !important;
+    font-weight: 500 !important;
+    border: none !important;
+    cursor: pointer !important;
+    transition: all 0.2s !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    box-shadow: none !important;
+    background-image: none !important;
+}
+.md-tab-btn.active-tab,
+.md-tab-btn[data-tab="principali"]:first-child {
+    /* attivo via JS */
+}
+#md-tab-bar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    gap: 6px !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    padding: 4px 0 10px 0 !important;
+    margin-bottom: 1rem !important;
+}
+#md-tab-bar::-webkit-scrollbar { display: none !important; }
+
+/* ── Filtri lega — stessa fix ── */
+#league-filter-bar button {
+    width: auto !important;
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    display: inline-block !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    box-shadow: none !important;
+    background-image: none !important;
+}
