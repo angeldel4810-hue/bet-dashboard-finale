@@ -783,3 +783,35 @@ table tr:hover td {
     margin: 20px auto;
     flex-shrink: 0;
 }
+
+/* ── Filtri Lega ── */
+#league-filter-bar::-webkit-scrollbar { display: none; }
+#league-filter-bar button:hover { opacity: 0.85; transform: translateY(-1px); }
+
+/* ── Schermata Dettaglio Partita ── */
+#section-match-detail { animation: fadeInUp 0.22s ease; }
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+#md-markets-container .price-row:hover {
+    background: rgba(99,179,237,0.08) !important;
+    border-color: rgba(99,179,237,0.3) !important;
+}
+#md-markets-container .price-row.selected {
+    background: rgba(99,179,237,0.15) !important;
+    border-color: var(--accent) !important;
+}
+
+/* Nascondi scrollbar tab menu partita su webkit */
+#section-match-detail > div:nth-child(2)::-webkit-scrollbar { display: none; }
+
+/* iOS Safari smooth scroll per barre orizzontali */
+#league-filter-bar,
+#section-match-detail > div:nth-child(2) {
+    -webkit-overflow-scrolling: touch;
+}
+#md-markets-container {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+}
