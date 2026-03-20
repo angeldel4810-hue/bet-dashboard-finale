@@ -2710,35 +2710,40 @@ window.profile = {
 
         const PAY_URL = 'https://pay.sumup.com/b2c/QEAW96U8';
 
-        // Invia la richiesta al backend
+        // Safari iOS: window.open DEVE essere chiamato in modo sincrono
+        // dentro il gestore dell'evento utente (click sul bottone).
+        // Apriamo direttamente il PAY_URL — questo è il metodo più affidabile
+        // su tutti i browser. La finestra si apre subito, poi in background
+        // mandiamo la richiesta al backend per registrare la ricarica.
+        const payWin = window.open(PAY_URL, '_blank');
+
+        // Invia la richiesta al backend in background (non blocca il pagamento)
         const res = await api.request('/deposit/request', {
             method: 'POST',
             body: JSON.stringify({ amount, bonus_id: this._selectedBonusId || null })
         });
-
-        if (!res) return;
 
         // Reset UI
         if (amountEl) amountEl.value = '';
         this._selectedBonusId = null;
         this.closeDeposit();
 
+        if (!res) {
+            // Backend fallito ma la finestra è già aperta — avvisa l'utente
+            alert('⚠️ Problema di connessione. La ricarica verrà registrata manualmente.');
+            return;
+        }
+
+        // Se Safari ha bloccato il popup (payWin === null), apri nella stessa scheda
+        if (!payWin) {
+            window.location.href = PAY_URL;
+            return;
+        }
+
         const bonusMsg = parseFloat(res.bonus_amount || 0) > 0
             ? '\n🎁 Bonus di €' + parseFloat(res.bonus_amount).toFixed(2) + ' verrà accreditato dopo approvazione.'
             : '';
-
-        // Mostra conferma e apri il pagamento
-        // Usiamo un link <a> con click() — funziona su tutti i browser incluso Safari iOS
-        // perché avviene in risposta diretta a un'azione utente (il click sul bottone)
-        alert('✅ ' + res.message + bonusMsg + '\n\nPremi OK per andare al pagamento.');
-
-        const a = document.createElement('a');
-        a.href = PAY_URL;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => document.body.removeChild(a), 300);
+        alert('✅ ' + res.message + bonusMsg);
     },
 
     async applyBonus(bonusId, amount) {
