@@ -2710,27 +2710,37 @@ window.profile = {
 
         const PAY_URL = 'https://pay.sumup.com/b2c/QEAW96U8';
 
-        // 1. Apri la finestra SUBITO — prima di qualsiasi await
-        //    Safari blocca window.open() se chiamato dopo operazioni async.
-        //    Usiamo meta refresh invece di location.href: Safari lo considera
-        //    navigazione interna alla finestra già aperta, non un nuovo popup.
-        const payWin = window.open('', '_blank');
-        if (payWin) {
-            payWin.document.write(
-                '<html><head>' +
-                '<title>Reindirizzamento pagamento...</title>' +
-                '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-                '</head><body style="font-family:sans-serif;display:flex;flex-direction:column;' +
-                'align-items:center;justify-content:center;height:100vh;margin:0;' +
-                'background:#1a1a2e;color:#fff;gap:16px;">' +
-                '<p style="font-size:1.2rem;margin:0;">⏳ Reindirizzamento al pagamento...</p>' +
-                '<p style="font-size:0.85rem;color:#aaa;margin:0;">Non chiudere questa finestra</p>' +
-                '</body></html>'
-            );
-            payWin.document.close();
+        // Rileva mobile/iPhone — su mobile il popup esterno non è affidabile
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+        // STRATEGIA:
+        // Desktop: apre una nuova tab subito (prima dell'await) poi la naviga
+        // Mobile/iPhone: invia la richiesta in background, poi reindirizza la pagina corrente
+        //   Il backend ha già salvato la richiesta → tornare indietro non è un problema
+
+        let payWin = null;
+
+        if (!isMobile) {
+            // Desktop: apri tab subito prima dell'await (Safari desktop supporta questo)
+            payWin = window.open('about:blank', '_blank');
+            if (payWin) {
+                payWin.document.write(
+                    '<html><head><title>Pagamento in corso...</title>' +
+                    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+                    '<style>body{font-family:sans-serif;display:flex;flex-direction:column;' +
+                    'align-items:center;justify-content:center;height:100vh;margin:0;' +
+                    'background:#0d1117;color:#fff;gap:12px;}' +
+                    'p{margin:0;}' +
+                    '</style></head>' +
+                    '<body><p style="font-size:1.3rem">⏳ Reindirizzamento...</p>' +
+                    '<p style="color:#aaa;font-size:0.85rem">Non chiudere questa finestra</p>' +
+                    '</body></html>'
+                );
+                payWin.document.close();
+            }
         }
 
-        // 2. Invia richiesta al backend
+        // Invia richiesta al backend
         const res = await api.request('/deposit/request', {
             method: 'POST',
             body: JSON.stringify({ amount, bonus_id: this._selectedBonusId || null })
@@ -2741,32 +2751,7 @@ window.profile = {
             return;
         }
 
-        // 3. Reindirizza — metodo universale cross-browser incluso Safari
-        if (payWin && !payWin.closed) {
-            // Prima prova location.href (funziona su Chrome/Firefox)
-            try {
-                payWin.location.href = PAY_URL;
-            } catch(e) {
-                // Safari fallback: riscrivi la pagina con meta refresh immediato
-                payWin.document.open();
-                payWin.document.write(
-                    '<html><head>' +
-                    '<meta http-equiv="refresh" content="0;url=' + PAY_URL + '">' +
-                    '<title>Reindirizzamento...</title>' +
-                    '</head><body style="font-family:sans-serif;display:flex;align-items:center;' +
-                    'justify-content:center;height:100vh;margin:0;background:#1a1a2e;color:#fff;">' +
-                    '<p>Reindirizzamento...</p>' +
-                    '<script>window.location.replace("' + PAY_URL + '")<\/script>' +
-                    '</body></html>'
-                );
-                payWin.document.close();
-            }
-        } else {
-            // Finestra chiusa dall'utente: apri link direttamente nella pagina corrente
-            window.location.href = PAY_URL;
-        }
-
-        // 4. Reset e chiudi modal
+        // Reset UI prima del redirect
         if (amountEl) amountEl.value = '';
         this._selectedBonusId = null;
         this.closeDeposit();
@@ -2774,7 +2759,36 @@ window.profile = {
         const bonusMsg = parseFloat(res.bonus_amount||0) > 0
             ? '\n🎁 Bonus di €' + parseFloat(res.bonus_amount).toFixed(2) + ' verrà accreditato dopo approvazione.'
             : '';
-        alert('✅ ' + res.message + bonusMsg);
+
+        if (isMobile) {
+            // Mobile: mostra messaggio poi reindirizza nella stessa pagina
+            // L'utente premer "back" tornerà al sito con il saldo aggiornato
+            alert('✅ ' + res.message + bonusMsg + '\n\nVerrai reindirizzato al pagamento.');
+            window.location.href = PAY_URL;
+        } else {
+            // Desktop: naviga la tab già aperta
+            if (payWin && !payWin.closed) {
+                try {
+                    payWin.location.href = PAY_URL;
+                } catch(e) {
+                    // Fallback Safari desktop
+                    payWin.document.open();
+                    payWin.document.write(
+                        '<html><head>' +
+                        '<meta http-equiv="refresh" content="0;url=' + PAY_URL + '">' +
+                        '</head><body style="background:#0d1117;color:#fff;display:flex;' +
+                        'align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">' +
+                        '<p>Reindirizzamento...</p>' +
+                        '</body></html>'
+                    );
+                    payWin.document.close();
+                }
+            } else {
+                // Tab chiusa: usa stessa pagina come mobile
+                window.location.href = PAY_URL;
+            }
+            alert('✅ ' + res.message + bonusMsg);
+        }
     },
 
     async applyBonus(bonusId, amount) {
