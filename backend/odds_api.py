@@ -96,6 +96,13 @@ def _simulate_markets(event: Dict[str, Any]):
 
     M = HOUSE_EDGE
 
+    # Stima lambda casa e ospite — usato da tutti i mercati con correlazione
+    lam_h = lam_a = None
+    if lam is not None and ph is not None and pa is not None:
+        ratio_h = ph / max(0.01, ph + pa)
+        lam_h = max(0.3, min(3.5, lam * ratio_h * 1.05))
+        lam_a = max(0.2, min(2.5, lam * (1.0 - ratio_h) * 0.95))
+
     # 1. DOUBLE CHANCE
     if 'double_chance' not in m_keys and ph is not None:
         add("double_chance", [
@@ -169,36 +176,51 @@ def _simulate_markets(event: Dict[str, Any]):
             cs_outcomes.append({"name": s, "price": min(66.0, max(1.05, round(1.0 / (p * M), 2)))})
         add("correct_score", cs_outcomes)
 
-    # 7. COMBO 1X2 + GG/NG
-    if 'combo_1x2_btts' not in m_keys and ph is not None:
-        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
-        gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None) if btts_m else None
-        ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None) if btts_m else None
-        if gg_q and ng_q:
-            combos = []
-            for rn, rq in [("1", h_q), ("X", x_q), ("2", a_q)]:
-                for bn, bq in [("GG", gg_q), ("NG", ng_q)]:
-                    combos.append({"name": f"{rn}+{bn}", "price": max(1.05, round(rq * bq / M, 2))})
-            add("combo_1x2_btts", combos)
+    # 7. COMBO 1X2 + GG/NG — Poisson bivariata per correlazione reale
+    # (se vince "1" con GG, significa che l'ospite ha segnato almeno 1 → correlazione forte)
+    if 'combo_1x2_btts' not in m_keys and ph is not None and lam_h is not None:
+        combos_1x2_btts = []
+        for hg in range(10):
+            for ag in range(10):
+                p = _poisson(lam_h, hg) * _poisson(lam_a, ag)
+                res = "1" if hg > ag else ("X" if hg == ag else "2")
+                gg  = hg > 0 and ag > 0
+                key_name = f"{res}+{'GG' if gg else 'NG'}"
+                # accumula probs
+                existing = next((c for c in combos_1x2_btts if c['name']==key_name), None)
+                if existing: existing['_p'] += p
+                else: combos_1x2_btts.append({'name': key_name, '_p': p})
+        # Converti in quote
+        final = []
+        for c in combos_1x2_btts:
+            if c['_p'] > 0.005:
+                final.append({"name": c['name'], "price": max(1.05, round(1.0/(c['_p']*M), 2))})
+        # Ordine canonico: 1+GG, 1+NG, X+GG, X+NG, 2+GG, 2+NG
+        order = ["1+GG","1+NG","X+GG","X+NG","2+GG","2+NG"]
+        final.sort(key=lambda x: order.index(x['name']) if x['name'] in order else 99)
+        if final:
+            add("combo_1x2_btts", final)
 
-    # 8. COMBO 1X2 + OVER/UNDER (tutte le linee disponibili)
-    if 'combo_1x2_ou' not in m_keys and ph is not None and totals:
-        lines_dict: Dict[float, Dict] = {}
+    # 8. COMBO 1X2 + OVER/UNDER — Poisson bivariata per correlazione
+    if 'combo_1x2_ou' not in m_keys and ph is not None and lam_h is not None and totals:
+        lines_set = set()
         for o in totals['outcomes']:
             pt = o.get('point')
-            if pt is None:
-                continue
-            pt = float(pt)
-            lines_dict.setdefault(pt, {})
-            if 'Over'  in str(o['name']): lines_dict[pt]['over']  = o['price']
-            if 'Under' in str(o['name']): lines_dict[pt]['under'] = o['price']
+            if pt is not None: lines_set.add(float(pt))
         combos_ou = []
-        for pt in sorted(lines_dict.keys()):
-            ov_q = lines_dict[pt].get('over')
-            un_q = lines_dict[pt].get('under')
-            for rn, rq in [("1", h_q), ("X", x_q), ("2", a_q)]:
-                if ov_q: combos_ou.append({"name": f"{rn}+Over {pt}",  "price": max(1.05, round(rq * ov_q / M, 2)), "point": pt})
-                if un_q: combos_ou.append({"name": f"{rn}+Under {pt}", "price": max(1.05, round(rq * un_q / M, 2)), "point": pt})
+        for pt in sorted(lines_set):
+            # accumula P(res AND over/under) via Poisson
+            acc = {"1_over":0,"1_under":0,"X_over":0,"X_under":0,"2_over":0,"2_under":0}
+            for hg in range(10):
+                for ag in range(10):
+                    p = _poisson(lam_h, hg) * _poisson(lam_a, ag)
+                    res = "1" if hg>ag else ("X" if hg==ag else "2")
+                    is_over = (hg+ag) > pt
+                    acc[f"{res}_{'over' if is_over else 'under'}"] += p
+            for rn in ["1","X","2"]:
+                p_ov = acc[f"{rn}_over"];  p_un = acc[f"{rn}_under"]
+                if p_ov > 0.003: combos_ou.append({"name": f"{rn}+Over {pt}",  "price": max(1.05, min(99.0, round(1.0/(p_ov*M),2))), "point": pt})
+                if p_un > 0.003: combos_ou.append({"name": f"{rn}+Under {pt}", "price": max(1.05, min(99.0, round(1.0/(p_un*M),2))), "point": pt})
         if combos_ou:
             add("combo_1x2_ou", combos_ou)
 
@@ -231,21 +253,23 @@ def _simulate_markets(event: Dict[str, Any]):
                     combos.append({"name": f"{dcn}+NG", "price": max(1.05, round(dcq * ng_q / M, 2))})
                 add("combo_dc_btts", combos)
 
-    # 10. DOPPIA CHANCE + OVER/UNDER
-    if 'combo_dc_ou' not in m_keys and ph is not None:
-        dc_m = next((m for m in m_list if m['key'] == 'double_chance'), None)
-        if dc_m:
-            ld = _build_lines()
-            combos = []
-            for pt in sorted(ld.keys()):
-                ov_q = ld[pt].get('over')
-                un_q = ld[pt].get('under')
-                for dc_o in dc_m['outcomes']:
-                    dcn, dcq = dc_o['name'], dc_o['price']
-                    if ov_q: combos.append({"name": f"{dcn}+Over {pt}",  "price": max(1.05, round(dcq * ov_q / M, 2)), "point": pt})
-                    if un_q: combos.append({"name": f"{dcn}+Under {pt}", "price": max(1.05, round(dcq * un_q / M, 2)), "point": pt})
-            if combos:
-                add("combo_dc_ou", combos)
+    # 10. DOPPIA CHANCE + OVER/UNDER — Poisson bivariata
+    if 'combo_dc_ou' not in m_keys and ph is not None and lam_h is not None:
+        dc_map = {"1X": lambda hg,ag: hg>=ag, "X2": lambda hg,ag: hg<=ag, "12": lambda hg,ag: hg!=ag}
+        combos = []
+        for pt in [1.5, 2.5, 3.5, 4.5]:
+            for dcn, dc_fn in dc_map.items():
+                p_ov = p_un = 0.0
+                for hg in range(10):
+                    for ag in range(10):
+                        p = _poisson(lam_h,hg)*_poisson(lam_a,ag)
+                        if dc_fn(hg,ag):
+                            if (hg+ag)>pt: p_ov+=p
+                            else: p_un+=p
+                if p_ov>0.003: combos.append({"name":f"{dcn}+Over {pt}", "price":max(1.05,min(99.0,round(1.0/(p_ov*M),2))),"point":pt})
+                if p_un>0.003: combos.append({"name":f"{dcn}+Under {pt}","price":max(1.05,min(99.0,round(1.0/(p_un*M),2))),"point":pt})
+        if combos:
+            add("combo_dc_ou", combos)
 
     # 11. DRAW NO BET + GG/NG
     if 'combo_dnb_btts' not in m_keys and ph is not None:
@@ -262,21 +286,25 @@ def _simulate_markets(event: Dict[str, Any]):
                     combos.append({"name": f"{dn}+No Goal", "price": max(1.05, round(dq * ng_q / M, 2))})
                 add("combo_dnb_btts", combos)
 
-    # 12. DRAW NO BET + OVER/UNDER
-    if 'combo_dnb_ou' not in m_keys and ph is not None:
-        dnb_m = next((m for m in m_list if m['key'] == 'draw_no_bet'), None)
-        if dnb_m:
-            ld = _build_lines()
-            combos = []
-            for pt in sorted(ld.keys()):
-                ov_q = ld[pt].get('over')
-                un_q = ld[pt].get('under')
-                for dnb_o in dnb_m['outcomes']:
-                    dn, dq = dnb_o['name'], dnb_o['price']
-                    if ov_q: combos.append({"name": f"{dn}+Over {pt}",  "price": max(1.05, round(dq * ov_q / M, 2)), "point": pt})
-                    if un_q: combos.append({"name": f"{dn}+Under {pt}", "price": max(1.05, round(dq * un_q / M, 2)), "point": pt})
-            if combos:
-                add("combo_dnb_ou", combos)
+    # 12. DRAW NO BET + OVER/UNDER — Poisson bivariata
+    if 'combo_dnb_ou' not in m_keys and ph is not None and lam_h is not None:
+        # DNB: home_team = casa vince (hg>ag), away_team = ospite vince (ag>hg)
+        ht = event.get('home_team',''); at = event.get('away_team','')
+        dnb_map = {ht: lambda hg,ag: hg>ag, at: lambda hg,ag: ag>hg}
+        combos = []
+        for pt in [1.5, 2.5, 3.5, 4.5]:
+            for dn, dnb_fn in dnb_map.items():
+                p_ov = p_un = 0.0
+                for hg in range(10):
+                    for ag in range(10):
+                        p = _poisson(lam_h,hg)*_poisson(lam_a,ag)
+                        if dnb_fn(hg,ag):
+                            if (hg+ag)>pt: p_ov+=p
+                            else: p_un+=p
+                if p_ov>0.003: combos.append({"name":f"{dn}+Over {pt}", "price":max(1.05,min(99.0,round(1.0/(p_ov*M),2))),"point":pt})
+                if p_un>0.003: combos.append({"name":f"{dn}+Under {pt}","price":max(1.05,min(99.0,round(1.0/(p_un*M),2))),"point":pt})
+        if combos:
+            add("combo_dnb_ou", combos)
 
     # 13. TRIPLA COMBO: 1X2 + GG/NG + OVER/UNDER 2.5
     if 'combo_1x2_btts_ou' not in m_keys and ph is not None:
@@ -349,13 +377,6 @@ def _simulate_markets(event: Dict[str, Any]):
         """P(squadra segna >= lo gol)."""
         return max(0.005, 1.0 - sum(_poisson(lam_x, k) for k in range(0, lo)))
 
-    # Stima lambda casa e ospite dai ratio della quota h2h
-    lam_h = lam_a = None
-    if lam is not None and ph is not None:
-        ratio_h = ph / max(0.01, ph + pa)
-        lam_h = max(0.3, min(3.5, lam * ratio_h * 1.05))
-        lam_a = max(0.2, min(2.5, lam * (1.0 - ratio_h) * 0.95))
-
     # ─── 17. MULTIGOL TOTALE (tutti i range sensati) ─────────────────────────
     if 'multigol' not in m_keys and lam is not None:
         ranges = [
@@ -369,7 +390,7 @@ def _simulate_markets(event: Dict[str, Any]):
         mg_outcomes = []
         for label, lo, hi in ranges:
             p = _p_range(lam, lo, hi)
-            mg_outcomes.append({"name": f"Multigol {label}", "price": max(1.05, round(1.0 / (p * M), 2))})
+            mg_outcomes.append({"name": f"Multigol {label}", "price": max(1.05, min(99.0, round(1.0 / (p * M), 2)))})
         add("multigol", mg_outcomes)
 
     # ─── 18. MULTIGOL CASA (gol segnati dalla squadra di casa) ───────────────
@@ -439,42 +460,51 @@ def _simulate_markets(event: Dict[str, Any]):
                 add("combo_dc_multigol", combos)
 
     # ─── 22. COMBO OVER/UNDER + GG/NG ────────────────────────────────────────
-    if 'combo_ou_btts' not in m_keys and lam is not None:
-        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
-        if btts_m and totals:
-            gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
-            ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
-            if gg_q and ng_q:
-                ld = _build_lines()
-                combos = []
-                for pt in sorted(ld.keys()):
-                    ov_q = ld[pt].get('over')
-                    un_q = ld[pt].get('under')
-                    if ov_q:
-                        combos.append({"name": f"Over {pt}+GG",      "price": max(1.05, round(ov_q * gg_q / M, 2)), "point": pt})
-                        combos.append({"name": f"Over {pt}+No Goal", "price": max(1.05, round(ov_q * ng_q / M, 2)), "point": pt})
-                    if un_q:
-                        combos.append({"name": f"Under {pt}+GG",      "price": max(1.05, round(un_q * gg_q / M, 2)), "point": pt})
-                        combos.append({"name": f"Under {pt}+No Goal", "price": max(1.05, round(un_q * ng_q / M, 2)), "point": pt})
-                if combos:
-                    add("combo_ou_btts", combos)
+    # Usa simulazione Poisson bivariata per catturare la correlazione reale
+    # (Over 2.5+GG e Under 2.5+NG sono correlati positivamente — non indipendenti)
+    if 'combo_ou_btts' not in m_keys and lam_h is not None and lam_a is not None:
+        combos = []
+        for pt in [1.5, 2.5, 3.5, 4.5]:
+            # Calcola P(Over pt AND GG), P(Over pt AND NG), P(Under pt AND GG), P(Under pt AND NG)
+            p_gg_over = p_ng_over = p_gg_under = p_ng_under = 0.0
+            for hg in range(10):
+                for ag in range(10):
+                    p = _poisson(lam_h, hg) * _poisson(lam_a, ag)
+                    is_over = (hg + ag) > pt
+                    is_gg   = hg > 0 and ag > 0
+                    if is_over and is_gg:     p_gg_over  += p
+                    elif is_over and not is_gg: p_ng_over  += p
+                    elif not is_over and is_gg: p_gg_under += p
+                    else:                       p_ng_under += p
+            # Quote con margine
+            def _safe_q(p): return max(1.05, min(99.0, round(1.0 / (p * M), 2))) if p > 0.005 else None
+            q_go = _safe_q(p_gg_over);  q_no = _safe_q(p_ng_over)
+            q_gu = _safe_q(p_gg_under); q_nu = _safe_q(p_ng_under)
+            if q_go:  combos.append({"name": f"Over {pt}+GG",      "price": q_go,  "point": pt})
+            if q_no:  combos.append({"name": f"Over {pt}+No Goal", "price": q_no,  "point": pt})
+            if q_gu:  combos.append({"name": f"Under {pt}+GG",     "price": q_gu,  "point": pt})
+            if q_nu:  combos.append({"name": f"Under {pt}+No Goal","price": q_nu,  "point": pt})
+        if combos:
+            add("combo_ou_btts", combos)
 
-    # ─── 23. MULTIGOL + GG/NG ────────────────────────────────────────────────
-    if 'combo_multigol_btts' not in m_keys and lam is not None:
-        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
-        if btts_m:
-            gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
-            ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
-            if gg_q and ng_q:
-                ranges_mg = [("1-2", 1, 2), ("2-3", 2, 3), ("1-3", 1, 3), ("2-4", 2, 4), ("3-5", 3, 5), ("3+", 3, 12)]
-                combos = []
-                for label, lo, hi in ranges_mg:
-                    p_mg = _p_range(lam, lo, hi)
-                    q_mg = max(1.05, round(1.0 / (p_mg * M), 2))
-                    combos.append({"name": f"Multigol {label}+GG",      "price": max(1.05, round(q_mg * gg_q / M, 2))})
-                    combos.append({"name": f"Multigol {label}+No Goal", "price": max(1.05, round(q_mg * ng_q / M, 2))})
-                if combos:
-                    add("combo_multigol_btts", combos)
+    # ─── 23. MULTIGOL + GG/NG — Poisson bivariata ──────────────────────────
+    if 'combo_multigol_btts' not in m_keys and lam_h is not None:
+        ranges_mg = [("1-2",1,2),("2-3",2,3),("1-3",1,3),("2-4",2,4),("3-5",3,5),("3+",3,12)]
+        combos = []
+        for label, lo, hi in ranges_mg:
+            p_gg = p_ng = 0.0
+            for hg in range(10):
+                for ag in range(10):
+                    p = _poisson(lam_h, hg) * _poisson(lam_a, ag)
+                    total = hg + ag
+                    in_range = lo <= total <= hi
+                    is_gg = hg > 0 and ag > 0
+                    if in_range and is_gg:     p_gg += p
+                    elif in_range and not is_gg: p_ng += p
+            if p_gg > 0.003: combos.append({"name": f"Multigol {label}+GG",      "price": max(1.05, round(1.0/(p_gg*M),2))})
+            if p_ng > 0.003: combos.append({"name": f"Multigol {label}+No Goal", "price": max(1.05, round(1.0/(p_ng*M),2))})
+        if combos:
+            add("combo_multigol_btts", combos)
 
     # ─── 24. GOL ESATTI TOTALI (0..6+) ───────────────────────────────────────
     if 'total_goals_exact' not in m_keys and lam is not None:
@@ -513,6 +543,88 @@ def _simulate_markets(event: Dict[str, Any]):
         if combos:
             add("combo_1x2_total_goals", combos)
 
+
+
+
+def _is_tennis_event(event: Dict[str, Any]) -> bool:
+    sport = (event.get('sport_title') or event.get('sport_key') or '').lower()
+    return any(kw in sport for kw in ['tennis','atp','wta','itf','challenger'])
+
+def _simulate_tennis_markets(event: Dict[str, Any]):
+    """Genera mercati tennis: vincitore partita, handicap set, over/under game."""
+    if not event.get('bookmakers'):
+        return
+    m_list = event['bookmakers'][0].get('markets', [])
+    m_keys = {m['key'] for m in m_list}
+    M = HOUSE_EDGE
+
+    def add(key, outcomes):
+        m_list.append({"key": key, "outcomes": outcomes, "_simulated": True})
+
+    # Quote base dalla h2h (vincitore partita)
+    h2h = next((m for m in m_list if m['key'] == 'h2h'), None)
+    if not h2h:
+        return
+
+    h_q = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['home_team']), None)
+    a_q = next((o['price'] for o in h2h['outcomes'] if o['name'] == event['away_team']), None)
+    if not h_q or not a_q:
+        return
+
+    ph = 1.0 / h_q
+    pa = 1.0 / a_q
+    tot = ph + pa
+    ph /= tot; pa /= tot
+
+    # 1. HANDICAP SET (+1.5 / -1.5) — simulato
+    if 'set_spreads' not in m_keys:
+        # Stima P(vince 2-0) vs P(vince 2-1) per calcolare l'handicap
+        # Modello: P(home vince set) proporzionale a ph
+        p_set_h = min(0.92, max(0.08, ph * 0.85 + 0.075))  # calibrato
+        p_set_a = 1.0 - p_set_h
+
+        # Bo3: P(2-0) = p^2, P(2-1) = 2*p*(1-p)*p, P(1-2) = ..., P(0-2) = (1-p)^2
+        p_home_20 = p_set_h ** 2
+        p_home_21 = 2 * p_set_h * p_set_a * p_set_h
+        p_away_20 = p_set_a ** 2
+        p_away_21 = 2 * p_set_a * p_set_h * p_set_a
+
+        # -1.5 set home = home vince SENZA perdere un set (2-0)
+        # +1.5 set home = home vince ANCHE perdendo un set, O perde entrambi i set ≤ 2
+        p_h_minus15 = p_home_20  # casa vince 2-0
+        p_a_minus15 = p_away_20  # ospite vince 2-0
+        p_h_plus15  = p_home_20 + p_home_21 + p_away_21  # casa perde max 1 set, oppure ospite vince 2-1
+        p_a_plus15  = p_away_20 + p_away_21 + p_home_21
+
+        add("set_spreads", [
+            {"name": f"{event['home_team']} -1.5",  "price": max(1.05, round(1.0/(p_h_minus15*M), 2)), "point": -1.5},
+            {"name": f"{event['home_team']} +1.5",  "price": max(1.05, round(1.0/(p_h_plus15*M), 2)),  "point": 1.5},
+            {"name": f"{event['away_team']} -1.5",  "price": max(1.05, round(1.0/(p_a_minus15*M), 2)), "point": -1.5},
+            {"name": f"{event['away_team']} +1.5",  "price": max(1.05, round(1.0/(p_a_plus15*M), 2)),  "point": 1.5},
+        ])
+
+    # 2. TOTALE SET (Over/Under 2.5) — Bo3
+    if 'set_totals' not in m_keys:
+        p_set_h = min(0.92, max(0.08, ph * 0.85 + 0.075))
+        p_set_a = 1.0 - p_set_h
+        # 2 set = una squadra vince 2-0
+        p_2sets = p_set_h**2 + p_set_a**2
+        # 3 set = qualcuno vince 2-1
+        p_3sets = 1.0 - p_2sets
+        add("set_totals", [
+            {"name": "Under 2.5 Set", "price": max(1.05, round(1.0/(p_2sets*M), 2)), "point": 2.5},
+            {"name": "Over 2.5 Set",  "price": max(1.05, round(1.0/(p_3sets*M), 2)), "point": 2.5},
+        ])
+
+    # 3. DOPPIA CHANCE TENNIS (non esiste, ma aggiungiamo risultato set per set)
+    # Chi vince il 1° set (utile per live betting)
+    if 'h2h_1st_half' not in m_keys:
+        p_set_h = min(0.92, max(0.08, ph * 0.85 + 0.075))
+        p_set_a = 1.0 - p_set_h
+        add("h2h_1st_half", [
+            {"name": event['home_team'], "price": max(1.05, round(1.0/(p_set_h*M), 2))},
+            {"name": event['away_team'], "price": max(1.05, round(1.0/(p_set_a*M), 2))},
+        ])
 
 
 # ─── THE ODDS API ────────────────────────────────────────────────────────────
@@ -624,7 +736,10 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
             _apply_margin_to_event(event)
             # Genera mercati mancanti
             try:
-                _simulate_markets(event)
+                if _is_tennis_event(event):
+                    _simulate_tennis_markets(event)
+                else:
+                    _simulate_markets(event)
             except Exception as e:
                 print(f"[simulate_markets] {e}")
 
@@ -766,7 +881,10 @@ def _fast_normalize_af(item: Dict[str, Any], meta: Dict[str, Any]) -> Dict[str, 
         "bookmakers": [{"key": "af", "title": "AF", "markets": list(markets_dict.values())}]
     }
     _apply_margin_to_event(event)
-    _simulate_markets(event)
+    if _is_tennis_event(event):
+        _simulate_tennis_markets(event)
+    else:
+        _simulate_markets(event)
     return event
 
 
@@ -885,7 +1003,10 @@ def _normalize_betsapi2(raw: Dict[str, Any], meta: dict) -> Dict[str, Any]:
         "bookmakers": [{"key": "bet365", "title": "Bet365", "markets": list(markets_dict.values())}]
     }
     _apply_margin_to_event(event)
-    _simulate_markets(event)
+    if _is_tennis_event(event):
+        _simulate_tennis_markets(event)
+    else:
+        _simulate_markets(event)
     return event
 
 

@@ -219,7 +219,7 @@ async def login(username: str = Body(...), password: str = Body(...)):
 
 # Helper: salva una scommessa casino nella tabella bets (per storico)
 def save_casino_bet(conn, u_id: int, game_name: str, amount: float, payout: float):
-    """Inserisce una riga in bets+bet_selections per i giochi casino. Fa sempre commit."""
+    """Inserisce bets+bet_selections+transactions per i giochi casino. Fa sempre commit."""
     try:
         cursor = conn.cursor()
         is_pg = hasattr(conn, 'get_dsn_parameters')
@@ -245,6 +245,22 @@ def save_casino_bet(conn, u_id: int, game_name: str, amount: float, payout: floa
             cursor.execute(
                 "INSERT INTO bet_selections (bet_id, event_id, market, selection, odds, home_team, away_team) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (bet_id, event_id, 'casino', game_name, odds, game_name, '')
+            )
+        # Log transazione: credito se vince, debito se perde
+        net = round(payout - amount, 2)
+        tx_type = 'casino_win' if net > 0 else 'casino_loss'
+        cursor.execute(
+            "SELECT balance FROM users WHERE id = %s" if is_pg else "SELECT balance FROM users WHERE id = ?",
+            (u_id,)
+        )
+        bal_row = cursor.fetchone()
+        if bal_row:
+            bal_before = float(bal_row[0] if is_pg else bal_row['balance'])
+            bal_after  = round(bal_before + net, 2)
+            cursor.execute(
+                "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s, %s, %s, %s, %s, %s, %s)" if is_pg
+                else "INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (u_id, tx_type, net, bal_before, bal_after, None, f"{game_name} — puntata €{amount:.2f} ritorno €{payout:.2f}")
             )
         conn.commit()
     except Exception as e:
@@ -507,23 +523,32 @@ async def fetch_odds(user = Depends(get_current_user)):
 
     results = await asyncio.gather(*(fetch_sport_odds(s) for s in sports_list))
     
-    # Parole chiave NON calcistiche — esclude questi sport
-    NON_FOOTBALL_KEYWORDS = [
-        'basketball', 'tennis', 'volleyball', 'baseball', 'hockey',
+    # Sport accettati: calcio + tennis. Tutto il resto viene escluso.
+    EXCLUDED_SPORTS = [
+        'basketball', 'volleyball', 'baseball', 'hockey',
         'rugby', 'mma', 'boxing', 'cricket', 'golf', 'nfl', 'nba',
         'nhl', 'mlb', 'handball', 'pallavolo', 'basket',
         'american football', 'aussie rules', 'gaelic', 'waterpolo',
         'esports', 'darts', 'snooker', 'cycling', 'formula',
     ]
+    TENNIS_KEYWORDS = ['tennis', 'atp', 'wta', 'itf', 'challenger']
 
-    def _is_football(event: dict) -> bool:
+    def _is_allowed_sport(event: dict) -> bool:
         sport = (event.get('sport_title') or event.get('sport_key') or '').lower()
-        return not any(kw in sport for kw in NON_FOOTBALL_KEYWORDS)
+        # Escludi sempre i non-sport ammessi
+        if any(kw in sport for kw in EXCLUDED_SPORTS):
+            return False
+        # Ammetti calcio e tennis
+        return True  # calcio passa di default, tennis non è in EXCLUDED_SPORTS
+
+    def _is_tennis(event: dict) -> bool:
+        sport = (event.get('sport_title') or event.get('sport_key') or '').lower()
+        return any(kw in sport for kw in TENNIS_KEYWORDS)
 
     for odds_chunk in results:
         if not odds_chunk: continue
         for event in odds_chunk:
-            if not _is_football(event):
+            if not _is_allowed_sport(event):
                 continue
             event_id = event['id']
             if event_id in seen_ids: continue
@@ -1337,8 +1362,8 @@ async def bj_stand(data: dict, current_user = Depends(get_current_user)):
 
     bet_amt = result.get("bet", 0)
 
-    if result["status"] in ["win", "push"]:
-        payout = bet_amt * 2 if result["status"] == "win" else bet_amt
+    if result["status"] in ["win", "win_bj", "push"]:
+        payout = bet_amt * 2.5 if result["status"] == "win_bj" else (bet_amt * 2 if result["status"] == "win" else bet_amt)
         cursor.execute("UPDATE users SET balance = balance + %s WHERE id = %s" if is_postgres else "UPDATE users SET balance = balance + ? WHERE id = ?", (payout, u_id))
         save_casino_bet(conn, u_id, "Blackjack", bet_amt, payout)
 
