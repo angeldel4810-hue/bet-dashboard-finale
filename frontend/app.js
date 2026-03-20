@@ -1613,6 +1613,11 @@ window.bets = {
 
         // Controllo se stiamo cercando di mischiare Reale e Virtuale
         if (state.slip.length > 0) {
+            // Blocca scommesse virtuali se non siamo in fase BETTING
+            if (String(eventId).startsWith('v_') && state.virtual.status !== 'BETTING') {
+                alert('Le scommesse virtuali sono chiuse. Attendi la prossima giornata.');
+                return;
+            }
             const isNewVirtual = String(eventId).startsWith('v_');
             const isExistingVirtual = String(state.slip[0].eventId).startsWith('v_');
 
@@ -2847,6 +2852,11 @@ window.matchDetail = {
         'combo_multigol_btts':  'Multigol + GG/NG',
         'total_goals_exact':    'Gol Esatti Totali',
         'combo_1x2_total_goals':'1X2 + Gol Esatti',
+        // Tennis
+        'set_spreads': 'Handicap Set (±1.5)',
+        'set_totals':  'Totale Set',
+        'game_spreads':'Handicap Game',
+        'game_totals': 'Over/Under Game',
     },
 
     _tabs: {
@@ -2873,6 +2883,10 @@ window.matchDetail = {
         document.getElementById('md-home').innerText = event.home_team;
         document.getElementById('md-away').innerText = event.away_team;
         document.getElementById('md-date').innerText = `${dateStr} — ${timeStr}`;
+
+        // Reset stato dropdown per la nuova partita
+        this._dropdownState = {};
+        this._activeTab = 'principali';
 
         // Ricostruisci tab bar via JS (garantisce layout cross-browser)
         const tabBar = document.getElementById('md-tab-bar');
@@ -3098,7 +3112,13 @@ window.matchDetail = {
 
     refreshSelections() {
         const event = state._currentMatchEvent;
-        if (event) this.renderTab(event);
+        if (event) {
+            this.renderTab(event);
+            // Aggiorna anche le card nella lista (stato selezione nei bottoni)
+            if (typeof dashboard !== 'undefined' && dashboard.renderOdds) {
+                dashboard.renderOdds();
+            }
+        }
     }
 };
 
