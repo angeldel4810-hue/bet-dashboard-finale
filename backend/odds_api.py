@@ -97,11 +97,14 @@ def _simulate_markets(event: Dict[str, Any]):
     M = HOUSE_EDGE
 
     # Stima lambda casa e ospite — usato da tutti i mercati con correlazione
+    # Floor su lam_a = 0.70: anche le squadre molto sfavorite segnano in media ~0.7 gol/partita.
+    # Senza floor, con quote tipo 8.00 ospite, lam_a scende a 0.35-0.45
+    # e la simulazione btts/GG diventa molto distante dai valori reali dei bookmaker.
     lam_h = lam_a = None
     if lam is not None and ph is not None and pa is not None:
         ratio_h = ph / max(0.01, ph + pa)
-        lam_h = max(0.3, min(3.5, lam * ratio_h * 1.05))
-        lam_a = max(0.2, min(2.5, lam * (1.0 - ratio_h) * 0.95))
+        lam_h = max(0.6, min(3.5, lam * ratio_h * 1.05))
+        lam_a = max(0.7, min(2.5, lam * (1.0 - ratio_h) * 0.95))
 
     # 1. DOUBLE CHANCE
     if 'double_chance' not in m_keys and ph is not None:
@@ -133,16 +136,18 @@ def _simulate_markets(event: Dict[str, Any]):
 
     # 4. BTTS
     if 'btts' not in m_keys:
-        # Usa Poisson bivariata se disponibile, altrimenti formula calibrata
+        # NOTA: btts viene simulata SOLO quando l'API non la restituisce.
+        # Le quote reali dall'API (Goal/No Goal) non vengono mai toccate.
+        # Con lam_a floor=0.70 sopra, la Poisson bivariata dà risultati calibrati.
         if lam_h is not None and lam_a is not None:
-            p_gg = sum(_poisson(lam_h,h)*_poisson(lam_a,a)
-                       for h in range(8) for a in range(8) if h>0 and a>0)
-            p_ng = max(0.01, 1.0 - p_gg)
+            p_gg = sum(_poisson(lam_h, h) * _poisson(lam_a, a)
+                       for h in range(8) for a in range(8) if h > 0 and a > 0)
         else:
             o25_ref = float(o25_q) if o25_q else 1.90
-            prob_over = min(0.95, max(0.05, 1.0 / o25_ref))
-            p_gg = min(0.72, max(0.28, prob_over * 0.72 + 0.13))
-            p_ng = 1.0 - p_gg
+            p_ov25 = min(0.88, max(0.12, 1.0 / o25_ref))
+            p_gg = min(0.58, max(0.33, p_ov25 * 0.72 + 0.06))
+        p_gg = min(0.62, max(0.33, p_gg))
+        p_ng = max(0.01, 1.0 - p_gg)
         add("btts", [
             {"name": "Goal",    "price": max(1.20, round(1.0 / (p_gg * M), 2))},
             {"name": "No Goal", "price": max(1.20, round(1.0 / (p_ng * M), 2))},
