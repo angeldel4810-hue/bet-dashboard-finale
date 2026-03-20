@@ -786,10 +786,10 @@ window.dashboard = {
                         <span class="label">1</span>
                         <span class="val">${homePrice?.price.toFixed(2) || '-'}</span>
                     </div>
-                    <div class="price-btn ${isDrawSel ? 'selected' : ''}" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', 'h2h', 'Pareggio', ${drawPrice?.price || 0})">
+                    ${drawPrice ? `<div class="price-btn ${isDrawSel ? 'selected' : ''}" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', 'h2h', 'Pareggio', ${drawPrice.price})">
                         <span class="label">X</span>
-                        <span class="val">${drawPrice?.price.toFixed(2) || '-'}</span>
-                    </div>
+                        <span class="val">${drawPrice.price.toFixed(2)}</span>
+                    </div>` : ''}
                     <div class="price-btn ${isAwaySel ? 'selected' : ''}" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', 'h2h', '${event.away_team}', ${awayPrice?.price || 0})">
                         <span class="label">2</span>
                         <span class="val">${awayPrice?.price.toFixed(2) || '-'}</span>
