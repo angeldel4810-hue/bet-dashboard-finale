@@ -2748,7 +2748,7 @@ window.profile = {
         this._selectedBonusId = null;
         this.closeDeposit();
 
-        alert('✅ Ricarica registrata. Completa il pagamento nella finestra aperta.\n\nIl saldo verrà aggiornato dopo approvazione dell\'admin.');
+        alert('✅ Richiesta in elaborazione. Completa il pagamento nella finestra aperta.');
     },
     async applyBonus(bonusId, amount) {
         const bonus = this._bonuses.find(b => b.id === bonusId);
