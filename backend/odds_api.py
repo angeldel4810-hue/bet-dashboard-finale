@@ -181,7 +181,7 @@ def _simulate_markets(event: Dict[str, Any]):
                     combos.append({"name": f"{rn}+{bn}", "price": max(1.05, round(rq * bq / M, 2))})
             add("combo_1x2_btts", combos)
 
-    # 8. COMBO 1X2 + OVER/UNDER
+    # 8. COMBO 1X2 + OVER/UNDER (tutte le linee disponibili)
     if 'combo_1x2_ou' not in m_keys and ph is not None and totals:
         lines_dict: Dict[float, Dict] = {}
         for o in totals['outcomes']:
@@ -201,6 +201,272 @@ def _simulate_markets(event: Dict[str, Any]):
                 if un_q: combos_ou.append({"name": f"{rn}+Under {pt}", "price": max(1.05, round(rq * un_q / M, 2)), "point": pt})
         if combos_ou:
             add("combo_1x2_ou", combos_ou)
+
+    # ── Helper: costruisci lines_dict da totals (riusato da più combo) ──
+    def _build_lines():
+        if not totals:
+            return {}
+        ld: Dict[float, Dict] = {}
+        for o in totals['outcomes']:
+            pt = o.get('point')
+            if pt is None: continue
+            pt = float(pt)
+            ld.setdefault(pt, {})
+            if 'Over'  in str(o['name']): ld[pt]['over']  = o['price']
+            if 'Under' in str(o['name']): ld[pt]['under'] = o['price']
+        return ld
+
+    # 9. DOPPIA CHANCE + GG/NG
+    if 'combo_dc_btts' not in m_keys and ph is not None:
+        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
+        dc_m   = next((m for m in m_list if m['key'] == 'double_chance'), None)
+        if btts_m and dc_m:
+            gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
+            ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
+            if gg_q and ng_q:
+                combos = []
+                for dc_o in dc_m['outcomes']:
+                    dcn, dcq = dc_o['name'], dc_o['price']
+                    combos.append({"name": f"{dcn}+GG", "price": max(1.05, round(dcq * gg_q / M, 2))})
+                    combos.append({"name": f"{dcn}+NG", "price": max(1.05, round(dcq * ng_q / M, 2))})
+                add("combo_dc_btts", combos)
+
+    # 10. DOPPIA CHANCE + OVER/UNDER
+    if 'combo_dc_ou' not in m_keys and ph is not None:
+        dc_m = next((m for m in m_list if m['key'] == 'double_chance'), None)
+        if dc_m:
+            ld = _build_lines()
+            combos = []
+            for pt in sorted(ld.keys()):
+                ov_q = ld[pt].get('over')
+                un_q = ld[pt].get('under')
+                for dc_o in dc_m['outcomes']:
+                    dcn, dcq = dc_o['name'], dc_o['price']
+                    if ov_q: combos.append({"name": f"{dcn}+Over {pt}",  "price": max(1.05, round(dcq * ov_q / M, 2)), "point": pt})
+                    if un_q: combos.append({"name": f"{dcn}+Under {pt}", "price": max(1.05, round(dcq * un_q / M, 2)), "point": pt})
+            if combos:
+                add("combo_dc_ou", combos)
+
+    # 11. DRAW NO BET + GG/NG
+    if 'combo_dnb_btts' not in m_keys and ph is not None:
+        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
+        dnb_m  = next((m for m in m_list if m['key'] == 'draw_no_bet'), None)
+        if btts_m and dnb_m:
+            gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
+            ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
+            if gg_q and ng_q:
+                combos = []
+                for dnb_o in dnb_m['outcomes']:
+                    dn, dq = dnb_o['name'], dnb_o['price']
+                    combos.append({"name": f"{dn}+GG",      "price": max(1.05, round(dq * gg_q / M, 2))})
+                    combos.append({"name": f"{dn}+No Goal", "price": max(1.05, round(dq * ng_q / M, 2))})
+                add("combo_dnb_btts", combos)
+
+    # 12. DRAW NO BET + OVER/UNDER
+    if 'combo_dnb_ou' not in m_keys and ph is not None:
+        dnb_m = next((m for m in m_list if m['key'] == 'draw_no_bet'), None)
+        if dnb_m:
+            ld = _build_lines()
+            combos = []
+            for pt in sorted(ld.keys()):
+                ov_q = ld[pt].get('over')
+                un_q = ld[pt].get('under')
+                for dnb_o in dnb_m['outcomes']:
+                    dn, dq = dnb_o['name'], dnb_o['price']
+                    if ov_q: combos.append({"name": f"{dn}+Over {pt}",  "price": max(1.05, round(dq * ov_q / M, 2)), "point": pt})
+                    if un_q: combos.append({"name": f"{dn}+Under {pt}", "price": max(1.05, round(dq * un_q / M, 2)), "point": pt})
+            if combos:
+                add("combo_dnb_ou", combos)
+
+    # 13. TRIPLA COMBO: 1X2 + GG/NG + OVER/UNDER 2.5
+    if 'combo_1x2_btts_ou' not in m_keys and ph is not None:
+        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
+        if btts_m and totals:
+            gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
+            ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
+            ov25 = next((o['price'] for o in totals['outcomes'] if o.get('point') == 2.5 and 'Over'  in str(o['name'])), None)
+            un25 = next((o['price'] for o in totals['outcomes'] if o.get('point') == 2.5 and 'Under' in str(o['name'])), None)
+            if gg_q and ng_q and ov25 and un25:
+                combos = []
+                for rn, rq in [("1", h_q), ("X", x_q), ("2", a_q)]:
+                    for bn, bq in [("GG", gg_q), ("NG", ng_q)]:
+                        for ouln, ouq in [("Over 2.5", ov25), ("Under 2.5", un25)]:
+                            combos.append({"name": f"{rn}+{bn}+{ouln}", "price": max(1.05, round(rq * bq * ouq / (M * M), 2))})
+                add("combo_1x2_btts_ou", combos)
+
+    # 14. 1° TEMPO + GG/NG
+    if 'combo_ht_btts' not in m_keys and ph is not None:
+        ht_m   = next((m for m in m_list if m['key'] == 'h2h_1st_half'), None)
+        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
+        if ht_m and btts_m:
+            gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
+            ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
+            if gg_q and ng_q:
+                combos = []
+                for ht_o in ht_m['outcomes']:
+                    hn = "1" if ht_o['name'] == event.get('home_team') else ("2" if ht_o['name'] == event.get('away_team') else "X")
+                    hq = ht_o['price']
+                    combos.append({"name": f"HT:{hn}+GG", "price": max(1.05, round(hq * gg_q / M, 2))})
+                    combos.append({"name": f"HT:{hn}+NG", "price": max(1.05, round(hq * ng_q / M, 2))})
+                add("combo_ht_btts", combos)
+
+    # 15. 1° TEMPO + OVER/UNDER 2.5 FINALE
+    if 'combo_ht_ou' not in m_keys and ph is not None:
+        ht_m = next((m for m in m_list if m['key'] == 'h2h_1st_half'), None)
+        if ht_m and totals:
+            ov25 = next((o['price'] for o in totals['outcomes'] if o.get('point') == 2.5 and 'Over'  in str(o['name'])), None)
+            un25 = next((o['price'] for o in totals['outcomes'] if o.get('point') == 2.5 and 'Under' in str(o['name'])), None)
+            if ov25 and un25:
+                combos = []
+                for ht_o in ht_m['outcomes']:
+                    hn = "1" if ht_o['name'] == event.get('home_team') else ("2" if ht_o['name'] == event.get('away_team') else "X")
+                    hq = ht_o['price']
+                    combos.append({"name": f"HT:{hn}+Over 2.5",  "price": max(1.05, round(hq * ov25 / M, 2))})
+                    combos.append({"name": f"HT:{hn}+Under 2.5", "price": max(1.05, round(hq * un25 / M, 2))})
+                add("combo_ht_ou", combos)
+
+    # 16. PARI / DISPARI GOL
+    if 'odd_even' not in m_keys and lam is not None:
+        import math as _m
+        p_even = sum(_poisson(lam, k) for k in range(0, 13, 2))
+        p_odd  = 1.0 - p_even
+        add("odd_even", [
+            {"name": "Pari",    "price": max(1.60, round(1.0 / (p_even * M), 2))},
+            {"name": "Dispari", "price": max(1.60, round(1.0 / (p_odd  * M), 2))},
+        ])
+
+
+    # ── Helper: calcola prob_gol_totali(n) con Poisson ──────────────────────
+    def _prob_exact_total(lam_tot, n):
+        """Probabilità che la partita finisca con esattamente n gol totali."""
+        return _poisson(lam_tot, n)
+
+    def _prob_range(lam_tot, n_min, n_max):
+        """Probabilità gol totali in [n_min, n_max]."""
+        return max(0.005, sum(_poisson(lam_tot, k) for k in range(n_min, n_max + 1)))
+
+    # 17. MULTIGOL (range gol totali nella partita)
+    if 'multigol' not in m_keys and lam is not None:
+        ranges = [
+            ("0-1",  0, 1),
+            ("0-2",  0, 2),
+            ("1-2",  1, 2),
+            ("1-3",  1, 3),
+            ("2-3",  2, 3),
+            ("2-4",  2, 4),
+            ("3-4",  3, 4),
+            ("3-5",  3, 5),
+            ("4+",   4, 9),
+        ]
+        mg_outcomes = []
+        for label, lo, hi in ranges:
+            p = _prob_range(lam, lo, hi)
+            mg_outcomes.append({"name": f"Multigol {label}", "price": max(1.05, round(1.0 / (p * M), 2))})
+        add("multigol", mg_outcomes)
+
+    # 18. COMBO 1X2 + MULTIGOL
+    if 'combo_1x2_multigol' not in m_keys and ph is not None and lam is not None:
+        ranges_mg = [
+            ("1-2", 1, 2),
+            ("2-3", 2, 3),
+            ("1-3", 1, 3),
+            ("2-4", 2, 4),
+            ("3+",  3, 9),
+        ]
+        combos = []
+        for rn, rq in [("1", h_q), ("X", x_q), ("2", a_q)]:
+            if rq is None: continue
+            for label, lo, hi in ranges_mg:
+                p_mg = _prob_range(lam, lo, hi)
+                # Probabilità condizionata: P(1X2) * P(multigol) / margin
+                p_raw = (1.0 / rq) * p_mg * (1.0 / M)  # prob implicita combo
+                price = max(1.05, round(1.0 / (p_raw * M), 2))
+                combos.append({"name": f"{rn}+Multigol {label}", "price": price})
+        if combos:
+            add("combo_1x2_multigol", combos)
+
+    # 19. COMBO DOPPIA CHANCE + MULTIGOL
+    if 'combo_dc_multigol' not in m_keys and ph is not None and lam is not None:
+        dc_m = next((m for m in m_list if m['key'] == 'double_chance'), None)
+        if dc_m:
+            ranges_mg = [("1-2", 1, 2), ("2-3", 2, 3), ("1-3", 1, 3), ("3+", 3, 9)]
+            combos = []
+            for dc_o in dc_m['outcomes']:
+                dcn, dcq = dc_o['name'], dc_o['price']
+                p_dc = 1.0 / dcq
+                for label, lo, hi in ranges_mg:
+                    p_mg = _prob_range(lam, lo, hi)
+                    price = max(1.05, round(1.0 / (p_dc * p_mg * M), 2))
+                    combos.append({"name": f"{dcn}+Multigol {label}", "price": price})
+            if combos:
+                add("combo_dc_multigol", combos)
+
+    # 20. COMBO OVER/UNDER + GG/NG (tutte le linee)
+    if 'combo_ou_btts' not in m_keys and lam is not None:
+        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
+        if btts_m and totals:
+            gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
+            ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
+            if gg_q and ng_q:
+                ld = _build_lines()
+                combos = []
+                for pt in sorted(ld.keys()):
+                    ov_q = ld[pt].get('over')
+                    un_q = ld[pt].get('under')
+                    if ov_q:
+                        combos.append({"name": f"Over {pt}+GG",      "price": max(1.05, round(ov_q * gg_q / M, 2)), "point": pt})
+                        combos.append({"name": f"Over {pt}+No Goal", "price": max(1.05, round(ov_q * ng_q / M, 2)), "point": pt})
+                    if un_q:
+                        combos.append({"name": f"Under {pt}+GG",      "price": max(1.05, round(un_q * gg_q / M, 2)), "point": pt})
+                        combos.append({"name": f"Under {pt}+No Goal", "price": max(1.05, round(un_q * ng_q / M, 2)), "point": pt})
+                if combos:
+                    add("combo_ou_btts", combos)
+
+    # 21. MULTIGOL + GG/NG
+    if 'combo_multigol_btts' not in m_keys and lam is not None:
+        btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
+        if btts_m:
+            gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
+            ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
+            if gg_q and ng_q:
+                ranges_mg = [("1-2", 1, 2), ("2-3", 2, 3), ("1-3", 1, 3), ("2-4", 2, 4), ("3+", 3, 9)]
+                combos = []
+                for label, lo, hi in ranges_mg:
+                    p_mg = _prob_range(lam, lo, hi)
+                    q_mg = max(1.05, round(1.0 / (p_mg * M), 2))
+                    combos.append({"name": f"Multigol {label}+GG",      "price": max(1.05, round(q_mg * gg_q / M, 2))})
+                    combos.append({"name": f"Multigol {label}+No Goal", "price": max(1.05, round(q_mg * ng_q / M, 2))})
+                if combos:
+                    add("combo_multigol_btts", combos)
+
+    # 22. GOL ESATTI TOTALI (0, 1, 2, 3, 4, 5+)
+    if 'total_goals_exact' not in m_keys and lam is not None:
+        outcomes = []
+        for n in range(6):
+            p = _prob_exact_total(lam, n)
+            label = f"{n} Gol" if n < 5 else "5+ Gol"
+            if n == 5:
+                p = max(0.01, 1.0 - sum(_poisson(lam, k) for k in range(5)))
+            outcomes.append({"name": label, "price": max(1.05, min(66.0, round(1.0 / (p * M), 2)))})
+        add("total_goals_exact", outcomes)
+
+    # 23. COMBO 1X2 + GOL ESATTI TOTALI
+    if 'combo_1x2_total_goals' not in m_keys and ph is not None and lam is not None:
+        combos = []
+        goals_labels = [(0, "0 Gol"), (1, "1 Gol"), (2, "2 Gol"), (3, "3 Gol"), (4, "4+ Gol")]
+        for rn, rq in [("1", h_q), ("X", x_q), ("2", a_q)]:
+            if rq is None: continue
+            for n, glabel in goals_labels:
+                if n < 4:
+                    p_g = _prob_exact_total(lam, n)
+                else:
+                    p_g = max(0.01, 1.0 - sum(_poisson(lam, k) for k in range(4)))
+                p_raw = (1.0 / rq) * p_g / M
+                price = max(1.05, min(66.0, round(1.0 / (p_raw * M), 2)))
+                combos.append({"name": f"{rn}+{glabel}", "price": price})
+        if combos:
+            add("combo_1x2_total_goals", combos)
+
 
 
 # ─── THE ODDS API ────────────────────────────────────────────────────────────
