@@ -336,72 +336,109 @@ def _simulate_markets(event: Dict[str, Any]):
         ])
 
 
-    # ── Helper: calcola prob_gol_totali(n) con Poisson ──────────────────────
-    def _prob_exact_total(lam_tot, n):
-        """Probabilità che la partita finisca con esattamente n gol totali."""
-        return _poisson(lam_tot, n)
+    # ── Helper Poisson ───────────────────────────────────────────────────────
+    def _p_exact(lam_x, n):
+        """P(squadra segna esattamente n gol) con lambda lam_x."""
+        return max(1e-9, _poisson(lam_x, n))
 
-    def _prob_range(lam_tot, n_min, n_max):
-        """Probabilità gol totali in [n_min, n_max]."""
-        return max(0.005, sum(_poisson(lam_tot, k) for k in range(n_min, n_max + 1)))
+    def _p_range(lam_x, lo, hi):
+        """P(squadra segna tra lo e hi gol inclusi)."""
+        return max(0.005, sum(_poisson(lam_x, k) for k in range(lo, hi + 1)))
 
-    # 17. MULTIGOL (range gol totali nella partita)
+    def _p_ge(lam_x, lo):
+        """P(squadra segna >= lo gol)."""
+        return max(0.005, 1.0 - sum(_poisson(lam_x, k) for k in range(0, lo)))
+
+    # Stima lambda casa e ospite dai ratio della quota h2h
+    lam_h = lam_a = None
+    if lam is not None and ph is not None:
+        ratio_h = ph / max(0.01, ph + pa)
+        lam_h = max(0.3, min(3.5, lam * ratio_h * 1.05))
+        lam_a = max(0.2, min(2.5, lam * (1.0 - ratio_h) * 0.95))
+
+    # ─── 17. MULTIGOL TOTALE (tutti i range sensati) ─────────────────────────
     if 'multigol' not in m_keys and lam is not None:
         ranges = [
-            ("0-1",  0, 1),
-            ("0-2",  0, 2),
-            ("1-2",  1, 2),
-            ("1-3",  1, 3),
-            ("2-3",  2, 3),
-            ("2-4",  2, 4),
-            ("3-4",  3, 4),
-            ("3-5",  3, 5),
-            ("4+",   4, 9),
+            ("0-1", 0, 1), ("0-2", 0, 2), ("0-3", 0, 3), ("0-6", 0, 6),
+            ("1-2", 1, 2), ("1-3", 1, 3), ("1-4", 1, 4), ("1-5", 1, 5), ("1-6", 1, 6),
+            ("2-3", 2, 3), ("2-4", 2, 4), ("2-5", 2, 5), ("2-6", 2, 6),
+            ("3-4", 3, 4), ("3-5", 3, 5), ("3-6", 3, 6),
+            ("4-6", 4, 6), ("5-6", 5, 6),
+            ("5+",  5, 12), ("6+", 6, 12), ("7+", 7, 12),
         ]
         mg_outcomes = []
         for label, lo, hi in ranges:
-            p = _prob_range(lam, lo, hi)
+            p = _p_range(lam, lo, hi)
             mg_outcomes.append({"name": f"Multigol {label}", "price": max(1.05, round(1.0 / (p * M), 2))})
         add("multigol", mg_outcomes)
 
-    # 18. COMBO 1X2 + MULTIGOL
+    # ─── 18. MULTIGOL CASA (gol segnati dalla squadra di casa) ───────────────
+    if 'multigol_home' not in m_keys and lam_h is not None:
+        ranges_sq = [
+            ("0",   0, 0), ("1",   1, 1), ("2",   2, 2), ("3+", 3, 12),
+            ("0-1", 0, 1), ("0-2", 0, 2), ("1-2", 1, 2), ("1-3", 1, 3),
+            ("2-3", 2, 3), ("2-4", 2, 4), ("3-4", 3, 4), ("4+", 4, 12),
+        ]
+        outcomes = []
+        for label, lo, hi in ranges_sq:
+            if lo == hi:
+                p = _p_exact(lam_h, lo) if lo < 3 else _p_ge(lam_h, 3)
+            else:
+                p = _p_range(lam_h, lo, hi)
+            outcomes.append({"name": f"Casa: {label}", "price": max(1.05, min(66.0, round(1.0 / (p * M), 2)))})
+        add("multigol_home", outcomes)
+
+    # ─── 19. MULTIGOL OSPITE (gol segnati dalla squadra ospite) ──────────────
+    if 'multigol_away' not in m_keys and lam_a is not None:
+        outcomes = []
+        ranges_sq = [
+            ("0",   0, 0), ("1",   1, 1), ("2",   2, 2), ("3+", 3, 12),
+            ("0-1", 0, 1), ("0-2", 0, 2), ("1-2", 1, 2), ("1-3", 1, 3),
+            ("2-3", 2, 3), ("2-4", 2, 4), ("3-4", 3, 4), ("4+", 4, 12),
+        ]
+        for label, lo, hi in ranges_sq:
+            if lo == hi:
+                p = _p_exact(lam_a, lo) if lo < 3 else _p_ge(lam_a, 3)
+            else:
+                p = _p_range(lam_a, lo, hi)
+            outcomes.append({"name": f"Ospite: {label}", "price": max(1.05, min(66.0, round(1.0 / (p * M), 2)))})
+        add("multigol_away", outcomes)
+
+    # ─── 20. COMBO 1X2 + MULTIGOL TOTALE ─────────────────────────────────────
     if 'combo_1x2_multigol' not in m_keys and ph is not None and lam is not None:
         ranges_mg = [
-            ("1-2", 1, 2),
-            ("2-3", 2, 3),
-            ("1-3", 1, 3),
-            ("2-4", 2, 4),
-            ("3+",  3, 9),
+            ("1-2", 1, 2), ("1-3", 1, 3), ("1-4", 1, 4),
+            ("2-3", 2, 3), ("2-4", 2, 4), ("2-5", 2, 5),
+            ("3-4", 3, 4), ("3-5", 3, 5), ("3+", 3, 12),
         ]
         combos = []
         for rn, rq in [("1", h_q), ("X", x_q), ("2", a_q)]:
             if rq is None: continue
+            p_r = 1.0 / rq
             for label, lo, hi in ranges_mg:
-                p_mg = _prob_range(lam, lo, hi)
-                # Probabilità condizionata: P(1X2) * P(multigol) / margin
-                p_raw = (1.0 / rq) * p_mg * (1.0 / M)  # prob implicita combo
-                price = max(1.05, round(1.0 / (p_raw * M), 2))
+                p_mg = _p_range(lam, lo, hi)
+                price = max(1.05, round(1.0 / (p_r * p_mg * M), 2))
                 combos.append({"name": f"{rn}+Multigol {label}", "price": price})
         if combos:
             add("combo_1x2_multigol", combos)
 
-    # 19. COMBO DOPPIA CHANCE + MULTIGOL
+    # ─── 21. COMBO DOPPIA CHANCE + MULTIGOL ──────────────────────────────────
     if 'combo_dc_multigol' not in m_keys and ph is not None and lam is not None:
         dc_m = next((m for m in m_list if m['key'] == 'double_chance'), None)
         if dc_m:
-            ranges_mg = [("1-2", 1, 2), ("2-3", 2, 3), ("1-3", 1, 3), ("3+", 3, 9)]
+            ranges_mg = [("1-2", 1, 2), ("1-3", 1, 3), ("2-3", 2, 3), ("2-4", 2, 4), ("3+", 3, 12)]
             combos = []
             for dc_o in dc_m['outcomes']:
                 dcn, dcq = dc_o['name'], dc_o['price']
                 p_dc = 1.0 / dcq
                 for label, lo, hi in ranges_mg:
-                    p_mg = _prob_range(lam, lo, hi)
+                    p_mg = _p_range(lam, lo, hi)
                     price = max(1.05, round(1.0 / (p_dc * p_mg * M), 2))
                     combos.append({"name": f"{dcn}+Multigol {label}", "price": price})
             if combos:
                 add("combo_dc_multigol", combos)
 
-    # 20. COMBO OVER/UNDER + GG/NG (tutte le linee)
+    # ─── 22. COMBO OVER/UNDER + GG/NG ────────────────────────────────────────
     if 'combo_ou_btts' not in m_keys and lam is not None:
         btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
         if btts_m and totals:
@@ -422,47 +459,56 @@ def _simulate_markets(event: Dict[str, Any]):
                 if combos:
                     add("combo_ou_btts", combos)
 
-    # 21. MULTIGOL + GG/NG
+    # ─── 23. MULTIGOL + GG/NG ────────────────────────────────────────────────
     if 'combo_multigol_btts' not in m_keys and lam is not None:
         btts_m = next((m for m in m_list if m['key'] == 'btts'), None)
         if btts_m:
             gg_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'Goal'),    None)
             ng_q = next((o['price'] for o in btts_m['outcomes'] if o['name'] == 'No Goal'), None)
             if gg_q and ng_q:
-                ranges_mg = [("1-2", 1, 2), ("2-3", 2, 3), ("1-3", 1, 3), ("2-4", 2, 4), ("3+", 3, 9)]
+                ranges_mg = [("1-2", 1, 2), ("2-3", 2, 3), ("1-3", 1, 3), ("2-4", 2, 4), ("3-5", 3, 5), ("3+", 3, 12)]
                 combos = []
                 for label, lo, hi in ranges_mg:
-                    p_mg = _prob_range(lam, lo, hi)
+                    p_mg = _p_range(lam, lo, hi)
                     q_mg = max(1.05, round(1.0 / (p_mg * M), 2))
                     combos.append({"name": f"Multigol {label}+GG",      "price": max(1.05, round(q_mg * gg_q / M, 2))})
                     combos.append({"name": f"Multigol {label}+No Goal", "price": max(1.05, round(q_mg * ng_q / M, 2))})
                 if combos:
                     add("combo_multigol_btts", combos)
 
-    # 22. GOL ESATTI TOTALI (0, 1, 2, 3, 4, 5+)
+    # ─── 24. GOL ESATTI TOTALI (0..6+) ───────────────────────────────────────
     if 'total_goals_exact' not in m_keys and lam is not None:
         outcomes = []
-        for n in range(6):
-            p = _prob_exact_total(lam, n)
-            label = f"{n} Gol" if n < 5 else "5+ Gol"
-            if n == 5:
-                p = max(0.01, 1.0 - sum(_poisson(lam, k) for k in range(5)))
+        for n in range(7):
+            if n < 6:
+                p = _p_exact(lam, n)
+                label = f"{n} Gol"
+            else:
+                p = max(0.005, _p_ge(lam, 6))
+                label = "6+ Gol"
             outcomes.append({"name": label, "price": max(1.05, min(66.0, round(1.0 / (p * M), 2)))})
         add("total_goals_exact", outcomes)
 
-    # 23. COMBO 1X2 + GOL ESATTI TOTALI
+    # ─── 25. COMBO 1X2 + GOL ESATTI — solo range sensati per ciascun esito ──
     if 'combo_1x2_total_goals' not in m_keys and ph is not None and lam is not None:
         combos = []
-        goals_labels = [(0, "0 Gol"), (1, "1 Gol"), (2, "2 Gol"), (3, "3 Gol"), (4, "4+ Gol")]
+        # Per "1" (casa vince): 1+ gol in casa garantiti → escludiamo 0 gol totali
+        # Per "X" (pareggio):   almeno 0 gol; 0-0 possibile ma non misto
+        # Per "2" (ospite vince): 1+ gol ospite garantiti
+        goals_map = {
+            "1": [(1, "1 Gol"), (2, "2 Gol"), (3, "3 Gol"), (4, "4+ Gol")],
+            "X": [(0, "0 Gol"), (1, "1 Gol"), (2, "2 Gol"), (3, "3 Gol"), (4, "4+ Gol")],
+            "2": [(1, "1 Gol"), (2, "2 Gol"), (3, "3 Gol"), (4, "4+ Gol")],
+        }
         for rn, rq in [("1", h_q), ("X", x_q), ("2", a_q)]:
             if rq is None: continue
-            for n, glabel in goals_labels:
+            p_r = 1.0 / rq
+            for n, glabel in goals_map[rn]:
                 if n < 4:
-                    p_g = _prob_exact_total(lam, n)
+                    p_g = _p_exact(lam, n)
                 else:
-                    p_g = max(0.01, 1.0 - sum(_poisson(lam, k) for k in range(4)))
-                p_raw = (1.0 / rq) * p_g / M
-                price = max(1.05, min(66.0, round(1.0 / (p_raw * M), 2)))
+                    p_g = max(0.005, _p_ge(lam, 4))
+                price = max(1.05, min(66.0, round(1.0 / (p_r * p_g * M), 2)))
                 combos.append({"name": f"{rn}+{glabel}", "price": price})
         if combos:
             add("combo_1x2_total_goals", combos)
