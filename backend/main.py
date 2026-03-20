@@ -524,22 +524,33 @@ async def fetch_odds(user = Depends(get_current_user)):
     results = await asyncio.gather(*(fetch_sport_odds(s) for s in sports_list))
     
     # Sport accettati: calcio + tennis. Tutto il resto viene escluso.
+    # Parole chiave di esclusione — controllate su sport_title E sport_key
     EXCLUDED_SPORTS = [
-        'basketball', 'volleyball', 'baseball', 'hockey',
+        'basketball', 'ncaab', 'ncaaf', 'ncaa',
+        'volleyball', 'baseball', 'hockey',
         'rugby', 'mma', 'boxing', 'cricket', 'golf', 'nfl', 'nba',
         'nhl', 'mlb', 'handball', 'pallavolo', 'basket',
         'american football', 'aussie rules', 'gaelic', 'waterpolo',
         'esports', 'darts', 'snooker', 'cycling', 'formula',
+        'lacrosse', 'kabaddi', 'squash', 'table tennis', 'badminton',
+        'futsal',  # futsal != football
     ]
+    # Sport ammessi esplicitamente (oltre al calcio)
+    ALLOWED_SPORTS = ['soccer', 'football', 'tennis', 'atp', 'wta', 'itf', 'challenger']
     TENNIS_KEYWORDS = ['tennis', 'atp', 'wta', 'itf', 'challenger']
 
     def _is_allowed_sport(event: dict) -> bool:
-        sport = (event.get('sport_title') or event.get('sport_key') or '').lower()
-        # Escludi sempre i non-sport ammessi
-        if any(kw in sport for kw in EXCLUDED_SPORTS):
+        title = (event.get('sport_title') or '').lower()
+        key   = (event.get('sport_key')   or '').lower()
+        combined = title + ' ' + key
+        # Escludi se contiene una keyword di esclusione
+        if any(kw in combined for kw in EXCLUDED_SPORTS):
             return False
-        # Ammetti calcio e tennis
-        return True  # calcio passa di default, tennis non è in EXCLUDED_SPORTS
+        # Ammetti esplicitamente calcio e tennis
+        if any(kw in combined for kw in ALLOWED_SPORTS):
+            return True
+        # Qualsiasi altra lega non riconosciuta: escludi per sicurezza
+        return False
 
     def _is_tennis(event: dict) -> bool:
         sport = (event.get('sport_title') or event.get('sport_key') or '').lower()
