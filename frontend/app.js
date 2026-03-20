@@ -797,11 +797,11 @@ window.dashboard = {
                 </div>
 
                 <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                    <div class="price-btn mini ${goalPrice ? '' : 'hidden'}" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', 'btts', 'Goal', ${goalPrice || 0})" style="flex:1; padding: 5px;">
-                        <span class="label" style="font-size:0.6rem">G</span>
+                    <div class="price-btn mini ${goalPrice ? '' : 'hidden'}" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', 'btts', 'Goal', ${goalPrice || 0})" style="flex:1; padding: 5px;" title="Goal Goal - Entrambe segnano">
+                        <span class="label" style="font-size:0.6rem">GG</span>
                         <span class="val" style="font-size:0.75rem">${goalPrice?.toFixed(2) || ''}</span>
                     </div>
-                    <div class="price-btn mini ${nogoalPrice ? '' : 'hidden'}" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', 'btts', 'No Goal', ${nogoalPrice || 0})" style="flex:1; padding: 5px;">
+                    <div class="price-btn mini ${nogoalPrice ? '' : 'hidden'}" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', 'btts', 'No Goal', ${nogoalPrice || 0})" style="flex:1; padding: 5px;" title="No Goal - Almeno una non segna">
                         <span class="label" style="font-size:0.6rem">NG</span>
                         <span class="val" style="font-size:0.75rem">${nogoalPrice?.toFixed(2) || ''}</span>
                     </div>
