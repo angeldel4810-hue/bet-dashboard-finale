@@ -133,13 +133,19 @@ def _simulate_markets(event: Dict[str, Any]):
 
     # 4. BTTS
     if 'btts' not in m_keys:
-        o25_ref = float(o25_q) if o25_q else 1.90
-        prob_over = min(0.95, max(0.05, 1.0 / o25_ref))
-        prob_gg = min(0.72, max(0.32, prob_over * 0.72 + 0.13))
-        prob_ng = 1.0 - prob_gg
+        # Usa Poisson bivariata se disponibile, altrimenti formula calibrata
+        if lam_h is not None and lam_a is not None:
+            p_gg = sum(_poisson(lam_h,h)*_poisson(lam_a,a)
+                       for h in range(8) for a in range(8) if h>0 and a>0)
+            p_ng = max(0.01, 1.0 - p_gg)
+        else:
+            o25_ref = float(o25_q) if o25_q else 1.90
+            prob_over = min(0.95, max(0.05, 1.0 / o25_ref))
+            p_gg = min(0.72, max(0.28, prob_over * 0.72 + 0.13))
+            p_ng = 1.0 - p_gg
         add("btts", [
-            {"name": "Goal",    "price": max(1.30, round(1.0 / (prob_gg * M), 2))},
-            {"name": "No Goal", "price": max(1.30, round(1.0 / (prob_ng * M), 2))},
+            {"name": "Goal",    "price": max(1.20, round(1.0 / (p_gg * M), 2))},
+            {"name": "No Goal", "price": max(1.20, round(1.0 / (p_ng * M), 2))},
         ])
 
     # 5. OVER/UNDER AGGIUNTIVE (1.5, 3.5, 4.5)
