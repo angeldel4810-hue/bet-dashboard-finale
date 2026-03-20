@@ -91,6 +91,44 @@
 
         <div class="container fade-in">
             <!-- Odds Section -->
+            <!-- ── SCHERMATA DETTAGLIO PARTITA ── -->
+            <div id="section-match-detail" class="hidden">
+                <!-- Header con freccia indietro -->
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:1rem; padding-bottom:1rem; border-bottom:1px solid var(--border-color);">
+                    <button onclick="matchDetail.close()" style="background:rgba(255,255,255,0.08); border:1px solid var(--border-color); color:var(--text-primary); border-radius:50%; width:38px; height:38px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; font-size:1.1rem;">←</button>
+                    <div style="flex:1; min-width:0;">
+                        <div id="md-league" style="font-size:0.7rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:2px;"></div>
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <span id="md-home" style="font-size:1.05rem; font-weight:700; color:var(--text-primary);"></span>
+                            <span style="color:var(--text-secondary); font-size:0.8rem;">vs</span>
+                            <span id="md-away" style="font-size:1.05rem; font-weight:700; color:var(--text-primary);"></span>
+                        </div>
+                        <div id="md-date" style="font-size:0.72rem; color:var(--text-secondary); margin-top:2px;"></div>
+                    </div>
+                </div>
+
+                <!-- Tab menu Principali / Tempi / Handicap / Combo / Tutto -->
+                <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; margin-bottom:1.2rem; scrollbar-width:none;">
+                    <button class="md-tab-btn" data-tab="principali" onclick="matchDetail.switchTab('principali')"
+                        style="white-space:nowrap; padding:7px 16px; border-radius:20px; border:none; cursor:pointer; font-size:0.8rem; font-weight:700; background:var(--accent); color:#0a0a1a; flex-shrink:0; transition:all 0.2s;">Principali</button>
+                    <button class="md-tab-btn" data-tab="tempi" onclick="matchDetail.switchTab('tempi')"
+                        style="white-space:nowrap; padding:7px 16px; border-radius:20px; border:none; cursor:pointer; font-size:0.8rem; font-weight:500; background:rgba(255,255,255,0.07); color:var(--text-secondary); flex-shrink:0; transition:all 0.2s;">Tempi</button>
+                    <button class="md-tab-btn" data-tab="handicap" onclick="matchDetail.switchTab('handicap')"
+                        style="white-space:nowrap; padding:7px 16px; border-radius:20px; border:none; cursor:pointer; font-size:0.8rem; font-weight:500; background:rgba(255,255,255,0.07); color:var(--text-secondary); flex-shrink:0; transition:all 0.2s;">Handicap</button>
+                    <button class="md-tab-btn" data-tab="combo" onclick="matchDetail.switchTab('combo')"
+                        style="white-space:nowrap; padding:7px 16px; border-radius:20px; border:none; cursor:pointer; font-size:0.8rem; font-weight:500; background:rgba(255,255,255,0.07); color:var(--text-secondary); flex-shrink:0; transition:all 0.2s;">Combo</button>
+                    <button class="md-tab-btn" data-tab="multigol" onclick="matchDetail.switchTab('multigol')"
+                        style="white-space:nowrap; padding:7px 16px; border-radius:20px; border:none; cursor:pointer; font-size:0.8rem; font-weight:500; background:rgba(255,255,255,0.07); color:var(--text-secondary); flex-shrink:0; transition:all 0.2s;">Multigol</button>
+                    <button class="md-tab-btn" data-tab="tutto" onclick="matchDetail.switchTab('tutto')"
+                        style="white-space:nowrap; padding:7px 16px; border-radius:20px; border:none; cursor:pointer; font-size:0.8rem; font-weight:500; background:rgba(255,255,255,0.07); color:var(--text-secondary); flex-shrink:0; transition:all 0.2s;">Tutto</button>
+                </div>
+
+                <!-- Contenuto mercati -->
+                <div id="md-markets-container" style="padding-bottom:6rem;">
+                </div>
+            </div>
+
+            <!-- ── LISTA PARTITE ── -->
             <div id="section-odds">
                 <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
@@ -122,6 +160,11 @@
                         </div>
                     </div>
                 </div>
+                <!-- Filtri Lega -->
+                <div id="league-filter-bar" style="display:flex; gap:8px; overflow-x:auto; padding:4px 0 12px 0; scrollbar-width:none; -webkit-overflow-scrolling:touch;">
+                    <!-- Injected by JS -->
+                </div>
+
                 <div id="odds-container" class="odds-grid">
                     <div style="grid-column: 1/-1; text-align: center; padding: 4rem; color: var(--text-secondary);">
                         Caricamento quote in corso...</div>

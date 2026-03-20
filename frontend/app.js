@@ -195,115 +195,11 @@ window.ui = {
         const event = state.odds.find(o => o.id === eventId);
         if (!event) return;
 
-        document.getElementById('modal-match-name').innerText = `${event.home_team} vs ${event.away_team}`;
-        document.getElementById('modal-match-time').innerText = new Date(event.commence_time).toLocaleString();
-
-        const container = document.getElementById('modal-markets-container');
-        const labels = {
-            // CALCIO - Mercati Principali
-            'h2h': 'Esito Finale 1X2',
-            'totals': 'Under/Over (Totali)',
-            'btts': 'Goal / No Goal',
-            'double_chance': 'Doppia Chance',
-            'draw_no_bet': 'Draw No Bet',
-            'outrights': 'Vincente Finale',
-
-            // CALCIO - Tempi e Gol
-            'h2h_1st_half': 'Risultato 1° Tempo',
-            'h2h_2nd_half': 'Risultato 2° Tempo',
-            'totals_1st_half': 'Under/Over 1° Tempo',
-            'totals_2nd_half': 'Under/Over 2° Tempo',
-            'ht_ft': 'Parziale / Finale',
-            'correct_score': 'Risultato Esatto',
-            'exact_score': 'Risultato Esatto',
-            'clean_sheet': 'Clean Sheet (Porta Inviolata)',
-            'win_to_nil': 'Vince a Zero',
-            'odd_even': 'Pari / Dispari',
-
-            // CALCIO - Handicap e Linee
-            'spreads': 'Handicap / Spread',
-            'handicaps': 'Handicap Asiatico',
-            'alternate_totals': 'Over/Under (Linee Aggiuntive)',
-            'alternate_spreads': 'Handicap (Linee Aggiuntive)',
-            'handicap_euro': 'Handicap Europeo',
-
-            // CALCIO - Eventi Partita
-            'total_corners': 'Totale Calci d\'Angolo',
-            'total_cards': 'Totale Cartellini',
-            'booking_points': 'Punti Cartellini',
-
-            // CALCIO - Marcatori e Giocatori
-            'player_anytime_scorer': 'Marcatore (Sempre)',
-            'player_first_scorer': 'Marcatore (Primo)',
-            'player_last_scorer': 'Marcatore (Ultimo)',
-            'player_shots': 'Tiri Giocatore',
-            'player_shots_on_target': 'Tiri in Porta Giocatore',
-            'player_assists': 'Assist Giocatore',
-            'player_anytime_card': 'Cartellino Giocatore',
-
-            // BASKET
-            'points_spread': 'Handicap Punti',
-            'points_totals': 'Over/Under Punti',
-
-            // TENNIS
-            'set_winner': 'Vincente Set',
-            'set_spreads': 'Handicap Set',
-            'set_totals': 'Under/Over Set',
-            'game_spreads': 'Handicap Game',
-            'game_totals': 'Under/Over Game'
-        };
-
-        const bookmaker = event.bookmakers[0];
-        if (!bookmaker) {
-            container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-secondary)">Dati non disponibili per questo evento.</div>';
-            document.getElementById('all-odds-modal').classList.remove('hidden');
-            return;
-        }
-
-        container.innerHTML = bookmaker.markets
-            .filter(m => m.key !== 'h2h_lay') // <--- RIMUOVI BANCA (EXCHANGE)
-            .map(m => {
-                const marketLabel = labels[m.key] || m.key.toUpperCase();
-                const outcomesHtml = m.outcomes.map(o => {
-                    let name = o.name;
-                    if (m.key === 'btts') {
-                        if (['Yes', 'yes', 'Goal', 'GG', '1'].includes(name)) name = 'Goal';
-                        else name = 'No Goal';
-                    } else if (m.key.includes('totals') && o.point !== undefined) {
-                        if (!name.includes(o.point.toString())) {
-                            name = `${o.name} ${o.point}`;
-                        }
-                    } else if (o.description) {
-                        name = `${o.description}: ${o.name}`;
-                    } else if (o.point !== undefined) {
-                        name = `${o.name} (${o.point > 0 ? '+' : ''}${o.point})`;
-                    }
-
-                    const isSelected = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
-
-                    return `
-                    <div class="price-row ${isSelected ? 'selected' : ''}" style="cursor:pointer" onclick="bets.addToSlip('${event.id}', '${event.home_team} vs ${event.away_team}', '${m.key}', '${name}', ${o.price}); ui.closeAllOdds();">
-                        <span>${name}</span>
-                        <span class="price-val">${o.price.toFixed(2)}</span>
-                    </div>
-                `;
-                }).join('');
-
-                return `
-                <div class="market-group">
-                    <h4 style="color:var(--accent); font-size:0.8rem; margin-bottom:10px; text-transform:uppercase;">${marketLabel}</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;">
-                        ${outcomesHtml}
-                    </div>
-                </div>
-            `;
-            }).join('');
-
-        document.getElementById('all-odds-modal').classList.remove('hidden');
-
-        document.getElementById('all-odds-modal').classList.remove('hidden');
+        // Salva l'evento corrente e mostra la schermata dedicata
+        state._currentMatchEvent = event;
+        matchDetail.open(event);
     },
-    closeAllOdds() {
+        closeAllOdds() {
         document.getElementById('all-odds-modal').classList.add('hidden');
     },
     async fetchBalance() {
@@ -788,6 +684,8 @@ window.dashboard = {
             el.innerText = `Prossimo aggiornamento: ${state.timer}m`;
         }
     },
+    _activeLeagueFilter: 'today',
+
     renderOdds() {
         const container = document.getElementById('odds-container');
         if (!container) return;
@@ -807,11 +705,30 @@ window.dashboard = {
                 msg += ' Aggiungi delle partite dal pannello di Amministrazione.';
             }
             container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 4rem;">${msg}</div>`;
+            this.renderLeagueFilters([]);
             return;
         }
 
         const cutoff = new Date(Date.now() + 60 * 1000);
         let filteredOdds = state.odds.filter(e => !e.commence_time || new Date(e.commence_time) > cutoff);
+
+        // Costruisci filtri lega
+        this.renderLeagueFilters(filteredOdds);
+
+        // Applica filtro lega attivo
+        const activeFilter = this._activeLeagueFilter;
+        if (activeFilter === 'today') {
+            const today = new Date();
+            const todayStr = today.toDateString();
+            const tomorrowStr = new Date(today.getTime() + 86400000).toDateString();
+            filteredOdds = filteredOdds.filter(e => {
+                const d = new Date(e.commence_time).toDateString();
+                return d === todayStr || d === tomorrowStr;
+            });
+        } else if (activeFilter !== 'all') {
+            filteredOdds = filteredOdds.filter(e => (e.sport_title || '') === activeFilter);
+        }
+
         if (query) {
             filteredOdds = filteredOdds.filter(event => {
                 const h = (event.home_team || '').toLowerCase();
@@ -822,7 +739,7 @@ window.dashboard = {
         }
 
         if (filteredOdds.length === 0) {
-            container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 4rem; color: var(--text-secondary);">Nessun match trovato per "${query}".</div>`;
+            container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 4rem; color: var(--text-secondary);">Nessun match trovato.</div>`;
             return;
         }
 
@@ -839,7 +756,6 @@ window.dashboard = {
             const isDrawSel = state.slip.some(s => s.eventId === event.id && s.market === 'h2h' && (s.selection === 'X' || s.selection === 'Pareggio' || s.selection === 'Draw'));
             const isAwaySel = state.slip.some(s => s.eventId === event.id && s.market === 'h2h' && s.selection === event.away_team);
 
-            // MERCATI SECONDARI DIRETTI (G/NG, U/O 2.5)
             const btts = bookmaker?.markets.find(m => m.key === 'btts');
             const goalPrice = btts?.outcomes.find(o => ['Yes', 'Goal'].includes(o.name))?.price;
             const nogoalPrice = btts?.outcomes.find(o => ['No', 'No Goal'].includes(o.name))?.price;
@@ -848,14 +764,21 @@ window.dashboard = {
             const over25Price = totals?.outcomes.find(o => o.name.includes('Over') && o.point === 2.5)?.price;
             const under25Price = totals?.outcomes.find(o => o.name.includes('Under') && o.point === 2.5)?.price;
 
+            const eventDate = new Date(event.commence_time);
+            const dateStr = eventDate.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit'});
+            const timeStr = eventDate.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+            const isToday = eventDate.toDateString() === new Date().toDateString();
+            const dayLabel = isToday ? 'Oggi' : dateStr;
+
             return `
             <div class="odd-card fade-in">
                 <div class="sport-tag">${event.sport_title}</div>
                 <div class="event-name" title="${event.home_team} vs ${event.away_team}">
                     ${event.home_team} vs ${event.away_team}
                 </div>
-                <div style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.8rem;">
-                    ${new Date(event.commence_time).toLocaleString()}
+                <div style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.8rem; display:flex; align-items:center; gap:6px;">
+                    <span style="background:rgba(99,179,237,0.15); color:var(--accent); padding:1px 7px; border-radius:10px; font-weight:600;">${dayLabel}</span>
+                    <span>${timeStr}</span>
                 </div>
                 
                 <div class="main-prices" style="margin-bottom: 8px;">
@@ -898,6 +821,51 @@ window.dashboard = {
             </div>
         `;
         }).join('');
+    },
+
+    renderLeagueFilters(odds) {
+        const bar = document.getElementById('league-filter-bar');
+        if (!bar) return;
+
+        // Raccogli leghe uniche
+        const leagueSet = new Set();
+        const today = new Date().toDateString();
+        const tomorrow = new Date(Date.now() + 86400000).toDateString();
+        let hasTodayTomorrow = false;
+        odds.forEach(e => {
+            if (e.sport_title) leagueSet.add(e.sport_title);
+            const d = new Date(e.commence_time).toDateString();
+            if (d === today || d === tomorrow) hasTodayTomorrow = true;
+        });
+
+        const leagues = [...leagueSet].sort();
+        const active = this._activeLeagueFilter;
+
+        const btn = (key, label, icon='') => {
+            const isActive = active === key;
+            return `<button onclick="dashboard.setLeagueFilter('${key}')" style="
+                white-space:nowrap; padding:6px 14px; border-radius:20px; border:none; cursor:pointer;
+                font-size:0.78rem; font-weight:${isActive?'700':'500'};
+                background:${isActive?'var(--accent)':'rgba(255,255,255,0.07)'};
+                color:${isActive?'#0a0a1a':'var(--text-secondary)'};
+                transition:all 0.2s; flex-shrink:0;
+            ">${icon}${label}</button>`;
+        };
+
+        let html = btn('all', 'Tutte', '🌐 ');
+        if (hasTodayTomorrow) html += btn('today', 'Oggi / Domani', '📅 ');
+        leagues.forEach(l => {
+            const short = l.replace(' - ITALY','').replace(' - ENGLAND','').replace(' - SPAIN','')
+                          .replace(' - GERMANY','').replace(' - FRANCE','').replace(' - EUROPE','');
+            html += btn(l, short);
+        });
+
+        bar.innerHTML = html;
+    },
+
+    setLeagueFilter(key) {
+        this._activeLeagueFilter = key;
+        this.renderOdds();
     }
 };
 
@@ -2838,6 +2806,164 @@ window.profile = {
     }
 };
 
+
+window.matchDetail = {
+    _activeTab: 'principali',
+
+    _labels: {
+        'h2h': 'Esito Finale 1X2',
+        'totals': 'Under/Over (Totali)',
+        'btts': 'Goal / No Goal',
+        'double_chance': 'Doppia Chance',
+        'draw_no_bet': 'Draw No Bet',
+        'correct_score': 'Risultato Esatto',
+        'h2h_1st_half': 'Risultato 1° Tempo',
+        'h2h_2nd_half': 'Risultato 2° Tempo',
+        'totals_1st_half': 'Under/Over 1° Tempo',
+        'totals_2nd_half': 'Under/Over 2° Tempo',
+        'alternate_totals': 'Over/Under (Linee Aggiuntive)',
+        'alternate_spreads': 'Handicap (Linee Aggiuntive)',
+        'spreads': 'Handicap / Spread',
+        'draw_no_bet': 'Draw No Bet',
+        'combo_1x2_btts':    'Combo 1X2 + GG/NG',
+        'combo_1x2_ou':      'Combo 1X2 + Over/Under',
+        'combo_dc_btts':     'Doppia Chance + GG/NG',
+        'combo_dc_ou':       'Doppia Chance + Over/Under',
+        'combo_dnb_btts':    'Draw No Bet + GG/NG',
+        'combo_dnb_ou':      'Draw No Bet + Over/Under',
+        'combo_1x2_btts_ou': 'Tripla Combo 1X2 + GG/NG + Over/Under',
+        'combo_ht_btts':     '1° Tempo + GG/NG',
+        'combo_ht_ou':       '1° Tempo + Over/Under',
+        'odd_even':             'Pari / Dispari Gol',
+        'multigol':             'Multigol (Range Gol Totali)',
+        'combo_1x2_multigol':   'Combo 1X2 + Multigol',
+        'combo_dc_multigol':    'Doppia Chance + Multigol',
+        'combo_ou_btts':        'Over/Under + GG/NG',
+        'combo_multigol_btts':  'Multigol + GG/NG',
+        'total_goals_exact':    'Gol Esatti Totali',
+        'combo_1x2_total_goals':'Combo 1X2 + Gol Esatti',
+    },
+
+    _tabs: {
+        'principali': ['h2h', 'totals', 'btts', 'double_chance', 'draw_no_bet', 'correct_score'],
+        'tempi':      ['h2h_1st_half', 'h2h_2nd_half', 'totals_1st_half', 'totals_2nd_half'],
+        'handicap':   ['spreads', 'alternate_spreads', 'alternate_totals'],
+        'combo':      ['combo_1x2_btts','combo_1x2_ou','combo_dc_btts','combo_dc_ou','combo_dnb_btts','combo_dnb_ou','combo_1x2_btts_ou','combo_ht_btts','combo_ht_ou','combo_ou_btts','odd_even'],
+        'multigol':   ['multigol','total_goals_exact','combo_1x2_multigol','combo_dc_multigol','combo_multigol_btts','combo_1x2_total_goals'],
+        'tutto':      null, // null = tutti i mercati
+    },
+
+    open(event) {
+        this._activeTab = 'principali';
+        const section = document.getElementById('section-match-detail');
+        const oddsSection = document.getElementById('section-odds');
+        if (!section || !oddsSection) return;
+
+        // Titolo e orario
+        const eventDate = new Date(event.commence_time);
+        const dateStr = eventDate.toLocaleDateString('it-IT', {weekday:'long', day:'2-digit', month:'long'});
+        const timeStr = eventDate.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+
+        document.getElementById('md-league').innerText = event.sport_title || '';
+        document.getElementById('md-home').innerText = event.home_team;
+        document.getElementById('md-away').innerText = event.away_team;
+        document.getElementById('md-date').innerText = `${dateStr} — ${timeStr}`;
+
+        // Mostra schermata
+        oddsSection.classList.add('hidden');
+        section.classList.remove('hidden');
+
+        this.renderTab(event);
+    },
+
+    close() {
+        const section = document.getElementById('section-match-detail');
+        const oddsSection = document.getElementById('section-odds');
+        if (section) section.classList.add('hidden');
+        if (oddsSection) oddsSection.classList.remove('hidden');
+        state._currentMatchEvent = null;
+    },
+
+    switchTab(tab) {
+        this._activeTab = tab;
+        const event = state._currentMatchEvent;
+        if (!event) return;
+
+        // Aggiorna stile bottoni tab
+        document.querySelectorAll('.md-tab-btn').forEach(btn => {
+            const isActive = btn.dataset.tab === tab;
+            btn.style.background = isActive ? 'var(--accent)' : 'rgba(255,255,255,0.07)';
+            btn.style.color = isActive ? '#0a0a1a' : 'var(--text-secondary)';
+            btn.style.fontWeight = isActive ? '700' : '500';
+        });
+
+        this.renderTab(event);
+    },
+
+    renderTab(event) {
+        const container = document.getElementById('md-markets-container');
+        if (!container) return;
+
+        const bookmaker = event.bookmakers?.[0];
+        if (!bookmaker) {
+            container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:2rem;">Mercati non disponibili.</p>';
+            return;
+        }
+
+        const tabKeys = this._tabs[this._activeTab];
+        let markets;
+        if (tabKeys === null) {
+            // "Tutto" — tutti i mercati tranne h2h_lay
+            markets = bookmaker.markets.filter(m => m.key !== 'h2h_lay');
+        } else {
+            // Prende i mercati nella lista, nell'ordine definito
+            markets = tabKeys
+                .map(key => bookmaker.markets.find(m => m.key === key))
+                .filter(Boolean);
+            // Se nessun mercato trovato per questo tab, mostra tutti
+            if (markets.length === 0) {
+                markets = bookmaker.markets.filter(m => m.key !== 'h2h_lay');
+            }
+        }
+
+        if (markets.length === 0) {
+            container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:2rem;">Nessun mercato disponibile per questa sezione.</p>';
+            return;
+        }
+
+        container.innerHTML = markets.map(m => {
+            const label = this._labels[m.key] || m.key.replace(/_/g,' ').toUpperCase();
+            const outcomesHtml = m.outcomes.map(o => {
+                let name = o.name;
+                if (m.key === 'btts') {
+                    name = ['Yes','yes','Goal','GG','1'].includes(name) ? 'Goal' : 'No Goal';
+                } else if (m.key.includes('totals') && o.point !== undefined) {
+                    if (!name.includes(o.point.toString())) name = `${o.name} ${o.point}`;
+                } else if (o.point !== undefined && !m.key.includes('combo')) {
+                    if (!name.includes(String(o.point))) name = `${o.name} (${o.point > 0 ? '+' : ''}${o.point})`;
+                }
+                const isSel = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
+                const safeEvent = (event.home_team + ' vs ' + event.away_team).replace(/'/g, "\'");
+                const safeName = name.replace(/'/g, "\'");
+                return `<div class="price-row ${isSel ? 'selected' : ''}" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,${isSel?'0.2':'0.07'});margin-bottom:6px;transition:all 0.15s;"
+                    onclick="bets.addToSlip('${event.id}','${safeEvent}','${m.key}','${safeName}',${o.price}); matchDetail.refreshSelections();">
+                    <span style="color:var(--text-primary);font-size:0.88rem;">${name}</span>
+                    <span style="color:var(--accent);font-weight:700;font-size:0.95rem;">${o.price.toFixed(2)}</span>
+                </div>`;
+            }).join('');
+
+            return `<div style="margin-bottom:1.5rem;">
+                <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.08em;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(99,179,237,0.2);">${label}</div>
+                <div>${outcomesHtml}</div>
+            </div>`;
+        }).join('');
+    },
+
+    refreshSelections() {
+        const event = state._currentMatchEvent;
+        if (event) this.renderTab(event);
+    }
+};
 
 window.onload = () => {
     if (state.token) {
