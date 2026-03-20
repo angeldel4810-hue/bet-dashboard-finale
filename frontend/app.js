@@ -2732,24 +2732,41 @@ window.profile = {
             return;
         }
 
-        // 1. Invia richiesta al backend (pending)
+        // 1. Apri la finestra SUBITO — prima di qualsiasi await
+        //    Safari blocca window.open() se chiamato dopo operazioni async
+        const payWin = window.open('', '_blank');
+        if (payWin) {
+            // Pagina di attesa mentre la richiesta viene inviata
+            payWin.document.write('<html><head><title>Reindirizzamento...</title></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#1a1a2e;color:#fff;"><p style="font-size:1.2rem;">⏳ Reindirizzamento al pagamento...</p></body></html>');
+        }
+
+        // 2. Invia richiesta al backend (pending)
         const res = await api.request('/deposit/request', {
             method: 'POST',
             body: JSON.stringify({ amount, bonus_id: this._selectedBonusId || null })
         });
 
-        if (!res) return; // error shown by api.request
+        if (!res) {
+            // Chiudi la finestra aperta se la richiesta fallisce
+            if (payWin && !payWin.closed) payWin.close();
+            return;
+        }
 
-        // 2. Apri SumUp con <a>.click() — funziona su iOS Safari
-        const link = document.createElement('a');
-        link.href = 'https://pay.sumup.com/b2c/QEAW96U8';
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        // 3. Reindirizza la finestra già aperta al link SumUp
+        if (payWin && !payWin.closed) {
+            payWin.location.href = 'https://pay.sumup.com/b2c/QEAW96U8';
+        } else {
+            // Fallback: se la finestra è stata chiusa, apri con link diretto
+            const link = document.createElement('a');
+            link.href = 'https://pay.sumup.com/b2c/QEAW96U8';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
 
-        // 3. Reset e chiudi modal
+        // 4. Reset e chiudi modal
         if (amountEl) amountEl.value = '';
         this._selectedBonusId = null;
         this.closeDeposit();
