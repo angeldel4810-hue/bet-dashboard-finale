@@ -2838,13 +2838,15 @@ window.matchDetail = {
         'combo_ht_btts':     '1° Tempo + GG/NG',
         'combo_ht_ou':       '1° Tempo + Over/Under',
         'odd_even':             'Pari / Dispari Gol',
-        'multigol':             'Multigol (Range Gol Totali)',
-        'combo_1x2_multigol':   'Combo 1X2 + Multigol',
+        'multigol':             'Multigol Totale',
+        'multigol_home':        'Multigol Casa',
+        'multigol_away':        'Multigol Ospite',
+        'combo_1x2_multigol':   '1X2 + Multigol',
         'combo_dc_multigol':    'Doppia Chance + Multigol',
         'combo_ou_btts':        'Over/Under + GG/NG',
         'combo_multigol_btts':  'Multigol + GG/NG',
         'total_goals_exact':    'Gol Esatti Totali',
-        'combo_1x2_total_goals':'Combo 1X2 + Gol Esatti',
+        'combo_1x2_total_goals':'1X2 + Gol Esatti',
     },
 
     _tabs: {
@@ -2852,7 +2854,7 @@ window.matchDetail = {
         'tempi':      ['h2h_1st_half', 'h2h_2nd_half', 'totals_1st_half', 'totals_2nd_half'],
         'handicap':   ['spreads', 'alternate_spreads', 'alternate_totals'],
         'combo':      ['combo_1x2_btts','combo_1x2_ou','combo_dc_btts','combo_dc_ou','combo_dnb_btts','combo_dnb_ou','combo_1x2_btts_ou','combo_ht_btts','combo_ht_ou','combo_ou_btts','odd_even'],
-        'multigol':   ['multigol','total_goals_exact','combo_1x2_multigol','combo_dc_multigol','combo_multigol_btts','combo_1x2_total_goals'],
+        'multigol':   ['multigol','multigol_home','multigol_away','total_goals_exact','combo_1x2_multigol','combo_dc_multigol','combo_multigol_btts','combo_ou_btts','combo_1x2_total_goals'],
         'tutto':      null, // null = tutti i mercati
     },
 
@@ -2920,6 +2922,10 @@ window.matchDetail = {
         this.renderTab(event);
     },
 
+    // Mercati che usano il dropdown selector stile Sisal
+    _DROPDOWN_MARKETS: new Set(['multigol','multigol_home','multigol_away','combo_1x2_multigol','combo_dc_multigol','combo_multigol_btts','combo_1x2_total_goals']),
+    _dropdownState: {}, // market_key → selected_prefix
+
     renderTab(event) {
         const container = document.getElementById('md-markets-container');
         if (!container) return;
@@ -2933,17 +2939,10 @@ window.matchDetail = {
         const tabKeys = this._tabs[this._activeTab];
         let markets;
         if (tabKeys === null) {
-            // "Tutto" — tutti i mercati tranne h2h_lay
             markets = bookmaker.markets.filter(m => m.key !== 'h2h_lay');
         } else {
-            // Prende i mercati nella lista, nell'ordine definito
-            markets = tabKeys
-                .map(key => bookmaker.markets.find(m => m.key === key))
-                .filter(Boolean);
-            // Se nessun mercato trovato per questo tab, mostra tutti
-            if (markets.length === 0) {
-                markets = bookmaker.markets.filter(m => m.key !== 'h2h_lay');
-            }
+            markets = tabKeys.map(key => bookmaker.markets.find(m => m.key === key)).filter(Boolean);
+            if (markets.length === 0) markets = bookmaker.markets.filter(m => m.key !== 'h2h_lay');
         }
 
         if (markets.length === 0) {
@@ -2953,6 +2952,13 @@ window.matchDetail = {
 
         container.innerHTML = markets.map(m => {
             const label = this._labels[m.key] || m.key.replace(/_/g,' ').toUpperCase();
+
+            // ── Mercati con DROPDOWN (stile Sisal) ──────────────────────────
+            if (this._DROPDOWN_MARKETS.has(m.key)) {
+                return this._renderDropdownMarket(event, m, label);
+            }
+
+            // ── Mercati normali (lista verticale) ───────────────────────────
             const outcomesHtml = m.outcomes.map(o => {
                 let name = o.name;
                 if (m.key === 'btts') {
@@ -2975,6 +2981,117 @@ window.matchDetail = {
             return `<div style="margin-bottom:1.5rem;">
                 <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.08em;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(99,179,237,0.2);">${label}</div>
                 <div>${outcomesHtml}</div>
+            </div>`;
+        }).join('');
+    },
+
+    _renderDropdownMarket(event, m, label) {
+        // Estrai prefissi unici per il dropdown (es. "1+", "X+", "2+", oppure "Casa:", "Ospite:")
+        // Per multigol semplice: non serve dropdown — mostra griglia diretta
+        if (m.key === 'multigol' || m.key === 'total_goals_exact') {
+            return this._renderMultigolGrid(event, m, label);
+        }
+
+        // Per combo: raggruppa per prefisso (parte prima del "+")
+        const groups = {};
+        const groupOrder = [];
+        m.outcomes.forEach(o => {
+            const plusIdx = o.name.indexOf('+');
+            const prefix = plusIdx > -1 ? o.name.substring(0, plusIdx) : o.name;
+            if (!groups[prefix]) { groups[prefix] = []; groupOrder.push(prefix); }
+            groups[prefix].push(o);
+        });
+
+        if (groupOrder.length <= 1) {
+            return this._renderMultigolGrid(event, m, label);
+        }
+
+        const mkId = m.key.replace(/_/g, '-');
+        const selectedPrefix = this._dropdownState[m.key] || groupOrder[0];
+        const safeEvent = (event.home_team + ' vs ' + event.away_team).replace(/'/g, "\'");
+
+        const selectedOutcomes = groups[selectedPrefix] || [];
+        const outcomesHtml = selectedOutcomes.map(o => {
+            const name = o.name;
+            const isSel = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
+            const safeName = name.replace(/'/g, "\'");
+            return `<div style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:8px;background:${isSel?'rgba(99,179,237,0.15)':'rgba(255,255,255,0.04)'};border:1px solid rgba(255,255,255,${isSel?'0.2':'0.07'});margin-bottom:6px;transition:all 0.15s;"
+                onclick="bets.addToSlip('${event.id}','${safeEvent}','${m.key}','${safeName}',${o.price}); matchDetail.refreshSelections();">
+                <span style="color:var(--text-primary);font-size:0.88rem;">${name}</span>
+                <span style="color:var(--accent);font-weight:700;font-size:0.95rem;">${o.price.toFixed(2)}</span>
+            </div>`;
+        }).join('');
+
+        const options = groupOrder.map(p =>
+            `<option value="${p}" ${p === selectedPrefix ? 'selected' : ''}>${p}</option>`
+        ).join('');
+
+        return `<div style="margin-bottom:1.5rem;">
+            <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.08em;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(99,179,237,0.2);">${label}</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <select id="dd-${mkId}" onchange="matchDetail._onDropdownChange('${m.key}','${event.id}')"
+                    style="width:auto!important;background:var(--card-bg);color:var(--text-primary);border:1px solid var(--border-color);border-radius:8px;padding:7px 12px;font-size:0.85rem;cursor:pointer;outline:none;min-width:120px;">
+                    ${options}
+                </select>
+                <span style="color:var(--text-secondary);font-size:0.78rem;">seleziona per filtrare</span>
+            </div>
+            <div id="dd-content-${mkId}">${outcomesHtml}</div>
+        </div>`;
+    },
+
+    _renderMultigolGrid(event, m, label) {
+        // Griglia compatta stile Sisal per multigol puro e gol esatti
+        const safeEvent = (event.home_team + ' vs ' + event.away_team).replace(/'/g, "\'");
+        const outcomesHtml = m.outcomes.map(o => {
+            const name = o.name;
+            const isSel = state.slip.some(s => s.eventId === event.id && s.market === m.key && s.selection === name);
+            const safeName = name.replace(/'/g, "\'");
+            // Label breve: rimuovi "Multigol " e "Gol" ecc.
+            const shortLabel = name.replace('Multigol ', '').replace(' Gol', 'G').replace('Casa: ','C:').replace('Ospite: ','O:');
+            return `<div style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 8px;border-radius:8px;background:${isSel?'rgba(99,179,237,0.18)':'rgba(255,255,255,0.05)'};border:1px solid rgba(255,255,255,${isSel?'0.25':'0.08'});transition:all 0.15s;text-align:center;"
+                onclick="bets.addToSlip('${event.id}','${safeEvent}','${m.key}','${safeName}',${o.price}); matchDetail.refreshSelections();">
+                <span style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:4px;font-weight:600;">${shortLabel}</span>
+                <span style="color:var(--accent);font-weight:700;font-size:0.95rem;">${o.price.toFixed(2)}</span>
+            </div>`;
+        }).join('');
+        return `<div style="margin-bottom:1.5rem;">
+            <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.08em;color:var(--accent);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(99,179,237,0.2);">${label}</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;">${outcomesHtml}</div>
+        </div>`;
+    },
+
+    _onDropdownChange(marketKey, eventId) {
+        const event = state._currentMatchEvent;
+        if (!event) return;
+        const mkId = marketKey.replace(/_/g, '-');
+        const sel = document.getElementById('dd-' + mkId);
+        if (!sel) return;
+        this._dropdownState[marketKey] = sel.value;
+
+        const bookmaker = event.bookmakers?.[0];
+        const m = bookmaker?.markets.find(x => x.key === marketKey);
+        if (!m) return;
+
+        const groups = {};
+        m.outcomes.forEach(o => {
+            const plusIdx = o.name.indexOf('+');
+            const prefix = plusIdx > -1 ? o.name.substring(0, plusIdx) : o.name;
+            if (!groups[prefix]) groups[prefix] = [];
+            groups[prefix].push(o);
+        });
+
+        const safeEvent = (event.home_team + ' vs ' + event.away_team).replace(/'/g, "\'");
+        const selectedOutcomes = groups[sel.value] || [];
+        const contentEl = document.getElementById('dd-content-' + mkId);
+        if (!contentEl) return;
+        contentEl.innerHTML = selectedOutcomes.map(o => {
+            const name = o.name;
+            const isSel = state.slip.some(s => s.eventId === event.id && s.market === marketKey && s.selection === name);
+            const safeName = name.replace(/'/g, "\'");
+            return `<div style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:8px;background:${isSel?'rgba(99,179,237,0.15)':'rgba(255,255,255,0.04)'};border:1px solid rgba(255,255,255,${isSel?'0.2':'0.07'});margin-bottom:6px;transition:all 0.15s;"
+                onclick="bets.addToSlip('${event.id}','${safeEvent}','${marketKey}','${safeName}',${o.price}); matchDetail.refreshSelections();">
+                <span style="color:var(--text-primary);font-size:0.88rem;">${name}</span>
+                <span style="color:var(--accent);font-weight:700;font-size:0.95rem;">${o.price.toFixed(2)}</span>
             </div>`;
         }).join('');
     },
