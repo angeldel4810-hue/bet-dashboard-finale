@@ -2708,38 +2708,62 @@ window.profile = {
             return;
         }
 
+        const PAY_URL = 'https://pay.sumup.com/b2c/QEAW96U8';
+
         // 1. Apri la finestra SUBITO — prima di qualsiasi await
-        //    Safari blocca window.open() se chiamato dopo operazioni async
+        //    Safari blocca window.open() se chiamato dopo operazioni async.
+        //    Usiamo meta refresh invece di location.href: Safari lo considera
+        //    navigazione interna alla finestra già aperta, non un nuovo popup.
         const payWin = window.open('', '_blank');
         if (payWin) {
-            // Pagina di attesa mentre la richiesta viene inviata
-            payWin.document.write('<html><head><title>Reindirizzamento...</title></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#1a1a2e;color:#fff;"><p style="font-size:1.2rem;">⏳ Reindirizzamento al pagamento...</p></body></html>');
+            payWin.document.write(
+                '<html><head>' +
+                '<title>Reindirizzamento pagamento...</title>' +
+                '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+                '</head><body style="font-family:sans-serif;display:flex;flex-direction:column;' +
+                'align-items:center;justify-content:center;height:100vh;margin:0;' +
+                'background:#1a1a2e;color:#fff;gap:16px;">' +
+                '<p style="font-size:1.2rem;margin:0;">⏳ Reindirizzamento al pagamento...</p>' +
+                '<p style="font-size:0.85rem;color:#aaa;margin:0;">Non chiudere questa finestra</p>' +
+                '</body></html>'
+            );
+            payWin.document.close();
         }
 
-        // 2. Invia richiesta al backend (pending)
+        // 2. Invia richiesta al backend
         const res = await api.request('/deposit/request', {
             method: 'POST',
             body: JSON.stringify({ amount, bonus_id: this._selectedBonusId || null })
         });
 
         if (!res) {
-            // Chiudi la finestra aperta se la richiesta fallisce
             if (payWin && !payWin.closed) payWin.close();
             return;
         }
 
-        // 3. Reindirizza la finestra già aperta al link SumUp
+        // 3. Reindirizza — metodo universale cross-browser incluso Safari
         if (payWin && !payWin.closed) {
-            payWin.location.href = 'https://pay.sumup.com/b2c/QEAW96U8';
+            // Prima prova location.href (funziona su Chrome/Firefox)
+            try {
+                payWin.location.href = PAY_URL;
+            } catch(e) {
+                // Safari fallback: riscrivi la pagina con meta refresh immediato
+                payWin.document.open();
+                payWin.document.write(
+                    '<html><head>' +
+                    '<meta http-equiv="refresh" content="0;url=' + PAY_URL + '">' +
+                    '<title>Reindirizzamento...</title>' +
+                    '</head><body style="font-family:sans-serif;display:flex;align-items:center;' +
+                    'justify-content:center;height:100vh;margin:0;background:#1a1a2e;color:#fff;">' +
+                    '<p>Reindirizzamento...</p>' +
+                    '<script>window.location.replace("' + PAY_URL + '")<\/script>' +
+                    '</body></html>'
+                );
+                payWin.document.close();
+            }
         } else {
-            // Fallback: se la finestra è stata chiusa, apri con link diretto
-            const link = document.createElement('a');
-            link.href = 'https://pay.sumup.com/b2c/QEAW96U8';
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Finestra chiusa dall'utente: apri link direttamente nella pagina corrente
+            window.location.href = PAY_URL;
         }
 
         // 4. Reset e chiudi modal
@@ -2747,7 +2771,10 @@ window.profile = {
         this._selectedBonusId = null;
         this.closeDeposit();
 
-        alert(`✅ ${res.message}${parseFloat(res.bonus_amount||0) > 0 ? '\n🎁 Bonus di €'+parseFloat(res.bonus_amount).toFixed(2)+' verrà accreditato dopo approvazione.' : ''}`);
+        const bonusMsg = parseFloat(res.bonus_amount||0) > 0
+            ? '\n🎁 Bonus di €' + parseFloat(res.bonus_amount).toFixed(2) + ' verrà accreditato dopo approvazione.'
+            : '';
+        alert('✅ ' + res.message + bonusMsg);
     },
 
     async applyBonus(bonusId, amount) {
