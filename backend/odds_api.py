@@ -90,11 +90,31 @@ def _simulate_markets(event: Dict[str, Any]):
         o25_q = next((o['price'] for o in totals['outcomes']
                       if o.get('point') == 2.5 and 'Over' in str(o.get('name', ''))), None)
         if o25_q:
-            # Usa la prob implicita diretta (formula correlazione calibrata su prob implicite)
             prob_o25 = min(0.95, max(0.05, 1.0 / float(o25_q)))
             lam = _lambda_from_over25(prob_o25)
 
+
     M = HOUSE_EDGE
+    import math as _math
+
+    # Se totals manca dall'API, stima lam dalle quote 1X2 e genera il mercato
+    # Range: 1.8 (favorito netto) -> 3.1 (partita equilibrata)
+    if lam is None and ph is not None:
+        _unc = 1.0 - max(ph, px if px else 0, pa)
+        lam = min(3.2, max(1.6, 1.8 + _unc * 2.0))
+        def _pov(l): return 1 - _math.exp(-l)*(1+l+l**2/2)
+        _po25 = _pov(lam); _pu25 = 1.0 - _po25
+        _po15 = 1 - _math.exp(-lam)*(1+lam); _pu15 = 1.0 - _po15
+        o25_q = max(1.05, round(1.0/(_po25*M), 2))
+        if 'totals' not in m_keys:
+            add("totals", [
+                {"name": "Over 2.5",  "price": o25_q, "point": 2.5},
+                {"name": "Under 2.5", "price": max(1.05, round(1.0/(_pu25*M), 2)), "point": 2.5},
+                {"name": "Over 1.5",  "price": max(1.05, round(1.0/(_po15*M), 2)), "point": 1.5},
+                {"name": "Under 1.5", "price": max(1.05, round(1.0/(_pu15*M), 2)), "point": 1.5},
+            ])
+            m_keys.add('totals')
+            totals = m_list[-1]  # aggiorna riferimento alla variabile totals
 
     # Stima lambda casa e ospite -- usato da tutti i mercati con correlazione
     # Floor su lam_a = 0.70: anche le squadre molto sfavorite segnano in media ~0.7 gol/partita.
