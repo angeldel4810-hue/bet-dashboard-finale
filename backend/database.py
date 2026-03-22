@@ -186,8 +186,12 @@ def init_db():
         )
         if needs_update:
             new_val = 'soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,soccer_portugal_primeira_liga,soccer_netherlands_eredivisie,soccer_uefa_europa_league,soccer_turkey_super_league,soccer_argentina_primera_division,soccer_italy_serie_c,soccer_uefa_europa_conference_league,soccer_italy_coppa_italia'
-            cursor.execute("UPDATE settings SET value = %s WHERE key = 'active_sports'", (new_val,))
-            print(f"[DB] active_sports aggiornato")
+            if is_postgres:
+                cursor.execute("UPDATE settings SET value = %s WHERE key = 'active_sports'", (new_val,))
+            else:
+                cursor.execute("UPDATE settings SET value = ? WHERE key = 'active_sports'", (new_val,))
+            conn.commit()
+            print("[DB] active_sports aggiornato con tutte le leghe")
 
         import bcrypt as _bcrypt
         admin_hash = _bcrypt.hashpw('admin123'.encode(), _bcrypt.gensalt()).decode()
