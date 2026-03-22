@@ -1,3 +1,24 @@
+// Helper: formatta data in ora italiana (UTC+1/+2)
+function fmtDate(dateStr, opts) {
+    if (!dateStr) return '---';
+    try {
+        return new Date(dateStr).toLocaleString('it-IT', Object.assign({ timeZone: 'Europe/Rome' }, opts || {}));
+    } catch(e) { return dateStr; }
+}
+function fmtDateTime(dateStr) {
+    if (!dateStr) return '---';
+    try {
+        const d = new Date(dateStr);
+        return d.toLocaleString('it-IT', { timeZone: 'Europe/Rome', day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
+    } catch(e) { return dateStr; }
+}
+function fmtTime(dateStr) {
+    if (!dateStr) return '---';
+    try {
+        return new Date(dateStr).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour:'2-digit', minute:'2-digit' });
+    } catch(e) { return dateStr; }
+}
+
 const state = {
     token: localStorage.getItem('token'),
     role: localStorage.getItem('role'),
@@ -1025,7 +1046,7 @@ window.admin = {
         document.getElementById('detail-status').style.color = detail.status === 'blocked' ? 'var(--danger)' : 'var(--success)';
 
         try {
-            document.getElementById('detail-created').innerText = detail.created_at ? new Date(detail.created_at).toLocaleDateString() : '---';
+            document.getElementById('detail-created').innerText = detail.created_at ? fmtDateTime(detail.created_at) : '---';
         } catch (e) {
             document.getElementById('detail-created').innerText = '---';
         }
@@ -1039,7 +1060,7 @@ window.admin = {
         } else {
             betsContainer.innerHTML = detail.bets.map(b => {
                 const betDate = b.created_at ? new Date(b.created_at) : null;
-                const betTimeStr = betDate ? betDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + ' — ' + betDate.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+                const betTimeStr = betDate ? fmtDateTime(betDate) : '';
                 return `
                 <div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:8px; margin-bottom:1rem; border-left: 4px solid ${b.status === 'won' ? 'var(--success)' : b.status === 'lost' ? 'var(--danger)' : b.status === 'cancelled' ? 'var(--text-secondary)' : 'var(--accent)'}">
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
@@ -1092,7 +1113,7 @@ window.admin = {
                     </div>
                     <div style="text-align: right;">
                         <div>€${t.balance_after.toFixed(2)}</div>
-                        <div style="color: var(--text-secondary); font-size: 0.75rem;">${new Date(t.timestamp).toLocaleDateString()}</div>
+                        <div style="color: var(--text-secondary); font-size: 0.75rem;">${fmtDate(t.timestamp, {day:'2-digit',month:'2-digit',year:'2-digit'})}</div>
                     </div>
                 </div>
             `).join('');
@@ -1118,10 +1139,10 @@ window.admin = {
         container.innerHTML = bets.map(b => {
             let timeStr = '--:--', dateStr = '--/--/--';
             try {
-                const date = new Date(b.created_at);
+                const date = b.created_at ? new Date(b.created_at) : null;
                 if (!isNaN(date)) {
                     timeStr = date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                    dateStr = date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                    dateStr = date ? fmtDateTime(date) : '---';
                 }
             } catch(e) {}
             const isWin = b.status === 'won';
@@ -1380,7 +1401,7 @@ window.admin = {
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;">
                     <div style="display:flex;gap:8px;align-items:center;">
                         <span style="font-weight:800;color:var(--accent);">${d.username}</span>
-                        <span style="font-size:0.75rem;color:var(--text-secondary);">#${d.id} · ${d.created_at ? new Date(d.created_at).toLocaleString('it-IT') : '---'}</span>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);">#${d.id} · ${fmtDateTime(d.created_at)}</span>
                     </div>
                     <span style="font-weight:900;color:${statusColors[d.status]||'#aaa'};font-size:0.85rem;">${statusLabels[d.status]||d.status}</span>
                 </div>
@@ -1438,7 +1459,7 @@ window.admin = {
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.5rem;">
                     <div style="display:flex; gap:8px; align-items:center;">
                         <span style="font-weight:800; color:var(--accent);">${w.username}</span>
-                        <span style="font-size:0.75rem; color:var(--text-secondary);">#${w.id} · ${w.created_at ? new Date(w.created_at).toLocaleString('it-IT') : '---'}</span>
+                        <span style="font-size:0.75rem; color:var(--text-secondary);">#${w.id} · ${fmtDateTime(w.created_at)}</span>
                     </div>
                     <span style="font-weight:900; color:${statusColors[w.status]||'#aaa'}; font-size:0.85rem;">${statusLabels[w.status]||w.status}</span>
                 </div>
@@ -1733,7 +1754,7 @@ window.bets = {
 
         container.innerHTML = filtered.map(bet => {
             let dateStr = '---';
-            try { if (bet.created_at) dateStr = new Date(bet.created_at).toLocaleString('it-IT'); } catch(e) {}
+            try { if (bet.created_at) dateStr = fmtDateTime(bet.created_at); } catch(e) {}
 
             const statusColor = bet.status === 'won' ? 'var(--success)' : bet.status === 'lost' ? 'var(--danger)' : 'var(--accent)';
             const statusLabel = { won: '✅ VINTO', lost: '❌ PERSO', pending: '⏳ IN CORSO', void: '↩️ ANNULLATO' }[bet.status] || bet.status.toUpperCase();
