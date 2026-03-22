@@ -168,7 +168,7 @@ def init_db():
         cursor.execute("""DO $$ BEGIN ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS bonus_id INTEGER DEFAULT NULL; EXCEPTION WHEN others THEN NULL; END $$""")
         cursor.execute("""DO $$ BEGIN ALTER TABLE deposit_requests ADD COLUMN IF NOT EXISTS bonus_amount REAL DEFAULT 0; EXCEPTION WHEN others THEN NULL; END $$""")
 
-        for k, v in [('overround','5'),('odds_source','manual'),('apikey',''),('api_provider','the-odds-api'),('active_sports','soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,soccer_portugal_primeira_liga,soccer_netherlands_eredivisie,soccer_uefa_europa_league,soccer_turkey_super_league,soccer_argentina_primera_division'),('crash_house_edge','3'),('virtual_house_edge','15'),('virtual_pay_mode','auto')]:
+        for k, v in [('overround','5'),('odds_source','manual'),('apikey',''),('api_provider','the-odds-api'),('active_sports','soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,soccer_portugal_primeira_liga,soccer_netherlands_eredivisie,soccer_uefa_europa_league,soccer_turkey_super_league,soccer_argentina_primera_division,soccer_italy_serie_c,soccer_uefa_europa_conference_league,soccer_italy_coppa_italia'),('crash_house_edge','3'),('virtual_house_edge','15'),('virtual_pay_mode','auto')]:
             cursor.execute("INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING", (k, v))
 
         # Migration: aggiorna active_sports se mancano leghe importanti
@@ -181,9 +181,11 @@ def init_db():
             or not any(kw in current_sports.lower() for kw in ['soccer','football'])
             or 'soccer_serie_a' not in current_sports
             or 'soccer_epl' not in current_sports
+            or 'soccer_italy_serie_c' not in current_sports
+            or 'soccer_uefa_europa_conference_league' not in current_sports
         )
         if needs_update:
-            new_val = 'soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,soccer_portugal_primeira_liga,soccer_netherlands_eredivisie,soccer_uefa_europa_league,soccer_turkey_super_league,soccer_argentina_primera_division'
+            new_val = 'soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,soccer_portugal_primeira_liga,soccer_netherlands_eredivisie,soccer_uefa_europa_league,soccer_turkey_super_league,soccer_argentina_primera_division,soccer_italy_serie_c,soccer_uefa_europa_conference_league,soccer_italy_coppa_italia'
             cursor.execute("UPDATE settings SET value = %s WHERE key = 'active_sports'", (new_val,))
             print(f"[DB] active_sports aggiornato")
 
@@ -221,7 +223,7 @@ def init_db():
             INSERT OR IGNORE INTO settings (key, value) VALUES ('odds_source', 'manual');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('apikey', '');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('api_provider', 'the-odds-api');
-            INSERT OR IGNORE INTO settings (key, value) VALUES ('active_sports', 'soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,soccer_portugal_primeira_liga,soccer_netherlands_eredivisie,soccer_uefa_europa_league,soccer_turkey_super_league,soccer_argentina_primera_division');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('active_sports', 'soccer_serie_a,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_germany_bundesliga,soccer_france_ligue_one,soccer_italy_serie_b,soccer_usa_mls,soccer_brazil_campeonato,soccer_portugal_primeira_liga,soccer_netherlands_eredivisie,soccer_uefa_europa_league,soccer_turkey_super_league,soccer_argentina_primera_division,soccer_italy_serie_c,soccer_uefa_europa_conference_league,soccer_italy_coppa_italia');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('crash_house_edge', '3');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_house_edge', '15');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('virtual_pay_mode', 'auto');
