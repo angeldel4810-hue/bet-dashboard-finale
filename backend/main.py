@@ -386,30 +386,27 @@ async def fetch_odds(user = Depends(get_current_user)):
     async with odds_lock:
         current_time = time.time()
 
-        # Se la cache in memoria è scaduta, controlla anche il timestamp nel DB
-        # Questo gestisce il caso in cui il server si è riavviato ma il TTL non è scaduto
-        mem_ts = odds_cache.get('timestamp', 0)
-        if mem_ts == 0:
-            db_ts = _get_db_timestamp()
-            if db_ts > 0 and (current_time - db_ts < CACHE_TTL):
-                # Il TTL non è scaduto — non chiamare l'API, ma la cache in memoria
-                # è vuota (riavvio). Dobbiamo fare la fetch per riempirla.
-                # Impostiamo timestamp a db_ts per non sprecare crediti:
-                # se i dati sono ancora freschi, li ricarichiamo senza consumare l'API.
-                # Nota: senza dati in memoria, dobbiamo comunque chiamare l'API una volta.
-                pass  # lascia scadere e vai a fetch sotto
-            odds_cache['timestamp'] = db_ts  # sincronizza
+        # Sincronizza timestamp dal DB se cache in memoria vuota (riavvio server Render)
+        if not odds_cache.get('timestamp'):
+            odds_cache['timestamp'] = _get_db_timestamp()
 
-        # Cache 6 ore — risparmia crediti API
-        if (current_time - odds_cache['timestamp'] < CACHE_TTL) and \
-           (odds_cache['source'] == source) and \
-           (odds_cache['provider'] == api_provider) and \
-           (odds_cache['sports'] == sports_str) and \
-           (abs(odds_cache['overround'] - overround) < 0.01) and \
-           len(odds_cache['data']) > 0:
+        # Cache valida SOLO se ha dati + TTL non scaduto + parametri identici
+        cache_valid = (
+            len(odds_cache.get('data') or []) > 0
+            and (current_time - (odds_cache.get('timestamp') or 0)) < CACHE_TTL
+            and odds_cache.get('source') == source
+            and odds_cache.get('provider') == api_provider
+            and odds_cache.get('sports') == sports_str
+            and abs((odds_cache.get('overround') or 0) - overround) < 0.01
+        )
+        if cache_valid:
             conn.close()
             return odds_cache['data']
-        
+
+        # Segna subito che stiamo facendo fetch per bloccare richieste parallele
+        odds_cache['timestamp'] = current_time
+        odds_cache['data'] = []
+
         cursor = conn.cursor()
         is_postgres = hasattr(conn, 'get_dsn_parameters')
 
