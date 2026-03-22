@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Simus Bet | Dashboard</title>
-    <link rel="stylesheet" href="style.css?v=1773700893">
+    <link rel="stylesheet" href="style.css?v=1774202254">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 
@@ -20,13 +20,13 @@
                 class="hidden"></div>
             <div class="input-group">
                 <label>Username</label>
-                <input type="text" id="username" placeholder="Inserisci username">
+                <input type="text" id="username" placeholder="Inserisci username" onkeypress="if(event.key==='Enter') auth.login()">
             </div>
             <div class="input-group">
                 <label>Password</label>
-                <input type="password" id="password" placeholder="••••••••">
+                <input type="password" id="password" placeholder="••••••••" onkeypress="if(event.key==='Enter') auth.login()">
             </div>
-            <button onclick="auth.login()">Accedi</button>
+            <button type="button" onclick="auth.login()" style="cursor:pointer;">Accedi</button>
         </div>
     </div>
 
@@ -402,7 +402,7 @@
                     <!-- TAVOLO -->
                     <div style="background: radial-gradient(ellipse at center, #0b6e35 0%, #063d1c 100%); border-radius: 20px; border: 6px solid #4a2f1a; box-shadow: 0 10px 40px rgba(0,0,0,0.8); overflow: hidden;">
 
-                        <!-- 1. AREA CARTE BANCO — altezza fissa -->
+                        <!-- 1. AREA CARTE BANCO -- altezza fissa -->
                         <div style="padding: 12px 12px 6px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08);">
                             <div style="font-size: 0.65rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
                                 BANCO <span id="bac-banker-score" style="background: #ffd700; color: #000; font-weight: 900; padding: 1px 8px; border-radius: 20px; margin-left: 4px; font-size: 0.75rem;">0</span>
@@ -410,7 +410,7 @@
                             <div id="bac-banker-cards" style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 90px;"></div>
                         </div>
 
-                        <!-- 2. ZONA PUNTATE — altezza fissa, non si sposta -->
+                        <!-- 2. ZONA PUNTATE -- altezza fissa, non si sposta -->
                         <div style="padding: 10px 10px 6px;">
 
                             <!-- Pairs row -->
@@ -451,7 +451,7 @@
                             </div>
                         </div>
 
-                        <!-- 3. MESSAGGIO RISULTATO — altezza fissa, mai sovrapposto -->
+                        <!-- 3. MESSAGGIO RISULTATO -- altezza fissa, mai sovrapposto -->
                         <div id="bac-msg"
                             style="text-align: center; font-size: 1.25rem; font-weight: 900; color: gold;
                                    text-shadow: 0 0 12px rgba(255,215,0,0.4);
@@ -462,7 +462,7 @@
                             Piazza le tue fiches
                         </div>
 
-                        <!-- 4. AREA CARTE GIOCATORE — altezza fissa -->
+                        <!-- 4. AREA CARTE GIOCATORE -- altezza fissa -->
                         <div style="padding: 6px 12px 10px; text-align: center;">
                             <div id="bac-player-cards" style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 90px;"></div>
                             <div style="font-size: 0.65rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; margin-top: 6px;">
@@ -470,7 +470,7 @@
                             </div>
                         </div>
 
-                        <!-- 5. FICHES + BOTTONI — sempre in fondo -->
+                        <!-- 5. FICHES + BOTTONI -- sempre in fondo -->
                         <div style="background: rgba(0,0,0,0.25); padding: 10px 10px 12px; border-top: 1px solid rgba(255,255,255,0.08);">
                             <div style="font-size: 0.6rem; color: rgba(255,255,255,0.35); text-align: center; margin-bottom: 7px; text-transform: uppercase; letter-spacing: 1px;">Seleziona fiche</div>
                             <div id="bac-chips" style="display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;"></div>
@@ -531,7 +531,7 @@
                             </div>
                         </div>
 
-                        <!-- Classifica mobile — gestita via JS -->
+                        <!-- Classifica mobile -- gestita via JS -->
                         <div id="virtual-standings-mobile-wrap" style="margin-top: 2rem; display: none;">
                             <div style="background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); padding: 1.5rem;">
                                 <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">Classifica Serie A</h3>
@@ -552,7 +552,7 @@
                         </div>
                     </div>
 
-                    <!-- Sidebar classifica — visibile solo su desktop -->
+                    <!-- Sidebar classifica -- visibile solo su desktop -->
                     <div class="virtual-sidebar">
                         <div style="background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); padding: 1.5rem;">
                             <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">Classifica Serie A</h3>
@@ -984,7 +984,7 @@
                                 <div class="input-group" style="margin:0;grid-column:1/-1;">
                                     <label>👤 Assegna a utente (vuoto=tutti)</label>
                                     <select id="bonus-user-target" style="width:100%;padding:0.75rem;background:#0d1117;border:1px solid var(--border-color);border-radius:8px;color:white;">
-                                        <option value="">— Globale (tutti gli utenti) —</option>
+                                        <option value="">-- Globale (tutti gli utenti) --</option>
                                     </select>
                                 </div>
                             </div>
@@ -1030,7 +1030,7 @@
                         style="background: var(--danger); margin-top: 2rem;">Chiudi</button>
                 </div>
             </div>
-            <script src="app.js?v=1773700893"></script>
+            <script src="app.js?v=1774202254"></script>
         </div>
         
         <div class="mobile-nav" id="mobile-nav">
