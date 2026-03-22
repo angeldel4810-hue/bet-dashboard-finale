@@ -20,47 +20,13 @@
                 class="hidden"></div>
             <div class="input-group">
                 <label>Username</label>
-                <input type="text" id="username" placeholder="Inserisci username" onkeypress="if(event.key==='Enter') auth.login()">
+                <input type="text" id="username" placeholder="Inserisci username">
             </div>
             <div class="input-group">
                 <label>Password</label>
-                <input type="password" id="password" placeholder="••••••••" onkeypress="if(event.key==='Enter') auth.login()">
+                <input type="password" id="password" placeholder="••••••••">
             </div>
-            <button type="button" id="login-btn" style="cursor:pointer;width:100%;padding:0.75rem;background:var(--accent);color:white;border:none;border-radius:8px;font-weight:600;">Accedi</button>
-            <script>
-            document.getElementById('login-btn').addEventListener('click', function() {
-                var u = document.getElementById('username').value;
-                var p = document.getElementById('password').value;
-                if (!u || !p) { alert('Inserisci username e password'); return; }
-                this.disabled = true;
-                this.textContent = 'Accesso...';
-                var btn = this;
-                fetch('/api/login', {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({username: u, password: p})
-                })
-                .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
-                .then(function(res) {
-                    if (res.ok && res.data.access_token) {
-                        localStorage.setItem('token', res.data.access_token);
-                        localStorage.setItem('role', res.data.role || 'user');
-                        localStorage.setItem('username', u);
-                        location.reload();
-                    } else {
-                        document.getElementById('login-error').textContent = (res.data && res.data.detail) || 'Credenziali non valide';
-                        document.getElementById('login-error').classList.remove('hidden');
-                        btn.disabled = false;
-                        btn.textContent = 'Accedi';
-                    }
-                })
-                .catch(function(e) {
-                    alert('Errore di connessione: ' + e.message);
-                    btn.disabled = false;
-                    btn.textContent = 'Accedi';
-                });
-            });
-            </script>
+            <button onclick="auth.login()">Accedi</button>
         </div>
     </div>
 
@@ -1067,6 +1033,7 @@
 
         </div>
         
+            <script src="app.js?v=1774203291"></script>
         <div class="mobile-nav" id="mobile-nav">
             <a onclick="router.navigate('odds')" class="mobile-nav-item active" id="mob-nav-odds">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -1159,7 +1126,6 @@
                     </button>
                 </div>
             </div>
-    <script src="app.js?v=1774202254"></script>
 </body>
 
 </html>
