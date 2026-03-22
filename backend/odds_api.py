@@ -662,12 +662,17 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
         return cached
 
     url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds"
+    # commenceTimeTo: partite nei prossimi 7 giorni (ISO 8601 UTC)
+    from datetime import datetime, timezone, timedelta
+    now_utc = datetime.now(timezone.utc)
+    time_to = (now_utc + timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%SZ')
     params = {
         "apiKey": api_key,
         "regions": regions,
         "markets": markets,
         "oddsFormat": "decimal",
-        "bookmakers": "bet365,williamhill,unibet,bwin,marathonbet,paddypower"
+        "bookmakers": "bet365,williamhill,unibet,bwin,marathonbet,paddypower",
+        "commenceTimeTo": time_to,
     }
 
     try:
