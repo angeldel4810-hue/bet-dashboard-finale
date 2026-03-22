@@ -386,11 +386,11 @@ async def fetch_odds(user = Depends(get_current_user)):
     async with odds_lock:
         current_time = time.time()
 
-        # Sincronizza timestamp dal DB se cache in memoria vuota (riavvio server Render)
+        # Riavvio server: recupera timestamp dal DB
         if not odds_cache.get('timestamp'):
             odds_cache['timestamp'] = _get_db_timestamp()
 
-        # Cache valida SOLO se ha dati + TTL non scaduto + parametri identici
+        # Cache valida: ha dati + non scaduta + stessi parametri
         cache_valid = (
             len(odds_cache.get('data') or []) > 0
             and (current_time - (odds_cache.get('timestamp') or 0)) < CACHE_TTL
@@ -403,9 +403,14 @@ async def fetch_odds(user = Depends(get_current_user)):
             conn.close()
             return odds_cache['data']
 
-        # Segna subito che stiamo facendo fetch per bloccare richieste parallele
-        odds_cache['timestamp'] = current_time
-        odds_cache['data'] = []
+        # Fetch in corso: blocca richieste parallele MA non azzerare i dati esistenti
+        # cosi gli utenti vedono i dati vecchi mentre aspettano la nuova fetch
+        is_fetching = odds_cache.get('_fetching', False)
+        if is_fetching:
+            conn.close()
+            return odds_cache.get('data') or []
+        odds_cache['_fetching'] = True
+        # NON azzerare data qui - mantieni dati vecchi durante la fetch
 
         cursor = conn.cursor()
         is_postgres = hasattr(conn, 'get_dsn_parameters')
@@ -493,7 +498,8 @@ async def fetch_odds(user = Depends(get_current_user)):
         odds_cache['provider'] = api_provider
         odds_cache['sports'] = sports_str
         odds_cache['overround'] = overround
-        _set_db_timestamp(_ts)  # persiste tra riavvii
+        odds_cache['_fetching'] = False
+        _set_db_timestamp(_ts)
         
         return odds_list
 
@@ -595,15 +601,21 @@ async def fetch_odds(user = Depends(get_current_user)):
             
     # CRITICAL FIX: The cache assignment MUST be outside the event loop
     _ts = time.time()
-    odds_cache['data'] = all_odds
-    odds_cache['timestamp'] = _ts
-    odds_cache['source'] = source
-    odds_cache['provider'] = api_provider
-    odds_cache['sports'] = sports_str
-    odds_cache['overround'] = overround
-    _set_db_timestamp(_ts)  # persiste tra riavvii
+    if all_odds:  # salva solo se ha trovato qualcosa
+        odds_cache['data'] = all_odds
+        odds_cache['timestamp'] = _ts
+        odds_cache['source'] = source
+        odds_cache['provider'] = api_provider
+        odds_cache['sports'] = sports_str
+        odds_cache['overround'] = overround
+        _set_db_timestamp(_ts)
+    else:
+        # Fetch vuota: resetta timestamp cosi riprova subito
+        odds_cache['timestamp'] = 0
+        print("[ODDS] Fetch API vuota - riprovera alla prossima richiesta")
+    odds_cache['_fetching'] = False
             
-    return all_odds
+    return odds_cache.get('data') or []
 
 @app.post("/api/admin/manual-odds", dependencies=[Depends(check_admin)])
 async def add_manual_odd(data: Dict[str, Any] = Body(...)):
