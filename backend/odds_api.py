@@ -122,15 +122,15 @@ def _simulate_markets(event: Dict[str, Any]):
             {"name": event['away_team'], "price": max(1.05, round(1.0 / (pa / sum_hna * M), 2))},
         ])
 
-    # 3. RISULTATO 1° TEMPO
+    # 3. RISULTATO 1 TEMPO (simulato quando non arriva dall'API)
+    # Formula calibrata su dati reali Serie A:
+    # - casa: compressa verso centro con coeff 0.68+0.09
+    # - ospite: piu compressa (lontano da casa) con coeff 0.60+0.09
+    # - pareggio: residuo, sale sempre rispetto al FT (meno gol nel 1T)
     if 'h2h_1st_half' not in m_keys and ph is not None:
-        # Regressione verso distribuzione uniforme (1/3 per ciascun esito):
-        # Nel 1° tempo ci sono meno gol -> piu pareggi -> prob si avvicinano a 1/3.
-        # alpha=0.65: calibrato su dati reali Serie A (minimizza errore medio).
-        _a = 0.65
-        ph1 = _a * ph + (1 - _a) / 3.0
-        px1 = _a * px + (1 - _a) / 3.0
-        pa1 = _a * pa + (1 - _a) / 3.0
+        ph1 = ph * 0.68 + 0.09
+        pa1 = pa * 0.60 + 0.09
+        px1 = max(0.28, 1.0 - ph1 - pa1)
         _t = ph1 + px1 + pa1
         add("h2h_1st_half", [
             {"name": event['home_team'], "price": max(1.10, round(1.0 / (ph1/_t * M), 2))},
@@ -680,6 +680,32 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List
             r = requests.get(url, params=params, timeout=12)
         r.raise_for_status()
         data = r.json()
+
+        # Se la chiamata principale non includeva h2h_1st_half (fallback 422),
+        # prova a recuperarlo con una seconda chiamata separata
+        if not is_tennis and "h2h_1st_half" not in params.get("markets", ""):
+            try:
+                params_ht = dict(params)
+                params_ht["markets"] = "h2h_1st_half"
+                r_ht = requests.get(url, params=params_ht, timeout=8)
+                if r_ht.status_code == 200:
+                    ht_data = r_ht.json()
+                    # Mergia le quote 1T sugli eventi corrispondenti
+                    ht_map = {e["id"]: e for e in ht_data}
+                    for event in data:
+                        eid = event.get("id")
+                        if eid in ht_map:
+                            for bookie in ht_map[eid].get("bookmakers", []):
+                                for mkt in bookie.get("markets", []):
+                                    if mkt["key"] == "h2h_1st_half":
+                                        # Aggiungi ai bookmaker esistenti dell'evento
+                                        if event.get("bookmakers"):
+                                            event["bookmakers"][0].setdefault("markets", [])
+                                            existing_keys = {m["key"] for m in event["bookmakers"][0]["markets"]}
+                                            if "h2h_1st_half" not in existing_keys:
+                                                event["bookmakers"][0]["markets"].append(mkt)
+            except Exception as e_ht:
+                print(f"[1T fetch] {e_ht}")
 
         for event in data:
             # Merge bookmaker con precedenza Bet365
