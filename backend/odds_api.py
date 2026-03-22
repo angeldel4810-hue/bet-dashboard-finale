@@ -97,7 +97,7 @@ if totals:
 
 M = HOUSE_EDGE
 
-# Stima lambda casa e ospite — usato da tutti i mercati con correlazione
+# Stima lambda casa e ospite -- usato da tutti i mercati con correlazione
 # Floor su lam_a = 0.70: anche le squadre molto sfavorite segnano in media ~0.7 gol/partita.
 # Senza floor, con quote tipo 8.00 ospite, lam_a scende a 0.35-0.45
 # e la simulazione btts/GG diventa molto distante dai valori reali dei bookmaker.
@@ -126,7 +126,7 @@ if 'draw_no_bet' not in m_keys and ph is not None:
 # 3. RISULTATO 1° TEMPO
 if 'h2h_1st_half' not in m_keys and ph is not None:
     # Regressione verso distribuzione uniforme (1/3 per ciascun esito):
-    # Nel 1° tempo ci sono meno gol → più pareggi → prob si avvicinano a 1/3.
+    # Nel 1° tempo ci sono meno gol -> piu pareggi -> prob si avvicinano a 1/3.
     # alpha=0.65: calibrato su dati reali Serie A (minimizza errore medio).
     _a = 0.65
     ph1 = _a * ph + (1 - _a) / 3.0
@@ -143,7 +143,7 @@ if 'h2h_1st_half' not in m_keys and ph is not None:
 if 'btts' not in m_keys:
     # NOTA: btts viene simulata SOLO quando l'API non la restituisce.
     # Le quote reali dall'API (Goal/No Goal) non vengono mai toccate.
-    # Con lam_a floor=0.70 sopra, la Poisson bivariata dà risultati calibrati.
+    # Con lam_a floor=0.70 sopra, la Poisson bivariata da risultati calibrati.
     if lam_h is not None and lam_a is not None:
         p_gg = sum(_poisson(lam_h, h) * _poisson(lam_a, a)
                    for h in range(8) for a in range(8) if h > 0 and a > 0)
@@ -192,8 +192,8 @@ if 'correct_score' not in m_keys and ph is not None:
         cs_outcomes.append({"name": s, "price": min(66.0, max(1.05, round(1.0 / (p * M), 2)))})
     add("correct_score", cs_outcomes)
 
-# 7. COMBO 1X2 + GG/NG — Poisson bivariata per correlazione reale
-# (se vince "1" con GG, significa che l'ospite ha segnato almeno 1 → correlazione forte)
+# 7. COMBO 1X2 + GG/NG -- Poisson bivariata per correlazione reale
+# (se vince "1" con GG, significa che l'ospite ha segnato almeno 1 -> correlazione forte)
 if 'combo_1x2_btts' not in m_keys and ph is not None and lam_h is not None:
     combos_1x2_btts = []
     for hg in range(10):
@@ -217,7 +217,7 @@ if 'combo_1x2_btts' not in m_keys and ph is not None and lam_h is not None:
     if final:
         add("combo_1x2_btts", final)
 
-# 8. COMBO 1X2 + OVER/UNDER — Poisson bivariata per correlazione
+# 8. COMBO 1X2 + OVER/UNDER -- Poisson bivariata per correlazione
 if 'combo_1x2_ou' not in m_keys and ph is not None and lam_h is not None and totals:
     lines_set = set()
     for o in totals['outcomes']:
@@ -240,7 +240,7 @@ if 'combo_1x2_ou' not in m_keys and ph is not None and lam_h is not None and tot
     if combos_ou:
         add("combo_1x2_ou", combos_ou)
 
-# ── Helper: costruisci lines_dict da totals (riusato da più combo) ──
+# ── Helper: costruisci lines_dict da totals (riusato da piu combo) ──
 def _build_lines():
     if not totals:
         return {}
@@ -269,7 +269,7 @@ if 'combo_dc_btts' not in m_keys and ph is not None:
                 combos.append({"name": f"{dcn}+NG", "price": max(1.05, round(dcq * ng_q / M, 2))})
             add("combo_dc_btts", combos)
 
-# 10. DOPPIA CHANCE + OVER/UNDER — Poisson bivariata
+# 10. DOPPIA CHANCE + OVER/UNDER -- Poisson bivariata
 if 'combo_dc_ou' not in m_keys and ph is not None and lam_h is not None:
     dc_map = {"1X": lambda hg,ag: hg>=ag, "X2": lambda hg,ag: hg<=ag, "12": lambda hg,ag: hg!=ag}
     combos = []
@@ -302,7 +302,7 @@ if 'combo_dnb_btts' not in m_keys and ph is not None:
                 combos.append({"name": f"{dn}+No Goal", "price": max(1.05, round(dq * ng_q / M, 2))})
             add("combo_dnb_btts", combos)
 
-# 12. DRAW NO BET + OVER/UNDER — Poisson bivariata
+# 12. DRAW NO BET + OVER/UNDER -- Poisson bivariata
 if 'combo_dnb_ou' not in m_keys and ph is not None and lam_h is not None:
     # DNB: home_team = casa vince (hg>ag), away_team = ospite vince (ag>hg)
     ht = event.get('home_team',''); at = event.get('away_team','')
@@ -477,7 +477,7 @@ if 'combo_dc_multigol' not in m_keys and ph is not None and lam is not None:
 
 # ─── 22. COMBO OVER/UNDER + GG/NG ────────────────────────────────────────
 # Usa simulazione Poisson bivariata per catturare la correlazione reale
-# (Over 2.5+GG e Under 2.5+NG sono correlati positivamente — non indipendenti)
+# (Over 2.5+GG e Under 2.5+NG sono correlati positivamente -- non indipendenti)
 if 'combo_ou_btts' not in m_keys and lam_h is not None and lam_a is not None:
     combos = []
     for pt in [1.5, 2.5, 3.5, 4.5]:
@@ -503,7 +503,7 @@ if 'combo_ou_btts' not in m_keys and lam_h is not None and lam_a is not None:
     if combos:
         add("combo_ou_btts", combos)
 
-# ─── 23. MULTIGOL + GG/NG — Poisson bivariata ──────────────────────────
+# ─── 23. MULTIGOL + GG/NG -- Poisson bivariata ──────────────────────────
 if 'combo_multigol_btts' not in m_keys and lam_h is not None:
     ranges_mg = [("1-2",1,2),("2-3",2,3),("1-3",1,3),("2-4",2,4),("3-5",3,5),("3+",3,12)]
     combos = []
@@ -535,10 +535,10 @@ if 'total_goals_exact' not in m_keys and lam is not None:
         outcomes.append({"name": label, "price": max(1.05, min(66.0, round(1.0 / (p * M), 2)))})
     add("total_goals_exact", outcomes)
 
-# ─── 25. COMBO 1X2 + GOL ESATTI — solo range sensati per ciascun esito ──
+# ─── 25. COMBO 1X2 + GOL ESATTI -- solo range sensati per ciascun esito ──
 if 'combo_1x2_total_goals' not in m_keys and ph is not None and lam is not None:
     combos = []
-    # Per "1" (casa vince): 1+ gol in casa garantiti → escludiamo 0 gol totali
+    # Per "1" (casa vince): 1+ gol in casa garantiti -> escludiamo 0 gol totali
     # Per "X" (pareggio):   almeno 0 gol; 0-0 possibile ma non misto
     # Per "2" (ospite vince): 1+ gol ospite garantiti
     goals_map = {
@@ -591,7 +591,7 @@ pa = 1.0 / a_q
 tot = ph + pa
 ph /= tot; pa /= tot
 
-# 1. HANDICAP SET (+1.5 / -1.5) — simulato
+# 1. HANDICAP SET (+1.5 / -1.5) -- simulato
 if 'set_spreads' not in m_keys:
     # Stima P(vince 2-0) vs P(vince 2-1) per calcolare l'handicap
     # Modello: P(home vince set) proporzionale a ph
@@ -618,7 +618,7 @@ if 'set_spreads' not in m_keys:
         {"name": f"{event['away_team']} +1.5",  "price": max(1.05, round(1.0/(p_a_plus15*M), 2)),  "point": 1.5},
     ])
 
-# 2. TOTALE SET (Over/Under 2.5) — Bo3
+# 2. TOTALE SET (Over/Under 2.5) -- Bo3
 if 'set_totals' not in m_keys:
     p_set_h = min(0.92, max(0.08, ph * 0.85 + 0.075))
     p_set_a = 1.0 - p_set_h
@@ -700,7 +700,7 @@ try:
 
         event['bookmakers'] = [{"key": "simus_bet", "title": "Simus Bet", "markets": list(virtual_markets.values())}]
 
-        # Normalizzazione nomi — OGNI mercato trattato separatamente
+        # Normalizzazione nomi -- OGNI mercato trattato separatamente
         for bookie in event.get('bookmakers', []):
             for market in bookie.get('markets', []):
                 mk = market['key']
