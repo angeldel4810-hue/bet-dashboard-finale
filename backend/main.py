@@ -264,7 +264,7 @@ bal_after  = round(bal_before + net, 2)
 cursor.execute(
 “INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (%s, %s, %s, %s, %s, %s, %s)” if is_pg
 else “INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, admin_id, reason) VALUES (?, ?, ?, ?, ?, ?, ?)”,
-(u_id, tx_type, net, bal_before, bal_after, None, f”{game_name} — puntata €{amount:.2f} ritorno €{payout:.2f}”)
+(u_id, tx_type, net, bal_before, bal_after, None, f”{game_name} – puntata €{amount:.2f} ritorno €{payout:.2f}”)
 )
 conn.commit()
 except Exception as e:
@@ -373,7 +373,7 @@ async def force_odds_refresh():
 “”“Admin: forza il refresh immediato delle quote (azzera la cache).”””
 odds_cache[‘timestamp’] = 0
 _set_db_timestamp(0)
-return {“message”: “Cache azzerata. La prossima chiamata a /api/odds aggiornerà le quote.”}
+return {“message”: “Cache azzerata. La prossima chiamata a /api/odds aggiornera le quote.”}
 
 @app.get(”/api/odds”)
 async def fetch_odds(user = Depends(get_current_user)):
@@ -434,7 +434,7 @@ if source == 'manual':
             o = dict(r)
             
         markets = []
-        MARGIN = 1.07  # 7% fisso — uguale al resto del sistema
+        MARGIN = 1.07  # 7% fisso -- uguale al resto del sistema
 
         def _apply_m(prices_list):
             """Normalizza e applica 2% di margine."""
@@ -471,7 +471,7 @@ if source == 'manual':
                 {"name": "Goal",    "price": gg_p},
                 {"name": "No Goal", "price": ng_p}
             ]})
-        # Filtra partite già iniziate o che iniziano entro 1 minuto
+        # Filtra partite gia iniziate o che iniziano entro 1 minuto
         try:
             ct = o.get('commence_time', '')
             if ct:
@@ -550,7 +550,7 @@ async def fetch_sport_odds(sport_name):
 results = await asyncio.gather(*(fetch_sport_odds(s) for s in sports_list))
 
 # Sport accettati: calcio + tennis. Tutto il resto viene escluso.
-# Parole chiave di esclusione — controllate su sport_title E sport_key
+# Parole chiave di esclusione -- controllate su sport_title E sport_key
 EXCLUDED_SPORTS = [
     'basketball', 'ncaab', 'ncaaf', 'ncaa',
     'volleyball', 'baseball', 'hockey',
@@ -593,7 +593,7 @@ for odds_chunk in results:
         if not ts: continue
         try:
             event_time = datetime.fromisoformat(ts)
-            # Il margine 7% è già applicato dentro odds_api.py — nessun overround qui
+            # Il margine 7% e gia applicato dentro odds_api.py -- nessun overround qui
             if event_time > now + timedelta(minutes=1):
                 all_odds.append(event)
                 seen_ids.add(event_id)
@@ -692,7 +692,7 @@ try:
     conn.commit()
 except Exception as e:
     conn.close()
-    raise HTTPException(status_code=400, detail=f"Errore: username già esistente o dati non validi")
+    raise HTTPException(status_code=400, detail=f"Errore: username gia esistente o dati non validi")
 
 conn.close()
 return {"message": f"Utente '{username}' creato con successo"}
@@ -736,7 +736,7 @@ is_postgres = hasattr(conn, ‘get_dsn_parameters’)
         else:
             bet['selections'] = [dict(sr) for sr in s_rows]
 
-        # Escludi scommesse casino (nessuna selection o event_id casino_*) — raccolte separatamente
+        # Escludi scommesse casino (nessuna selection o event_id casino_*) -- raccolte separatamente
         sels = bet['selections']
         if not sels or any(str(s['event_id']).startswith('casino_') for s in sels):
             continue  # skip: le casino vengono restituite in casino_bets
@@ -756,7 +756,7 @@ is_postgres = hasattr(conn, ‘get_dsn_parameters’)
     
     user_data['bets'] = bets
 
-    # Casino bets (blackjack, baccarat, sette e mezzo — da tabella bets)
+    # Casino bets (blackjack, baccarat, sette e mezzo -- da tabella bets)
     casino_bets = []
     try:
         casino_query = (
@@ -948,11 +948,11 @@ for r in rows:
                 a_score = v_match[2] if is_postgres else v_match['away_score']
                 sel['v_score'] = f"{h_score} - {a_score}"
 
-    # Determina categoria — escludi casino
+    # Determina categoria -- escludi casino
     if not sels:
-        continue  # casino senza selections — escludi
+        continue  # casino senza selections -- escludi
     elif any(str(s['event_id']).startswith('casino_') for s in sels):
-        continue  # puntate casino — escludi
+        continue  # puntate casino -- escludi
     elif any(str(s['event_id']).startswith('v_') for s in sels):
         bet['category'] = 'virtual'
         bet['game'] = 'Calcio Virtuale'
@@ -1001,9 +1001,9 @@ for r in rows:
 
     # Determina categoria
     if not sels:
-        continue  # casino senza selections — escludi
+        continue  # casino senza selections -- escludi
     elif any(s['event_id'].startswith('casino_') for s in sels):
-        continue  # puntate casino — escludi
+        continue  # puntate casino -- escludi
     elif any(s['event_id'].startswith('v_') for s in sels):
         bet['category'] = 'virtual'
         bet['game'] = 'Calcio Virtuale'
@@ -1073,7 +1073,7 @@ if selections:
         is_virtual = str(s.get('event_id', '')).startswith('v_')
         if is_virtual != first_is_virtual:
             conn.close()
-            raise HTTPException(status_code=400, detail="Non è possibile combinare scommesse reali e virtuali")
+            raise HTTPException(status_code=400, detail="Non e possibile combinare scommesse reali e virtuali")
 
 # Insert selections
 for s in selections:
@@ -1118,7 +1118,7 @@ async def place_crash_bet(amount: float = Body(…, embed=True), user = Depends(
 if amount < 0.20:
 raise HTTPException(status_code=400, detail=“Scommessa minima €0.20”)
 if crash_engine.status != “waiting”:
-raise HTTPException(status_code=400, detail=“Round già iniziato o in corso”)
+raise HTTPException(status_code=400, detail=“Round gia iniziato o in corso”)
 
 ```
 conn = get_db()
@@ -1147,7 +1147,7 @@ bet_id = cursor.fetchone()[0] if is_postgres else cursor.lastrowid
 conn.commit()
 conn.close()
 
-# Aggiungi alla lista scommesse attive del motore (per semplicità in memoria)
+# Aggiungi alla lista scommesse attive del motore (per semplicita in memoria)
 crash_engine.bets.append({"id": bet_id, "user_id": u_id, "username": user['username'], "amount": amount})
 
 return {"bet_id": bet_id, "new_balance": balance - amount}
@@ -1156,13 +1156,13 @@ return {"bet_id": bet_id, "new_balance": balance - amount}
 @app.post(”/api/crash/cashout”)
 async def crash_cashout(bet_id: int = Body(…, embed=True), user = Depends(get_current_user)):
 if crash_engine.status != “running”:
-raise HTTPException(status_code=400, detail=“Il gioco non è in esecuzione”)
+raise HTTPException(status_code=400, detail=“Il gioco non e in esecuzione”)
 
 ```
 # Cerca la scommessa tra quelle attive
 active_bet = next((b for b in crash_engine.bets if b['id'] == bet_id and b['username'] == user['username']), None)
 if not active_bet:
-    raise HTTPException(status_code=404, detail="Scommessa non trovata o già incassata")
+    raise HTTPException(status_code=404, detail="Scommessa non trovata o gia incassata")
 
 multiplier = crash_engine.current_multiplier
 payout = active_bet['amount'] * multiplier
@@ -1213,7 +1213,7 @@ else:
 
 if b_status != 'pending':
     conn.close()
-    raise HTTPException(status_code=400, detail="Scommessa già risolta")
+    raise HTTPException(status_code=400, detail="Scommessa gia risolta")
 
 # Update bet status
 cursor.execute("UPDATE bets SET status = %s WHERE id = %s" if is_postgres else "UPDATE bets SET status = ? WHERE id = ?", (status, bet_id))
@@ -1784,10 +1784,10 @@ else:
 if deposit_amount < bonus['min_deposit']:
     conn.close(); raise HTTPException(status_code=400, detail=f"Ricarica minima per questo bonus: €{bonus['min_deposit']:.2f}")
 
-# Verifica non già usato
+# Verifica non gia usato
 cursor.execute("SELECT id FROM user_bonuses WHERE user_id = %s AND bonus_id = %s" if is_pg else "SELECT id FROM user_bonuses WHERE user_id = ? AND bonus_id = ?", (u_id, bonus_id))
 if cursor.fetchone():
-    conn.close(); raise HTTPException(status_code=400, detail="Hai già usato questo bonus")
+    conn.close(); raise HTTPException(status_code=400, detail="Hai gia usato questo bonus")
 
 # Calcola importo bonus
 bonus_amount = round(deposit_amount * bonus['bonus_percent'] / 100 + bonus['bonus_fixed'], 2)
@@ -1957,7 +1957,7 @@ return {“message”: “Richiesta di ricarica inviata. In attesa di approvazio
 async def pay_redirect(amount: float, token: str, bonus_id: int = None):
 “””
 Endpoint GET: registra la ricarica e fa redirect 302 a SumUp.
-Il frontend chiama window.open(’/api/pay?…’) in modo sincrono —
+Il frontend chiama window.open(’/api/pay?…’) in modo sincrono –
 soluzione definitiva per Safari iOS (nessun redirect JS dopo await).
 “””
 PAY_URL = “https://pay.sumup.com/b2c/QEAW96U8”
@@ -2052,7 +2052,7 @@ cursor.execute(“SELECT id, user_id, amount, status, bonus_id, bonus_amount FRO
         r = dict(row)
         
     if r.get('status') != 'pending':
-        raise HTTPException(status_code=400, detail="Già elaborata")
+        raise HTTPException(status_code=400, detail="Gia elaborata")
         
     if status == 'approved':
         amt = float(r.get('amount') or 0)
@@ -2135,7 +2135,7 @@ cursor.execute(“SELECT id, user_id, amount, status FROM withdrawal_requests WH
         r = dict(row)
 
     if r.get('status') != 'pending':
-        raise HTTPException(status_code=400, detail="Già elaborata")
+        raise HTTPException(status_code=400, detail="Gia elaborata")
 
     uid = int(r.get('user_id'))
     amount = float(r.get('amount') or 0)
