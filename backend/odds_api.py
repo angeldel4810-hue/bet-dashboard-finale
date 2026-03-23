@@ -641,9 +641,9 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu,us") -> L
     if is_tennis:
         markets = "h2h"  # Tennis: solo vincitore partita dall'API, il resto viene simulato
     else:
-        markets = "h2h,totals,btts,double_chance,draw_no_bet,h2h_1st_half,correct_score"
+        markets = "h2h,totals,btts,double_chance,draw_no_bet,h2h_1st_half,correct_score,alternate_totals"
 
-    cache_key = f"odds_toa_v14_{sport}_{regions}"
+    cache_key = f"odds_toa_v15_{sport}_{regions}"
     cached = cache.get(cache_key)
     if cached and len(cached) > 0:  # non restituire cache vuota
         return cached
@@ -667,9 +667,9 @@ def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu,us") -> L
         r.raise_for_status()
         data = r.json()
 
-        # Se la chiamata principale non includeva h2h_1st_half (fallback 422),
-        # prova a recuperarlo con una seconda chiamata separata
-        if not is_tennis and "h2h_1st_half" not in params.get("markets", ""):
+        # Chiama SEMPRE h2h_1st_half separatamente per massimizzare la copertura
+        # (alcuni bookmaker lo pubblicano solo su chiamate dedicate)
+        if not is_tennis:
             try:
                 params_ht = dict(params)
                 params_ht["markets"] = "h2h_1st_half"
