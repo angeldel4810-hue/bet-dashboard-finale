@@ -2908,6 +2908,13 @@ window.matchDetail = {
         'combo_multigol_btts':  'Multigol + GG/NG',
         'total_goals_exact':    'Gol Esatti Totali',
         'combo_1x2_total_goals':'1X2 + Gol Esatti',
+        // Mercati aggiuntivi reali
+        'h2h_2nd_half':       'Risultato 2° Tempo',
+        'totals_1st_half':    'Over/Under 1° Tempo',
+        'totals_2nd_half':    'Over/Under 2° Tempo',
+        'alternate_totals':   'Over/Under (Linee Extra)',
+        'alternate_spreads':  'Handicap (Linee Extra)',
+        'spreads':            'Handicap Europeo',
         // Tennis
         'set_spreads': 'Handicap Set (±1.5)',
         'set_totals':  'Totale Set',
@@ -2917,9 +2924,9 @@ window.matchDetail = {
 
     _tabs: {
         // Tab calcio
-        'principali': ['h2h', 'totals', 'btts', 'double_chance', 'draw_no_bet', 'correct_score', 'odd_even'],
-        'tempi':      ['h2h_1st_half', 'combo_ht_btts', 'combo_ht_ou'],
-        'handicap':   ['draw_no_bet', 'combo_dnb_btts', 'combo_dnb_ou'],
+        'principali': ['h2h', 'totals', 'alternate_totals', 'btts', 'double_chance', 'draw_no_bet', 'correct_score', 'odd_even', 'spreads', 'alternate_spreads'],
+        'tempi':      ['h2h_1st_half', 'h2h_2nd_half', 'totals_1st_half', 'totals_2nd_half', 'combo_ht_btts', 'combo_ht_ou'],
+        'handicap':   ['spreads', 'alternate_spreads', 'draw_no_bet', 'combo_dnb_btts', 'combo_dnb_ou'],
         'combo':      ['combo_1x2_btts','combo_1x2_ou','combo_dc_btts','combo_dc_ou','combo_dnb_btts','combo_dnb_ou','combo_1x2_btts_ou','combo_ht_btts','combo_ht_ou','combo_ou_btts'],
         'multigol':   ['multigol','multigol_home','multigol_away','total_goals_exact','combo_1x2_multigol','combo_dc_multigol','combo_multigol_btts','combo_1x2_total_goals'],
         'tutto':      null,
