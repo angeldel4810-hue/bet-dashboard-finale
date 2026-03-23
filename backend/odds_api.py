@@ -32,5 +32,4 @@ def get_odds_from_cache() -> List[Dict[str, Any]]:
 def fetch_all_active_sports(api_key: str) -> List[Dict[str, Any]]:
     if not api_key:
         return []
-    
     return []
