@@ -125,18 +125,7 @@ def _simulate_markets(event: Dict[str, Any]):
             {"name": event['away_team'], "price": max(1.05, round(1.0 / (pa / sum_hna * M), 2))},
         ])
 
-    # 3. RISULTATO 1 TEMPO (simulato quando non arriva dall'API)
-    # Formula calibrata su dati reali Serie A
-    if 'h2h_1st_half' not in m_keys and ph is not None:
-        ph1 = ph * 0.68 + 0.09
-        pa1 = pa * 0.60 + 0.09
-        px1 = max(0.28, 1.0 - ph1 - pa1)
-        _t = ph1 + px1 + pa1
-        add("h2h_1st_half", [
-            {"name": event['home_team'], "price": max(1.10, round(1.0 / (ph1/_t * M), 2))},
-            {"name": "Pareggio",         "price": max(1.40, round(1.0 / (px1/_t * M), 2))},
-            {"name": event['away_team'], "price": max(1.10, round(1.0 / (pa1/_t * M), 2))},
-        ])
+    # 3. RISULTATO 1 TEMPO: solo dall'API, non simulato
 
     # 4. BTTS
     if 'btts' not in m_keys:
@@ -642,7 +631,7 @@ def _simulate_tennis_markets(event: Dict[str, Any]):
 
 # ─── THE ODDS API ────────────────────────────────────────────────────────────
 
-def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu") -> List[Dict[str, Any]]:
+def get_odds_the_odds_api(api_key: str, sport: str, regions: str = "eu,us") -> List[Dict[str, Any]]:
     if not sport:
         sport = 'soccer'
 
